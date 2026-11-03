@@ -3,6 +3,7 @@
 | Item | Τιμή |
 |---|---|
 | Phase | 3 - Agent στο Runtime, σε εξέλιξη: ο agent χτίστηκε, δοκιμάστηκε τοπικά σε τέσσερα alerts, έγινε deploy στο Runtime και κλήθηκε από την αρχή μέχρι το τέλος (2026-11-03). Απομένουν: UI αναλυτή, τα τρία demo alerts μέσω του UI. Η Φάση 2 έγινε deploy 2026-11-03: stack SurvFirm, seed7 στο DynamoDB, Gateway `surv-investigator` με Lambda target `surv`, smoke test μέσω MCP με token L1 πέρασε, όρια ρυθμού ανά αναλυτή ενεργά και δοκιμασμένα. **Η Φάση 2 ολοκληρώθηκε.** (Η Φάση 1 ολοκληρώθηκε 2026-11-02· βλ. `05-build-plan.md`) |
+| Repository | `https://github.com/donquixote47/surveillance-investigator` (ιδιωτικό), κλάδος `main`· τοπικό αντίγραφο `shared/tam-work/projects/agentcore-surveillance-investigator` |
 | Region | eu-west-2 |
 | Stack | Python 3.14.2 (uv 0.12.1), Strands Agents 1.63.0, bedrock-agentcore 1.25.2, boto3 1.43.123, AgentCore CLI 1.0.1 (`@aws/agentcore`), AWS CDK CLI 2.1147.0 με aws-cdk-lib 2.275.0 (Python) για το mock back end· moto 5.2.5 για offline tests DynamoDB |
 | Models | `eu.anthropic.claude-haiku-5-5` (ανάπτυξη), `eu.anthropic.claude-sonnet-5-5` (προεπιλεγμένος agent), `eu.anthropic.claude-opus-5-5` (arm σύγκρισης στη Φάση 5 και κριτής σκεπτικού)· πρόσβαση Haiku και Sonnet επιβεβαιωμένη από eu-west-2 2026-11-02 |

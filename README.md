@@ -4,7 +4,7 @@ A Level-1 trade-surveillance analyst agent that investigates spoofing and layeri
 
 Built as George's TFC Artificial Intelligence and Machine Learning project (Agentic AI learning path), to be presented to a mentor. Two goals in equal measure: solve a real problem for brokers and trading firms, and learn Amazon Bedrock AgentCore in depth.
 
-Documentation is bilingual: `docs/en/` (canonical) and `docs/el/` (Greek twin). Τα ελληνικά κείμενα είναι στο `docs/el/`.
+Repository: `https://github.com/donquixote47/surveillance-investigator` (private). Documentation is bilingual: `docs/en/` (canonical) and `docs/el/` (Greek twin). Τα ελληνικά κείμενα είναι στο `docs/el/`.
 
 ## Status
 

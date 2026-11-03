@@ -3,6 +3,7 @@
 | Item | Value |
 |---|---|
 | Phase | 3 - Agent on Runtime, in progress: agent built, tested locally on four alerts, deployed to Runtime and invoked end to end (2026-11-03). Remaining: analyst UI, the three demo alerts through the UI. Phase 2 deployed 2026-11-03: SurvFirm stack, seed7 in DynamoDB, Gateway `surv-investigator` with Lambda target `surv`, smoke test through MCP with an L1 token passed, per-analyst rate limits active and probed. **Phase 2 complete.** (Phase 1 completed 2026-11-02; see `05-build-plan.md`) |
+| Repository | `https://github.com/donquixote47/surveillance-investigator` (private), branch `main`; local clone `shared/tam-work/projects/agentcore-surveillance-investigator` |
 | Region | eu-west-2 |
 | Stack | Python 3.14.2 (uv 0.12.1), Strands Agents 1.63.0, bedrock-agentcore 1.25.2, boto3 1.43.123, AgentCore CLI 1.0.1 (`@aws/agentcore`), AWS CDK CLI 2.1147.0 with aws-cdk-lib 2.275.0 (Python) for the mock back end; moto 5.2.5 for offline DynamoDB tests |
 | Models | `eu.anthropic.claude-haiku-5-5` (dev), `eu.anthropic.claude-sonnet-5-5` (default agent), `eu.anthropic.claude-opus-5-5` (Phase 5 comparison arm and rationale judge); Haiku and Sonnet access confirmed from eu-west-2 2026-11-02 |

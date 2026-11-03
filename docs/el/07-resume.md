@@ -4,7 +4,7 @@
 
 ## 1. Τι πρέπει να διαβάσει πρώτα μια νέα συνεδρία
 
-Άνοιξε τη ρίζα του αποθετηρίου ως workspace του Kiro. Μετά, με αυτή τη σειρά:
+Κλωνοποίησε το `https://github.com/donquixote47/surveillance-investigator` (ιδιωτικό· πρώτα `gh auth login` ως donquixote47) και άνοιξε τη ρίζα του αποθετηρίου ως workspace του Kiro. Μετά, με αυτή τη σειρά:
 
 1. `.kiro/steering/project-context.md` - ο στόχος, το εύρος, οι κανόνες (region eu-west-2, μόνο συνθετικά δεδομένα, tags σε κάθε πόρο, δίγλωσσα έγγραφα, ανακοίνωση κόστους πριν από deploy).
 2. `.kiro/steering/challenge-and-verify.md` - το Kiro δεν συμφωνεί εξ ορισμού· οι ισχυρισμοί ελέγχονται σε πρωτογενείς πηγές.
