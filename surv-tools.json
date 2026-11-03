@@ -1,0 +1,1114 @@
+[
+  {
+    "name": "get_alert",
+    "description": "Start of every investigation. Returns the alert raised by the surveillance detector: trader, instrument, the detector's scenario (SPOOFING or LAYERING), trigger, time window and the detector's own one-line summary with its parameters.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": "alert identifier, e.g. A-261005-0002"
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "date": {
+          "type": "string",
+          "description": "YYYY-MM-DD"
+        },
+        "scenario": {
+          "type": "string",
+          "description": "SPOOFING or LAYERING"
+        },
+        "instrument": {
+          "type": "string",
+          "description": ""
+        },
+        "trader_id": {
+          "type": "string",
+          "description": ""
+        },
+        "trigger": {
+          "type": "string",
+          "description": "OPPOSITE_FILL_CANCEL or LARGE_QUICK_CANCEL"
+        },
+        "trigger_ts": {
+          "type": "integer",
+          "description": "nanoseconds since epoch"
+        },
+        "window_start": {
+          "type": "integer",
+          "description": "nanoseconds since epoch"
+        },
+        "window_end": {
+          "type": "integer",
+          "description": "nanoseconds since epoch"
+        },
+        "window_start_time": {
+          "type": "string",
+          "description": "HH:MM:SS.mmm"
+        },
+        "window_end_time": {
+          "type": "string",
+          "description": "HH:MM:SS.mmm"
+        },
+        "window_seconds": {
+          "type": "number",
+          "description": "length of the detector window; the detector uses a fixed 60 s look-back"
+        },
+        "trigger_summary": {
+          "type": "string",
+          "description": "the detector's explanation of why it fired"
+        },
+        "detector_version": {
+          "type": "string",
+          "description": ""
+        },
+        "detector_params": {
+          "type": "string",
+          "description": "JSON of the detector parameters in force"
+        },
+        "status": {
+          "type": "string",
+          "description": "OPEN, IN_REVIEW, CLOSED or ESCALATED"
+        }
+      },
+      "required": [
+        "alert_id",
+        "trader_id",
+        "instrument",
+        "window_start",
+        "window_end"
+      ]
+    }
+  },
+  {
+    "name": "get_order_events",
+    "description": "The trader's raw order lifecycle events (NEW, MODIFY, CANCEL, FILL, PARTIAL_FILL) inside the alert window, optionally padded, with the best bid and ask before each event. Paginated; follow next_token.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "pad_seconds": {
+          "type": "number",
+          "description": "seconds of context before and after the window (default 0, max 600)"
+        },
+        "next_token": {
+          "type": "string",
+          "description": "pagination token from a previous call"
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "trader_id": {
+          "type": "string",
+          "description": ""
+        },
+        "events": {
+          "type": "array",
+          "description": "events in time order",
+          "items": {
+            "type": "object",
+            "description": "one order lifecycle event",
+            "properties": {
+              "ts": {
+                "type": "integer",
+                "description": "nanoseconds since epoch"
+              },
+              "time": {
+                "type": "string",
+                "description": "HH:MM:SS.mmm, venue local time"
+              },
+              "order_id": {
+                "type": "string",
+                "description": ""
+              },
+              "event": {
+                "type": "string",
+                "description": "NEW, MODIFY, CANCEL, FILL or PARTIAL_FILL"
+              },
+              "side": {
+                "type": "string",
+                "description": "BUY or SELL"
+              },
+              "price_ticks": {
+                "type": "number",
+                "description": "limit price in ticks; absent for market orders"
+              },
+              "qty": {
+                "type": "integer",
+                "description": "NEW = size, FILL/PARTIAL_FILL = executed, CANCEL = removed, MODIFY = signed delta"
+              },
+              "remaining_qty": {
+                "type": "integer",
+                "description": "open quantity after the event"
+              },
+              "order_type": {
+                "type": "string",
+                "description": "LIMIT, MARKET, PEGGED or ICEBERG"
+              },
+              "parent_order_id": {
+                "type": "string",
+                "description": "client or algo parent order, if any"
+              },
+              "best_bid": {
+                "type": "number",
+                "description": "best bid immediately before the event, ticks"
+              },
+              "best_ask": {
+                "type": "number",
+                "description": "best ask immediately before the event, ticks"
+              }
+            }
+          }
+        },
+        "event_count": {
+          "type": "integer",
+          "description": "events returned in this page"
+        },
+        "total_in_range": {
+          "type": "integer",
+          "description": "events in the requested range"
+        },
+        "next_token": {
+          "type": "string",
+          "description": "present when more pages follow"
+        }
+      },
+      "required": [
+        "alert_id",
+        "events"
+      ]
+    }
+  },
+  {
+    "name": "reconstruct_book",
+    "description": "What the market looked like: the best bid/ask path through the window and resting depth by price level at a given instant, separating the trader's own orders from everyone else's. Depth is tabulated from the whole day's tape up to the instant (no re-matching).",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "at_ts": {
+          "type": "integer",
+          "description": "instant for the depth snapshot, ns since epoch (default: the alert's trigger_ts)"
+        },
+        "levels": {
+          "type": "integer",
+          "description": "price levels per side in the snapshot (default 5, max 20)"
+        },
+        "sample_every_ms": {
+          "type": "integer",
+          "description": "BBO path sampling interval (default 1000)"
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "at_ts": {
+          "type": "integer",
+          "description": ""
+        },
+        "at_time": {
+          "type": "string",
+          "description": ""
+        },
+        "bids": {
+          "type": "array",
+          "description": "best first",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "price_ticks": {
+                "type": "number",
+                "description": ""
+              },
+              "total_qty": {
+                "type": "integer",
+                "description": ""
+              },
+              "trader_qty": {
+                "type": "integer",
+                "description": "the alert's trader's share"
+              }
+            }
+          }
+        },
+        "asks": {
+          "type": "array",
+          "description": "best first",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "price_ticks": {
+                "type": "number",
+                "description": ""
+              },
+              "total_qty": {
+                "type": "integer",
+                "description": ""
+              },
+              "trader_qty": {
+                "type": "integer",
+                "description": ""
+              }
+            }
+          }
+        },
+        "mid_ticks": {
+          "type": "number",
+          "description": ""
+        },
+        "spread_ticks": {
+          "type": "number",
+          "description": ""
+        },
+        "bbo_path": {
+          "type": "array",
+          "description": "sampled through the window",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "time": {
+                "type": "string",
+                "description": ""
+              },
+              "best_bid": {
+                "type": "number",
+                "description": ""
+              },
+              "best_ask": {
+                "type": "number",
+                "description": ""
+              },
+              "mid": {
+                "type": "number",
+                "description": ""
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    }
+  },
+  {
+    "name": "compute_discriminators",
+    "description": "The deterministic numbers an analyst computes for a spoofing alert, from the tape and the instrument's average depth: order-to-trade ratio, cancel ratio and latency, peak resting size vs depth, distance from the touch at placement, same-side vs opposite-side executions, MODIFY reductions, cancel symmetry across sides, price move before the trader's opposite-side execution, post-cancel move and reversion, round-trip P&L in ticks, repetitions over the session, and how many other traders cancelled in the second before this trader's first cancel. Vocabulary follows Delegated Regulation (EU) 2016/522 Annex II. Every value is reproducible from get_order_events.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "evidence_id": {
+          "type": "string",
+          "description": "stable id for citing this computation in the report"
+        },
+        "trader_id": {
+          "type": "string",
+          "description": ""
+        },
+        "window_seconds": {
+          "type": "number",
+          "description": ""
+        },
+        "avg_depth_top5": {
+          "type": "number",
+          "description": "instrument's average one-side top-5 depth for the day"
+        },
+        "dominant_side": {
+          "type": "string",
+          "description": "side with the larger gross submitted size in the window"
+        },
+        "gross_submitted_dominant": {
+          "type": "integer",
+          "description": ""
+        },
+        "gross_submitted_other": {
+          "type": "integer",
+          "description": ""
+        },
+        "otr": {
+          "type": "number",
+          "description": "(NEW+MODIFY+CANCEL)/executions; null when no executions"
+        },
+        "cancel_ratio": {
+          "type": "number",
+          "description": "cancelled or reduced qty / submitted qty"
+        },
+        "median_cancel_latency_ms": {
+          "type": "number",
+          "description": "placement to cancel, dominant side"
+        },
+        "max_resting_size_vs_depth": {
+          "type": "number",
+          "description": ""
+        },
+        "distance_from_touch_ticks": {
+          "type": "number",
+          "description": "size-weighted at placement; negative = improving the touch"
+        },
+        "distinct_price_levels": {
+          "type": "integer",
+          "description": ""
+        },
+        "large_order_ids": {
+          "type": "array",
+          "description": "dominant-side orders >= 3 x depth",
+          "items": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "same_side_fill_qty": {
+          "type": "integer",
+          "description": "executed on the trader's own dominant-side orders"
+        },
+        "opposite_side_fill_qty": {
+          "type": "integer",
+          "description": ""
+        },
+        "opposite_side_fills": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "ts": {
+                "type": "integer",
+                "description": ""
+              },
+              "time": {
+                "type": "string",
+                "description": ""
+              },
+              "price_ticks": {
+                "type": "number",
+                "description": ""
+              },
+              "qty": {
+                "type": "integer",
+                "description": ""
+              },
+              "ms_before_first_cancel": {
+                "type": "number",
+                "description": ""
+              }
+            }
+          }
+        },
+        "modify_reduction_qty": {
+          "type": "integer",
+          "description": ""
+        },
+        "cancel_symmetry": {
+          "type": "number",
+          "description": "1 = equal cancels on both sides, 0 = one-sided"
+        },
+        "price_move_ticks": {
+          "type": "number",
+          "description": "+ = moved the way a spoofer on the dominant side would want, before he traded"
+        },
+        "post_cancel_move_ticks": {
+          "type": "number",
+          "description": "same orientation, 10 s after the last cancel"
+        },
+        "reversion_ticks": {
+          "type": "number",
+          "description": "favourable pre-trade move undone after the cancel; 0 when there was none"
+        },
+        "round_trip_ticks": {
+          "type": "number",
+          "description": "SELL VWAP minus BUY VWAP in the window; negative = a loss"
+        },
+        "repetitions_in_session": {
+          "type": "integer",
+          "description": ""
+        },
+        "market_wide_cancels_1s_before_first_cancel": {
+          "type": "integer",
+          "description": "distinct other traders"
+        },
+        "order_types": {
+          "type": "object",
+          "description": "counts by order type",
+          "properties": {}
+        },
+        "parent_order_ids": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "notes": {
+          "type": "array",
+          "description": "deterministic remarks, e.g. executions on the dominant side",
+          "items": {
+            "type": "string",
+            "description": ""
+          }
+        }
+      },
+      "required": [
+        "alert_id",
+        "evidence_id",
+        "dominant_side"
+      ]
+    }
+  },
+  {
+    "name": "get_trader_profile",
+    "description": "Who the trader is: role (MARKET_MAKER, PROP, AGENCY, CLIENT, ALGO), desk, instruments on which the firm has registered market-making obligations, typical order size and typical daily order-to-trade ratio, and any risk-system events (kill switch, limit breach) recorded inside the alert window.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "trader_id": {
+          "type": "string",
+          "description": ""
+        },
+        "alert_id": {
+          "type": "string",
+          "description": "optional; when given, risk events are filtered to the alert window"
+        }
+      },
+      "required": [
+        "trader_id"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "trader_id": {
+          "type": "string",
+          "description": ""
+        },
+        "name": {
+          "type": "string",
+          "description": ""
+        },
+        "desk": {
+          "type": "string",
+          "description": ""
+        },
+        "role": {
+          "type": "string",
+          "description": ""
+        },
+        "registered_mm_instruments": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "type": "string",
+            "description": ""
+          }
+        },
+        "typical_order_size": {
+          "type": "integer",
+          "description": ""
+        },
+        "typical_daily_otr": {
+          "type": "number",
+          "description": ""
+        },
+        "risk_limit_events_in_window": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "ts": {
+                "type": "integer",
+                "description": ""
+              },
+              "time": {
+                "type": "string",
+                "description": ""
+              },
+              "instrument": {
+                "type": "string",
+                "description": ""
+              },
+              "reason": {
+                "type": "string",
+                "description": ""
+              }
+            }
+          }
+        },
+        "risk_limit_events_total": {
+          "type": "integer",
+          "description": "all recorded risk events for the trader"
+        }
+      },
+      "required": [
+        "trader_id",
+        "role"
+      ]
+    }
+  },
+  {
+    "name": "get_trader_alert_history",
+    "description": "Prior alerts on this trader and how analysts dispositioned them, newest first. Prior dispositions are context, not evidence about the current window.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "trader_id": {
+          "type": "string",
+          "description": ""
+        },
+        "lookback_days": {
+          "type": "integer",
+          "description": "default 90"
+        },
+        "before_date": {
+          "type": "string",
+          "description": "YYYY-MM-DD; default today"
+        }
+      },
+      "required": [
+        "trader_id"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "trader_id": {
+          "type": "string",
+          "description": ""
+        },
+        "alerts": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "alert_id": {
+                "type": "string",
+                "description": ""
+              },
+              "date": {
+                "type": "string",
+                "description": ""
+              },
+              "scenario": {
+                "type": "string",
+                "description": ""
+              },
+              "proposed_disposition": {
+                "type": "string",
+                "description": ""
+              },
+              "recorded_disposition": {
+                "type": "string",
+                "description": ""
+              },
+              "recorded_by": {
+                "type": "string",
+                "description": ""
+              },
+              "analyst_note": {
+                "type": "string",
+                "description": ""
+              },
+              "override": {
+                "type": "boolean",
+                "description": "true when the analyst changed the proposal"
+              }
+            }
+          }
+        },
+        "count": {
+          "type": "integer",
+          "description": ""
+        }
+      },
+      "required": [
+        "trader_id",
+        "alerts"
+      ]
+    }
+  },
+  {
+    "name": "get_market_events",
+    "description": "Public market events (news, scheduled macro prints, halts, auctions, open/close) in and around the window; '*' means market-wide.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "instrument": {
+          "type": "string",
+          "description": ""
+        },
+        "window_start": {
+          "type": "integer",
+          "description": "ns since epoch"
+        },
+        "window_end": {
+          "type": "integer",
+          "description": "ns since epoch"
+        },
+        "pad_seconds": {
+          "type": "number",
+          "description": "default 60"
+        }
+      },
+      "required": [
+        "instrument",
+        "window_start",
+        "window_end"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "events": {
+          "type": "array",
+          "description": "",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "ts": {
+                "type": "integer",
+                "description": ""
+              },
+              "time": {
+                "type": "string",
+                "description": ""
+              },
+              "instrument": {
+                "type": "string",
+                "description": ""
+              },
+              "type": {
+                "type": "string",
+                "description": ""
+              },
+              "description": {
+                "type": "string",
+                "description": ""
+              },
+              "seconds_from_window_start": {
+                "type": "number",
+                "description": ""
+              }
+            }
+          }
+        }
+      },
+      "required": [
+        "events"
+      ]
+    }
+  },
+  {
+    "name": "get_instrument_stats",
+    "description": "Normalisers for 'large' and 'far from the touch': average daily volume, average spread, average top-5 depth per side, tick size, for the instrument and day.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "instrument": {
+          "type": "string",
+          "description": ""
+        },
+        "date": {
+          "type": "string",
+          "description": "YYYY-MM-DD"
+        }
+      },
+      "required": [
+        "instrument",
+        "date"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "instrument": {
+          "type": "string",
+          "description": ""
+        },
+        "date": {
+          "type": "string",
+          "description": ""
+        },
+        "adv": {
+          "type": "integer",
+          "description": ""
+        },
+        "n_trades": {
+          "type": "integer",
+          "description": ""
+        },
+        "avg_spread_ticks": {
+          "type": "number",
+          "description": ""
+        },
+        "avg_depth_top5": {
+          "type": "number",
+          "description": ""
+        },
+        "tick_size": {
+          "type": "number",
+          "description": ""
+        },
+        "open_ticks": {
+          "type": "number",
+          "description": ""
+        },
+        "close_ticks": {
+          "type": "number",
+          "description": ""
+        }
+      },
+      "required": [
+        "instrument",
+        "date"
+      ]
+    }
+  },
+  {
+    "name": "get_procedures",
+    "description": "The firm's written surveillance procedures: the definition of spoofing and layering it applies, the closure standard for a false positive, and the escalation standard. Topics: spoofing_definition, closure_standard, escalation_standard, all.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": "spoofing_definition, closure_standard, escalation_standard or all"
+        }
+      },
+      "required": [
+        "topic"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "topic": {
+          "type": "string",
+          "description": ""
+        },
+        "text": {
+          "type": "string",
+          "description": ""
+        }
+      },
+      "required": [
+        "topic",
+        "text"
+      ]
+    }
+  },
+  {
+    "name": "propose_disposition",
+    "description": "The agent's only write. Records a PROPOSED disposition and the investigation report for the alert. Nothing is closed, escalated or filed: a human analyst records the decision through a different path. The report must cite evidence from the tools called in this session.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "disposition": {
+          "type": "string",
+          "description": "CLOSE_FP, ESCALATE or DRAFT_STOR"
+        },
+        "confidence": {
+          "type": "number",
+          "description": "0-1"
+        },
+        "report": {
+          "type": "object",
+          "description": "",
+          "properties": {
+            "alert_id": {
+              "type": "string",
+              "description": "the alert this report is about"
+            },
+            "scenario": {
+              "type": "string",
+              "description": "the detector scenario (SPOOFING or LAYERING)"
+            },
+            "summary": {
+              "type": "string",
+              "description": "one paragraph a Level-2 reviewer can read in 30 seconds"
+            },
+            "evidence": {
+              "type": "array",
+              "description": "",
+              "items": {
+                "type": "object",
+                "description": "",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "E1, E2, ..."
+                  },
+                  "source": {
+                    "type": "string",
+                    "description": "tool name"
+                  },
+                  "fact": {
+                    "type": "string",
+                    "description": ""
+                  }
+                }
+              }
+            },
+            "indicators_matched": {
+              "type": "array",
+              "description": "Annex II indicator vocabulary",
+              "items": {
+                "type": "string",
+                "description": ""
+              }
+            },
+            "indicators_not_matched": {
+              "type": "array",
+              "description": "",
+              "items": {
+                "type": "string",
+                "description": ""
+              }
+            },
+            "legitimate_explanations_considered": {
+              "type": "array",
+              "description": "",
+              "items": {
+                "type": "object",
+                "description": "",
+                "properties": {
+                  "explanation": {
+                    "type": "string",
+                    "description": ""
+                  },
+                  "ruled_out_by": {
+                    "type": "array",
+                    "description": "evidence ids",
+                    "items": {
+                      "type": "string",
+                      "description": ""
+                    }
+                  },
+                  "verdict": {
+                    "type": "string",
+                    "description": "ruled_out, supported or undetermined"
+                  }
+                }
+              }
+            },
+            "what_would_change_my_mind": {
+              "type": "string",
+              "description": ""
+            },
+            "memory_used": {
+              "type": "array",
+              "description": "prior dispositions or analyst feedback relied on",
+              "items": {
+                "type": "string",
+                "description": ""
+              }
+            },
+            "window_used": {
+              "type": "string",
+              "description": "the detector window the analysis covered, and whether a longer frame was considered"
+            },
+            "tool_calls": {
+              "type": "array",
+              "description": "tools called before this proposal, filled by the agent from its trace",
+              "items": {
+                "type": "string",
+                "description": ""
+              }
+            }
+          },
+          "required": [
+            "summary",
+            "evidence",
+            "legitimate_explanations_considered"
+          ]
+        }
+      },
+      "required": [
+        "alert_id",
+        "disposition",
+        "confidence",
+        "report"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "disposition": {
+          "type": "string",
+          "description": ""
+        },
+        "case_id": {
+          "type": "string",
+          "description": ""
+        },
+        "proposed_at": {
+          "type": "string",
+          "description": ""
+        },
+        "status": {
+          "type": "string",
+          "description": "PROPOSED: awaiting a human decision"
+        }
+      },
+      "required": [
+        "alert_id",
+        "disposition",
+        "case_id"
+      ]
+    }
+  },
+  {
+    "name": "draft_stor_narrative",
+    "description": "Drafts the narrative fields of a Suspicious Transaction and Order Report (MAR Art. 16, template in Delegated Regulation (EU) 2016/957) from the recorded proposal. Only meaningful after a DRAFT_STOR proposal. Nothing is filed anywhere.",
+    "inputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        }
+      },
+      "required": [
+        "alert_id"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "description": "",
+      "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": ""
+        },
+        "stor_fields": {
+          "type": "object",
+          "description": "",
+          "properties": {
+            "description_of_suspicious_activity": {
+              "type": "string",
+              "description": ""
+            },
+            "instrument": {
+              "type": "string",
+              "description": ""
+            },
+            "persons_involved": {
+              "type": "string",
+              "description": ""
+            },
+            "reasons_for_suspicion": {
+              "type": "string",
+              "description": ""
+            },
+            "indicators": {
+              "type": "array",
+              "description": "",
+              "items": {
+                "type": "string",
+                "description": ""
+              }
+            },
+            "period": {
+              "type": "string",
+              "description": ""
+            }
+          }
+        },
+        "status": {
+          "type": "string",
+          "description": "DRAFT: not filed"
+        }
+      },
+      "required": [
+        "alert_id",
+        "stor_fields"
+      ]
+    }
+  }
+]

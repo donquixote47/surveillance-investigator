@@ -1,0 +1,284 @@
+"""Build and run the Level-1 investigator: a Strands agent whose only tools are the `surv` Gateway's.
+
+The analyst's Cognito access token is forwarded to the Gateway on every tool call, so the Gateway (and later the
+Policy Engine and the rate limits) see the analyst, not the agent, as the principal.
+
+`InvestigationGuard` is the agent's own belt before the Gateway's braces: it validates the report against the
+strict `InvestigationReport` model before `propose_disposition` leaves, fills `tool_calls` from the calls it
+observed (the model does not get to self-report its trajectory), refuses a second proposal in the same run, and
+keeps the proposal and its result for the caller.
+"""
+
+from __future__ import annotations
+
+import json
+import logging
+import os
+import time
+from dataclasses import dataclass, field
+from typing import Any
+
+from prompt import TOOL_PREFIX, system_prompt
+from pydantic import ValidationError
+from report import InvestigationReport
+from strands import Agent
+from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookProvider, HookRegistry
+from strands.models.bedrock import BedrockModel
+from strands.tools.executors import SequentialToolExecutor
+from strands.tools.mcp import MCPClient
+
+log = logging.getLogger("surv.investigator")
+
+DEFAULT_MODEL = "eu.anthropic.claude-sonnet-5-5"
+REGION = os.environ.get("AWS_REGION", "eu-west-2")
+PROPOSE = f"{TOOL_PREFIX}propose_disposition"
+DRAFT_STOR = f"{TOOL_PREFIX}draft_stor_narrative"
+
+
+def gateway_mcp_url() -> str:
+    """The Gateway is declared with protocolType None, so its URL is a bare origin and MCP lives at /mcp."""
+    url = os.environ.get("SURV_GATEWAY_URL") or os.environ.get("AGENTCORE_GATEWAY_SURV_INVESTIGATOR_URL")
+    if not url:
+        raise RuntimeError("SURV_GATEWAY_URL (or AGENTCORE_GATEWAY_SURV_INVESTIGATOR_URL) is not set")
+    return url.rstrip("/") + ("" if url.rstrip("/").endswith("/mcp") else "/mcp")
+
+
+@dataclass
+class InvestigationGuard(HookProvider):
+    alert_id: str
+    mode: str = "investigate"
+    calls: list[dict[str, Any]] = field(default_factory=list)
+    proposal: dict[str, Any] | None = None
+    proposal_result: dict[str, Any] | None = None
+    rejections: list[str] = field(default_factory=list)
+    stor_draft: dict[str, Any] | None = None
+
+    def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
+        registry.add_callback(BeforeToolCallEvent, self.before_tool)
+        registry.add_callback(AfterToolCallEvent, self.after_tool)
+
+    # -- before: validate what is about to leave ------------------------------------------------------
+    def before_tool(self, event: BeforeToolCallEvent) -> None:
+        name = event.tool_use["name"]
+        inputs = event.tool_use.get("input") or {}
+        self.calls.append({"tool": name.removeprefix(TOOL_PREFIX), "input": _compact(inputs), "t": time.time()})
+
+        if name == DRAFT_STOR and self.mode != "stor_drafting":
+            event.cancel_tool = "draft_stor_narrative is a Level-2 action; you are in Level-1 mode. Do not call it."
+            return
+
+        if name != PROPOSE:
+            return
+        if self.proposal is not None:
+            event.cancel_tool = (
+                "propose_disposition was already called in this investigation. One proposal per alert; "
+                "finish with your summary."
+            )
+            return
+        if inputs.get("alert_id") != self.alert_id:
+            event.cancel_tool = (
+                f"this investigation is for alert {self.alert_id}; the proposal names {inputs.get('alert_id')!r}."
+            )
+            return
+        raw = dict(inputs.get("report") or {})
+        raw.setdefault("alert_id", self.alert_id)
+        raw["proposed_disposition"] = inputs.get("disposition")
+        raw["confidence"] = inputs.get("confidence")
+        raw["tool_calls"] = [
+            c["tool"] for c in self.calls[:-1] if c["tool"] != "propose_disposition"
+        ]  # evidence calls so far
+        try:
+            report = InvestigationReport.model_validate(raw)
+        except ValidationError as exc:
+            msg = (
+                "report rejected before it reached the Gateway; fix these and call propose_disposition again:\n"
+                + _explain(exc)
+            )
+            self.rejections.append(msg)
+            event.cancel_tool = msg
+            return
+        gateway_report = report.for_gateway()
+        event.tool_use = {**event.tool_use, "input": {**inputs, "report": gateway_report}}
+        self.proposal = {
+            "disposition": report.proposed_disposition,
+            "confidence": report.confidence,
+            "report": report.model_dump(),
+        }
+
+    # -- after: keep what came back --------------------------------------------------------------------
+    def after_tool(self, event: AfterToolCallEvent) -> None:
+        name = event.tool_use["name"]
+        body = _result_json(event.result)
+        if self.calls and self.calls[-1]["tool"] == name.removeprefix(TOOL_PREFIX):
+            self.calls[-1]["ms"] = int((time.time() - self.calls[-1].pop("t")) * 1000)
+            self.calls[-1]["status"] = "error" if (event.cancel_message or _is_error(event.result, body)) else "ok"
+        if name == PROPOSE and self.proposal is not None:
+            if event.cancel_message or _is_error(event.result, body):
+                # the Gateway or a policy refused it: let the model try again with the same report
+                self.proposal = None
+                self.rejections.append(f"gateway refused the proposal: {event.cancel_message or body}")
+            else:
+                self.proposal_result = body
+        if name == DRAFT_STOR and isinstance(body, dict) and "error" not in body:
+            self.stor_draft = body
+
+
+def _compact(inputs: dict) -> dict:
+    """Tool inputs for the trace summary; the report is large and already kept separately."""
+    return {k: ("<report>" if k == "report" else v) for k, v in inputs.items()}
+
+
+def _explain(exc: ValidationError) -> str:
+    lines = []
+    for e in exc.errors():
+        loc = ".".join(str(p) for p in e["loc"]) or "report"
+        lines.append(f"- {loc}: {e['msg']}")
+    return "\n".join(lines)
+
+
+def _result_json(result: Any) -> Any:
+    try:
+        for block in result.get("content", []):
+            if "text" in block:
+                try:
+                    return json.loads(block["text"])
+                except json.JSONDecodeError:
+                    return block["text"]
+            if "json" in block:
+                return block["json"]
+    except Exception:  # not a ToolResult dict
+        return None
+    return None
+
+
+def _is_error(result: Any, body: Any) -> bool:
+    try:
+        if result.get("status") == "error":
+            return True
+    except Exception:
+        pass
+    return isinstance(body, dict) and "error" in body
+
+
+@dataclass
+class InvestigationResult:
+    alert_id: str
+    mode: str
+    model_id: str
+    proposal: dict[str, Any] | None
+    proposal_result: dict[str, Any] | None
+    stor_draft: dict[str, Any] | None
+    rejections: list[str]
+    tool_calls: list[dict[str, Any]]
+    final_text: str
+    usage: dict[str, Any]
+    duration_s: float
+    session_id: str | None = None
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return self.__dict__.copy()
+
+
+def build_agent(
+    *,
+    alert_id: str,
+    access_token: str,
+    mode: str = "investigate",
+    analyst: str | None = None,
+    model_id: str | None = None,
+) -> tuple[Agent, InvestigationGuard, MCPClient]:
+    model_id = model_id or os.environ.get("SURV_MODEL_ID", DEFAULT_MODEL)
+    # Claude 5.5: `temperature` is rejected; adaptive thinking is on by default (Sonnet at effort "high") and its
+    # tokens count against max_tokens, so the budget must cover thinking plus the report. Effort is a tuning knob
+    # for Phase 5 (A/B low vs high).
+    effort = os.environ.get("SURV_EFFORT", "medium")
+    model = BedrockModel(
+        model_id=model_id,
+        region_name=REGION,
+        max_tokens=int(os.environ.get("SURV_MAX_TOKENS", "32000")),
+        additional_request_fields={"thinking": {"type": "adaptive"}, "output_config": {"effort": effort}},
+    )
+    mcp = MCPClient(url=gateway_mcp_url(), headers={"Authorization": f"Bearer {access_token}"}, startup_timeout=60)
+    guard = InvestigationGuard(alert_id=alert_id, mode=mode)
+    agent = Agent(
+        model=model,
+        tools=[mcp],
+        system_prompt=system_prompt(mode),
+        hooks=[guard],
+        tool_executor=SequentialToolExecutor(),  # temporal policies need each response recorded before the next request
+        callback_handler=None,
+        trace_attributes={
+            "surv.alert_id": alert_id,
+            "surv.mode": mode,
+            "surv.analyst": analyst or "unknown",
+            "surv.model_id": model_id,
+        },
+        name="surv_investigator_l1",
+        description="Level-1 spoofing/layering alert investigator",
+    )
+    return agent, guard, mcp
+
+
+def investigate(
+    *,
+    alert_id: str,
+    access_token: str,
+    mode: str = "investigate",
+    analyst: str | None = None,
+    model_id: str | None = None,
+    session_id: str | None = None,
+    extra_instruction: str | None = None,
+) -> InvestigationResult:
+    """Run one investigation to completion and return everything the caller needs to show or store."""
+    t0 = time.time()
+    agent, guard, _mcp = build_agent(
+        alert_id=alert_id, access_token=access_token, mode=mode, analyst=analyst, model_id=model_id
+    )
+    prompt = f"Investigate alert {alert_id}."
+    if mode == "stor_drafting":
+        prompt += " If you propose DRAFT_STOR, draft the STOR narrative afterwards."
+    if extra_instruction:
+        prompt += f"\n\nAnalyst instruction: {extra_instruction}"
+    error: str | None = None
+    text = ""
+    usage: dict[str, Any] = {}
+    try:
+        result = agent(prompt)  # the Agent starts the MCP client as a ToolProvider and stops it in cleanup()
+        text = "".join(b.get("text", "") for b in result.message.get("content", []) if isinstance(b, dict))
+        try:
+            u = result.metrics.accumulated_usage
+            usage = {
+                "input_tokens": u.get("inputTokens"),
+                "output_tokens": u.get("outputTokens"),
+                "total_tokens": u.get("totalTokens"),
+                "model_calls": len(result.metrics.cycle_durations),
+            }
+        except Exception:  # metrics shape changed; the run itself is fine
+            pass
+    except Exception as exc:  # keep the trajectory so the failure can be read
+        error = f"{type(exc).__name__}: {exc}"
+        log.exception("investigation of %s failed", alert_id)
+        try:  # the partial assistant message is already in the history; keep its text for diagnosis
+            last = agent.messages[-1]
+            if last.get("role") == "assistant":
+                text = "".join(b.get("text", "") for b in last.get("content", []) if isinstance(b, dict))
+        except Exception:
+            pass
+    finally:
+        agent.cleanup()
+    return InvestigationResult(
+        alert_id=alert_id,
+        mode=mode,
+        model_id=agent.model.config.get("model_id", "?") if hasattr(agent.model, "config") else "?",
+        proposal=guard.proposal,
+        proposal_result=guard.proposal_result,
+        stor_draft=guard.stor_draft,
+        rejections=guard.rejections,
+        tool_calls=guard.calls,
+        final_text=text,
+        usage=usage,
+        duration_s=round(time.time() - t0, 1),
+        session_id=session_id,
+        error=error,
+    )

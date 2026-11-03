@@ -1,0 +1,103 @@
+# AgentCore: verified behaviours and traps
+
+Carried over from the earlier sanctions project (checked against the developer guide in September 2026) and re-checked where marked. The service changes monthly: when in doubt, re-check with the `aws-agentcore` power (`search_agentcore_docs`, `fetch_agentcore_doc`) before asserting anything, then update this file with the date.
+
+## Service inventory [verified 2026-11-02, devguide "What is Amazon Bedrock AgentCore?"]
+
+Harness, Runtime, Memory, Gateway, Identity, Code Interpreter, Browser, Observability, Payments, Evaluations, Optimization, Policy, Registry. All listed as services in the overview; none flagged as preview there. In eu-west-2 (London) the control-plane `list-*` calls for runtimes, gateways, memories, policy engines, code interpreters, evaluators and browsers all succeed [verified 2026-11-02]. Optimization and Registry endpoints were not probed; check when first used.
+
+## Naming and identifiers [checked 2026-09, re-verify in Phase 0]
+
+- Gateway exposes a target's tools as `${target_name}___${tool_name}` (three underscores). Our target is `surv`, so the MCP tool is `surv___get_alert` and the policy action is `AgentCore::Action::"surv___get_alert"`.
+- Runtime, Memory, Policy Engine and Policy names: `[a-zA-Z][a-zA-Z0-9_]{0,47}`. Gateway and target names: `([0-9a-zA-Z][-]?){1,100}`.
+- Runtime `runtime_session_id` must be 33-256 characters; reuse it for multi-turn conversations.
+
+## Policy (Dogwood, Cedar-compatible) [temporal docs verified to exist 2026-11-02; details checked 2026-09]
+
+- Deny by default. A tool call is allowed only if a `permit` applies and no `forbid` overrides it. `forbid` always wins.
+- Temporal conditions live in a `temporal { ... }` block and look back over the *policy session*. Events referenced: `::request` (a call was made), `::response` (a call completed and was permitted), `::error` (a call was denied).
+- A `::response` event is recorded only for permitted calls. The agent must await each tool result before issuing the dependent call. Strands does this sequentially by default; do not parallelise prerequisite and dependent calls.
+- Because deny-by-default, every prerequisite tool needs its own plain `permit`, otherwise it is never recorded as a response and the dependent rule can never fire.
+- Self-referential rules (cool-down) must match on `::response`, not `::request`, or the current request matches its own event.
+- Session-scoped counts are resettable by starting a new session. Present them as behaviour shaping, not as hard security. Pair with identity-scoped Gateway rate limits.
+- Per-policy enforcement mode `LOG_ONLY` vs `ACTIVE` exists: test on real traffic first, read decision logs, then switch. [verified 2026-11-02, "Test a policy in LOG_ONLY mode"]
+- Policy creation is asynchronous; validation runs against the Cedar schema derived from the Gateway's tools, so the Gateway target must exist and be READY before policies referencing its tools can validate.
+- Natural-language policy generation exists and validates per policy. Use it once as a demo, hand-write the rest. [verified 2026-11-02, "Policy generation: per-policy validation"]
+- Dogwood is open source (github.com/dogwood-policy/dogwood). Useful for testing policies locally.
+
+## Gateway [checked 2026-09]
+
+- `searchType: SEMANTIC` cannot be changed after creation.
+- `UpdateGateway` replaces all fields; fetch first and pass existing values through.
+- Inbound auth: `CUSTOM_JWT` (Cognito) or `AWS_IAM`. Never `NONE` here.
+- Lambda targets need a `toolSchema` with input *and output* schemas. Temporal policies reference `output.<field>` of prior responses, so declare `alert_id`, `trader_id`, `disposition`, `evidence_ids` in the schemas.
+- Per-user rate limiting is configured on the Gateway [verified 2026-11-03 by probing]: `CreateGatewayRateLimit` / `BatchPutGatewayRateLimits` (upsert) with `dimensionKeys` from {`targetName`, `toolName` (= `target___tool`), `$.context.jwt.<claim>`, `$.context.iam.principal`, header/body selectors} and `entries` (`*` = per-entity buckets, trailing positions only). CloudFormation `AWS::BedrockAgentCore::GatewayRateLimit` exists (L1 `aws_bedrockagentcore.CfnGatewayRateLimit` in aws-cdk-lib ≥ 2.269; not taggable). Throttled MCP call surfaces as `MCPError: Rate limit exceeded`. **Request limits have a burst allowance**: at 1/min, 18 calls passed before the first refusal and ~42 of 120 in 15 s; `rate: 0` blocks outright. Treat the rate as a sustained average; counting belongs to Policy. Propagation ≤ 30 s; fail-open when a dimension does not resolve.
+- Up to two Lambda interceptors (REQUEST, RESPONSE): an alternative place for audit logging.
+- Lambda target contract [verified 2026-11-02, devguide "Lambda functions" for Gateway targets]: the Lambda receives the tool's input properties as the `event` (no envelope) and the full tool name `<target>___<tool>` in `context.client_context.custom['bedrockAgentCoreToolName']`. One Lambda ARN per target, one tool schema per target: dispatch inside the function (`src/tools/lambda_handlers/gateway_tools.py`). Locally we pass `__tool__` in the event instead.
+- Tagging [verified 2026-11-03 against the installed boto3 model]: `tags` on `CreateGateway`, `CreateAgentRuntime`, `CreateMemory`, `CreatePolicyEngine`, `CreateCodeInterpreter`, `CreateEvaluator`; `TagResource` and `ListTagsForResource` are on the **control-plane** client (`aws bedrock-agentcore-control tag-resource`), not on `bedrock-agentcore`. Built-in evaluators have account-less ARNs (`arn:aws:bedrock-agentcore:::evaluator/...`) and cannot be tagged. `scripts/check_tags.py` audits everything.
+
+## Runtime [checked 2026-09]
+
+- Isolated microVM per session; billed for active session time. Default idle timeout 900 s, max lifetime 28800 s. Stop sessions after demos.
+- Each update creates an immutable version; the DEFAULT endpoint moves to the newest. Pin a `demo` endpoint to a known-good version before presenting.
+- Protocols: HTTP, MCP, A2A. Our L1 agent is HTTP; a stretch L2 reviewer agent would be A2A.
+- Direct code deployment for Python (zip) exists as an alternative to containers. [verified 2026-11-02, "Direct code deployment for Python"]
+
+## Runtime, learned by deploying [verified 2026-11-03]
+- CLI layout: `agentcore add runtime --name X --language python` writes only `app/X/README.md` + `AGENTS.md`; the code is ours: `app/X/main.py` (module-level `app = BedrockAgentCoreApp()`, `@app.entrypoint def invoke(payload, context)`, `app.run()` under `__main__`) and `app/X/pyproject.toml` (`[project].dependencies` is the only place deps are read from; `requires-python` constrains `runtimeVersion`; `[tool.agentcore] entrypoint`). No Dockerfile = CodeZip (direct code deploy; aarch64 wheels only, glibc ≤ 2.34, zip < 250 MiB). `findManifest` walks up from `codeLocation` to the project root, so a runtime folder without its own `pyproject.toml` silently inherits the root one.
+- Deployed names are `<project>_<target>_<runtime>`: ours is `surv_default_surv_investigator_l1`. Entry point becomes `opentelemetry-instrument main.py`. The CLI injects `AGENTCORE_GATEWAY_<NAME>_URL/_ARN/_AUTH_TYPE` for every project Gateway; a `protocolType: None` Gateway URL is a bare origin, append `/mcp`.
+- Analyst-token passthrough: Runtime `authorizerType: CUSTOM_JWT` + `requestHeaderAllowlist: ["Authorization"]`; the SDK exposes it as `context.request_headers["Authorization"]` (normalised key). Invocation with CUSTOM_JWT is plain HTTPS, no SigV4: `POST https://bedrock-agentcore.<region>.amazonaws.com/runtimes/<url-encoded ARN>/invocations?qualifier=DEFAULT` with `Authorization: Bearer <access token>` and `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id` (33+ chars). `scripts/invoke_runtime.py` is the reference. 35 s wall for a 9-tool investigation, 7 s for a refused request (cold start included).
+- Observability: spans land in the Runtime's log group `/aws/bedrock-agentcore/runtimes/<id>-DEFAULT`, stream `spans` (not only in `aws/spans`); one span per `execute_tool` and `mcp tools/call`, plus `chat <model>` per model call; `trace_attributes` passed to the Strands `Agent` appear as span attributes (`surv.alert_id`). Per-session streams `runtime-logs-<session id>` hold the app logs.
+- Strands + MCP: `MCPClient(url=..., headers={"Authorization": ...})` as a ToolProvider in `Agent(tools=[mcp])`; the Agent starts it, `agent.cleanup()` stops it; wrapping it in `with mcp:` as well raises "client session is currently running". `BeforeToolCallEvent.cancel_tool = "<message>"` turns the call into an error tool result the model reads. `SequentialToolExecutor` keeps calls in order (the model still batches several `toolUse` blocks in one message; they execute one by one).
+- Claude 5.5 on Bedrock [Bedrock user guide, 2026-11-03]: `temperature` -> ValidationException ("deprecated for this model"); adaptive thinking is on by default (Sonnet/Opus effort `high`, Haiku `medium`) and its tokens count against `max_tokens`; set `additional_request_fields={"thinking": {"type": "adaptive"}, "output_config": {"effort": ...}}`; `thinking.type: "enabled"` with `budget_tokens` is rejected. We use `max_tokens=32000`, effort `medium`. Strands raises `MaxTokensReachedException` and leaves the partial assistant message in `agent.messages`.
+
+## Memory [checked 2026-09]
+
+- Strategies: semantic, summary, user preference, episodic, custom. Long-term extraction is asynchronous; expect delay before records are retrievable.
+- `CreateEvent` accepts a `json` payload for non-conversational data. This is how disposition events are stored.
+- Plan the namespace scheme before creating the resource (per trader, per instrument, per analyst); awkward to change later.
+- Semantic retrieval is billed per call.
+
+## Code Interpreter [verified 2026-11-02 that docs exist]
+
+- Sandboxed Python/Node sessions with pre-installed libraries (see "Pre-installed libraries" page for the current list; check pandas/numpy before relying on them). Stop sessions when done; they are billed.
+
+## Evaluations [verified 2026-11-02, "Ground truth evaluations"]
+
+- Ground truth is supported: `Builtin.Correctness` (trace-level, `expectedResponse`), `Builtin.GoalSuccessRate` (session-level, natural-language `assertions`), `Builtin.TrajectoryExactOrderMatch` / `InOrderMatch` / `AnyOrderMatch` (session-level, `expectedTrajectory.toolNames`, programmatic, no LLM cost).
+- Custom evaluators can use placeholders `{assertions}`, `{expected_response}`, `{expected_tool_trajectory}`, `{actual_tool_trajectory}`, `{available_tools}`, `{context}`, `{assistant_turn}`. Custom evaluators with ground-truth placeholders cannot run in online mode.
+- Prerequisites: agent on Runtime with observability enabled (or Strands/LangGraph instrumented with OTel), CloudWatch Transaction Search, 2-5 minutes for telemetry ingestion before evaluating.
+- `OnDemandEvaluationDatasetRunner` runs the full loop (invoke, wait, collect spans, evaluate) client-side. Also `agentcore eval ondemand evaluate` in the CLI.
+- Evaluations scores sessions and traces individually. The project's aggregate metric (safe close rate at 100% recall) is computed by our own harness over the per-case results. Don't claim Evaluations computes it.
+
+## AgentCore CLI [verified 2026-11-02, CLI 1.0.1 installed, devguide pages cited]
+
+- Package is `@aws/agentcore` (not `agentcore-cli`): `npm install -g @aws/agentcore`. Node 20.12+. Conflicts with the Python starter toolkit's `agentcore` command; don't install both.
+- `agentcore add` resource types: harness, runtime, runtime-endpoint, gateway, gateway-target, gateway-connector, policy-engine, policy, credentials, memory, evaluator, online-eval, config-bundle, payment-manager. Everything is recorded in `agentcore/agentcore.json`; `agentcore deploy` creates it.
+- The CLI deploys through AWS CDK (TypeScript) with `@aws/agentcore-cdk`; the generated stack is `agentcore/cdk/lib/cdk-stack.ts` and the `AgentCoreApplication` construct exposes `runtime(name)` / `harness(name)` as `IGrantable` ("Customize the CDK code"). We do not put the firm's resources there (decision log 2026-11-02); they live in `infra/` (CDK Python).
+- Lambda gateway target: `agentcore add gateway-target --gateway G --target-configuration '{"name":..., "targetType":"lambdaFunctionArn", "lambdaFunctionArn":{"lambdaArn":"arn:...", "toolSchemaFile":"tools.json"}}'`. The ARN must already exist, hence infra deploys first.
+- Policy engine via CLI: `agentcore add policy-engine --name X --attach-to-gateways G --attach-mode log-only`. Deployed name is `<project>_<target>_<name>`, max 48 chars, `[A-Za-z][A-Za-z0-9_]*`, **no hyphens**. Keep the project name short.
+- `policyEngineId` (`name-xxxxxxxxxx`) is for policy CRUD; `policyEngineArn` is for attaching to a gateway. Not interchangeable.
+- [verified 2026-11-03 by doing it] `agentcore create --name surv` scaffolds into `./surv/`; we moved `agentcore/` to the project root. The project-file key for JWT auth is `customJwtAuthorizer` (API: `customJWTAuthorizer`) and needs one of `allowedClients`/`allowedAudience`/`allowedScopes`/`customClaims`. `toolSchemaFile` resolves from the **project root**, not from `agentcore/`. `agentcore deploy` compiles the TS CDK app itself (`npx cdk synth` in `agentcore/cdk` fails with MODULE_NOT_FOUND until then). Deployed names are prefixed `<project>-<target>-`: the Gateway is `surv-default-surv-investigator`. The CLI enables CloudWatch Transaction Search on first deploy. The Gateway's auto-created workload identity is **not** tagged by the stack: tag it with `tag-resource` (works).
+- [verified 2026-11-03] Gateway `allowedClients` matches the `client_id` claim, which Cognito puts in **access** tokens only; the id token fails. mcp 2.3.0 client API: `streamable_http_client(url, http_client=create_mcp_http_client(headers=...))` yields `(read, write)`; `CallToolResult.is_error` / `structured_content` (snake_case). `scripts/smoke_gateway.py` is the reference. Cold `compute_discriminators` through the Gateway: 3.6 s; warm reads about 200 ms.
+
+## Optimization [verified 2026-11-02, "AgentCore optimization" and "How it works"]
+
+- Three parts: recommendations (revised system prompt or tool descriptions from traces against a target evaluator, with explanation), configuration bundles (versioned immutable snapshots of prompt, model id, tool descriptions; optional), A/B testing through Gateway (bundle variants on one runtime, or target variants to different runtime endpoints) with online evaluation and statistical significance.
+- Nothing is applied automatically: the operator routes traffic to the winner. Our promotion rule (data doc 4.4) adds the offline deterministic gate on top.
+- Needs CloudWatch traces with Observability and online evaluators configured on the Gateway. Pricing to check.
+- Insights ("Triage agent failures with pattern analysis") exists as a related page; not yet read.
+
+## Tooling and environment [checked 2026-11-02 on this machine]
+
+- `uv 0.12.1`, `node v26.13.0`, `aws-cli 2.38.5`, `cdk 2.1147.0` (upgraded 2026-11-03: aws-cdk-lib 2.275.0 emits cloud-assembly schema 55, which CLI 2.1119.0 refused), `agentcore 1.0.1` present. Set `JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1` for CDK on node 26.
+- Python pinned to 3.14 (`.python-version`, system 3.14.2); `uv sync` resolved and imported strands-agents 1.63.0, strands-agents-tools 0.8.11, bedrock-agentcore 1.25.2, boto3 1.43.123, pandas 3.1.0, pyarrow 26.0.0, numpy 2.5.4, pydantic 2.14.2 on 3.14.2. Note pandas 3.x: string dtype and copy-on-write defaults differ from 2.x. The September note "3.14 too new for the SDKs" is obsolete.
+- Deployment runtimes for 3.14: Lambda `python3.14` is GA on Amazon Linux 2023 (deprecation June 2029; `python3.15` is preview) [verified 2026-11-02, Lambda runtimes page]. AgentCore Runtime `CodeConfiguration.runtime` accepts `PYTHON_3_10` to `PYTHON_3_14` and `NODE_22` [verified 2026-11-02, API reference and the installed boto3 service model]. Runtime and our Lambdas are arm64: build wheels with `uv pip install --python-platform aarch64-manylinux_2_28 --python-version 3.14 --only-binary=:all:` (`infra/build_layer.sh`). cp314 wheels of pandas 3.1.0, numpy 2.5.4 and pyarrow 26.0.0 exist only as `manylinux_2_28`; `manylinux2014` finds nothing [verified 2026-11-03 on PyPI]. Amazon Linux 2023 (glibc 2.34) accepts them. CDK `Runtime.PYTHON_3_14` and `Architecture.ARM_64` synthesize to `python3.14`/`arm64` [verified 2026-11-03, `cdk synth`]. CDK `Function.log_retention` is deprecated and adds a custom-resource Lambda: pass an explicit `log_group` instead.
+- Models are offered through inference profiles only (`INFERENCE_PROFILE`). From eu-west-2 use the `eu.` ids: `eu.anthropic.claude-haiku-5-5`, `eu.anthropic.claude-sonnet-5-5`, `eu.anthropic.claude-opus-5-5`. Haiku and Sonnet confirmed with a one-token `converse` call from eu-west-2. `get-inference-profile` shows the `eu.` profile spans eu-central-1, eu-north-1, eu-south-1, eu-south-2, eu-west-1, eu-west-2, eu-west-3: inference may run outside London. Fine for synthetic data; a real customer would ask.
+- Read-only `aws bedrock-agentcore-control list-{agent-runtimes,gateways,memories,policy-engines,code-interpreters,evaluators,browsers}` all succeed in eu-west-2 (and in us-east-1, checked earlier the same day).
+- AWS identity on this machine is an IAM user `ai-admin` in account 384308066035. Admin-class credentials: prefer read-only calls where possible; the deploy-guard hook asks before create/deploy commands.
+- The `aws-agentcore` Kiro power wraps control-plane calls and doc search. Prefer it for lookups; prefer the CLI or CDK for anything that should be reproducible.
+- Account 384308066035 had no `CDKToolkit` stack in eu-west-2 on 2026-11-03: `cdk bootstrap` (with the two project tags) comes before the first `cdk deploy`.
+- DynamoDB London on-demand prices [Pricing API 2026-11-03]: $0.7423/M WRU, $0.1487/M RRU, $0.29715/GB-month after 25 free GB. GSIs double the write cost of the tables that carry them. Bulk loads: shuffle items first, or a GSI partitioned on a low-cardinality key (our `by_date`) throttles the whole load to one partition (observed 630 vs 3,500 items/s).
+- AgentCore prices [pricing page 2026-11-03]: Gateway InvokeTool $5 per million; Policy $0.000025 per authorization request, natural-language authoring $0.13 per 1K input tokens; Identity free when used through Runtime or Gateway; customer-defined rate limiting free; Optimization recommendations free (pay for the Evaluations they consume), Insights free in preview.
+- CloudFormation output keys drop underscores from CfnOutput ids (`ORDER_EVENTS_TABLE` -> `ORDEREVENTSTABLE`); `scripts/load_dynamodb.py` normalises both sides.
