@@ -66,6 +66,7 @@ uv run scripts/invoke_runtime.py A-261006-0006             # το αναπτυγ
 uv run scripts/invoke_runtime.py A-261005-0002 --user L2 --mode stor_drafting
 uv run scripts/replay_alert.py data/synthetic/seed7 --scenario S-SPOOF-5 --reveal   # ανάγνωση ταινίας με το χέρι
 uv run scripts/check_tags.py                               # έλεγχος tags
+uv run --group ui streamlit run ui/analyst_app.py          # UI αναλυτή στο http://127.0.0.1:8501 (μόνο loopback)
 python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία εγγράφων (κενή έξοδος = καθαρό)
 ```
 
@@ -84,6 +85,7 @@ infra/                   CDK Python stack για το back end της εταιρ
 agentcore/               Project του AgentCore CLI: agentcore.json, deployed state, TS CDK stack (εδώ ζουν τα όρια ρυθμού)
 app/surv_investigator_l1 Ο agent: μοντέλο έκθεσης, prompt, agent Strands + guard, entrypoint Runtime, tests
 scripts/                 build_dataset, replay_alert, load_dynamodb, smoke_gateway, investigate, invoke_runtime, check_tags
+ui/                      UI αναλυτή (Streamlit) και οι clients του χωρίς Streamlit για Cognito, το API της ανθρώπινης διαδρομής, το Runtime, τα spans του CloudWatch
 data/synthetic/seed7     Το dataset (στο repo) με labels
 surv-tools.json          Σχήμα tools του Gateway, παράγεται από το src/tools/schema.py
 policies/, evals/        Φάσεις 4 και 5 (άδεια μέχρι στιγμής)

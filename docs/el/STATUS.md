@@ -2,19 +2,19 @@
 
 | Item | Τιμή |
 |---|---|
-| Phase | 3 - Agent στο Runtime, σε εξέλιξη: ο agent χτίστηκε, δοκιμάστηκε τοπικά σε τέσσερα alerts, έγινε deploy στο Runtime και κλήθηκε από την αρχή μέχρι το τέλος (2026-11-03). Απομένουν: UI αναλυτή, τα τρία demo alerts μέσω του UI. Η Φάση 2 έγινε deploy 2026-11-03: stack SurvFirm, seed7 στο DynamoDB, Gateway `surv-investigator` με Lambda target `surv`, smoke test μέσω MCP με token L1 πέρασε, όρια ρυθμού ανά αναλυτή ενεργά και δοκιμασμένα. **Η Φάση 2 ολοκληρώθηκε.** (Η Φάση 1 ολοκληρώθηκε 2026-11-02· βλ. `05-build-plan.md`) |
+| Phase | 3 ολοκληρώθηκε (2026-11-03): agent στο Runtime, UI αναλυτή (Streamlit), demo alerts A/B/C έτρεξαν και καταγράφηκαν. Επόμενο: Φάση 4 (policies, Memory, Code Interpreter). Η Φάση 2 έγινε deploy 2026-11-03: stack SurvFirm, seed7 στο DynamoDB, Gateway `surv-investigator` με Lambda target `surv`, smoke test μέσω MCP με token L1 πέρασε, όρια ρυθμού ανά αναλυτή ενεργά και δοκιμασμένα. **Η Φάση 2 ολοκληρώθηκε.** (Η Φάση 1 ολοκληρώθηκε 2026-11-02· βλ. `05-build-plan.md`) |
 | Repository | `https://github.com/donquixote47/surveillance-investigator` (ιδιωτικό), κλάδος `main`· τοπικό αντίγραφο `shared/tam-work/projects/agentcore-surveillance-investigator` |
 | Region | eu-west-2 |
 | Stack | Python 3.14.2 (uv 0.12.1), Strands Agents 1.63.0, bedrock-agentcore 1.25.2, boto3 1.43.123, AgentCore CLI 1.0.1 (`@aws/agentcore`), AWS CDK CLI 2.1147.0 με aws-cdk-lib 2.275.0 (Python) για το mock back end· moto 5.2.5 για offline tests DynamoDB |
 | Models | `eu.anthropic.claude-haiku-5-5` (ανάπτυξη), `eu.anthropic.claude-sonnet-5-5` (προεπιλεγμένος agent), `eu.anthropic.claude-opus-5-5` (arm σύγκρισης στη Φάση 5 και κριτής σκεπτικού)· πρόσβαση Haiku και Sonnet επιβεβαιωμένη από eu-west-2 2026-11-02 |
 | Deployed AWS resources | Βλ. τον πίνακα παρακάτω (δύο CloudFormation stacks, 1 Gateway, όλα με tags· το `scripts/check_tags.py` καθαρό) |
 | Dataset | `data/synthetic/seed7` (20 συνεδριάσεις 2026-10-05..30): 167 alerts, 28 TRUE_ABUSE (17%), 52 υποβάθρου, 1.82 M γεγονότα εντολών, recall στην εισηγμένη κατάχρηση 100%, 0 χαμένες εισαγωγές· μέσα τα `report.md` και `manifest.json` |
-| Last evaluation run | Agent, τέσσερα επιλεγμένα alerts (όχι το σύνολο αξιολόγησης): 3 στα 4 συμφωνούν με το label με Sonnet 5.5· η απόκλιση είναι το F-NEWS-1 που κλιμακώθηκε (ασφαλές). Το Haiku 5.5 κλιμάκωσε τον market maker που το Sonnet έκλεισε. Threshold baseline: ακατέργαστο safe close 96%, το gate απέτυχε (6 από τα 7 alerts S-SPOOF-5 προτάθηκαν CLOSE_FP μέσω του R5), αναφέρεται n/a |
-| Cost to date | Περίπου $4,5: $3,2 της Φάσης 2 πλέον περίπου 8 διερευνήσεων (Sonnet περίπου 35k tokens εισόδου / 3k εξόδου η καθεμία ≈ $0,10· οι εκτελέσεις Haiku λίγα σεντ) και δευτερολέπτων Runtime.  εγγραφές DynamoDB για το seed7 (≈4,2 M WRU μαζί με το GSI και τη διπλή μερική φόρτωση) πλέον μερικών δεκάδων κλήσεων Lambda, Cognito και Gateway· κλήσεις μοντέλου ακόμη κάτω από $0,01 |
+| Last evaluation run | Agent, επτά επιλεγμένα alerts (όχι το σύνολο αξιολόγησης): 5 στα 7 συμφωνούν με το label με Sonnet 5.5· και οι δύο αποκλίσεις είναι F-NEWS-1 που κλιμακώθηκαν (ασφαλές). Το Haiku 5.5 κλιμάκωσε τον market maker που το Sonnet έκλεισε. Threshold baseline: ακατέργαστο safe close 96%, το gate απέτυχε (6 από τα 7 alerts S-SPOOF-5 προτάθηκαν CLOSE_FP μέσω του R5), αναφέρεται n/a |
+| Cost to date | Περίπου $5: $3,2 της Φάσης 2 πλέον περίπου 12 διερευνήσεων (Sonnet περίπου 35k tokens εισόδου / 3k εξόδου η καθεμία ≈ $0,10· οι εκτελέσεις Haiku λίγα σεντ) και δευτερολέπτων Runtime.  εγγραφές DynamoDB για το seed7 (≈4,2 M WRU μαζί με το GSI και τη διπλή μερική φόρτωση) πλέον μερικών δεκάδων κλήσεων Lambda, Cognito και Gateway· κλήσεις μοντέλου ακόμη κάτω από $0,01 |
 
 ## Επόμενο βήμα
 
-Κλείσιμο Φάσης 3: UI αναλυτή (Streamlit: σύνδεση, ουρά από `GET /alerts`, εκτέλεση μέσω του Runtime, προβολή έκθεσης και trace id, καταγραφή μέσω `POST /cases/{id}/disposition`), μετά τα τρία demo alerts A/B/C μέσα από αυτό. Μετά Φάση 4 (policies, Memory).
+Φάση 4: Policy Engine συνδεδεμένο στο Gateway σε LOG_ONLY (policies 01-08 στο `policies/`), πόρος Memory με τα namespaces της ενότητας 7 του σχεδίου και η ανθρώπινη διαδρομή να γράφει dispositions και feedback σε αυτό, ο agent να διαβάζει το Memory μετά το `get_alert`· μετά αλλαγή των policies σε ACTIVE αφού διαβαστούν τα decision logs. Οι δύο κλιμακώσεις F-NEWS-1 είναι η πρώτη περίπτωση του βρόχου μάθησης.
 
 ## Αναπτυγμένοι πόροι
 

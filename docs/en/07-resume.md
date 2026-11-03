@@ -66,6 +66,7 @@ uv run scripts/invoke_runtime.py A-261006-0006             # the deployed Runtim
 uv run scripts/invoke_runtime.py A-261005-0002 --user L2 --mode stor_drafting
 uv run scripts/replay_alert.py data/synthetic/seed7 --scenario S-SPOOF-5 --reveal   # read a tape by hand
 uv run scripts/check_tags.py                               # tag audit
+uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
 python3 .kiro/hooks/scripts/docs-sync-check.py             # docs parity (empty output = clean)
 ```
 
@@ -84,6 +85,7 @@ infra/                   CDK Python stack for the firm's back end
 agentcore/               AgentCore CLI project: agentcore.json, deployed state, TS CDK stack (rate limits live here)
 app/surv_investigator_l1 The agent: report model, prompt, Strands agent + guard, Runtime entrypoint, tests
 scripts/                 build_dataset, replay_alert, load_dynamodb, smoke_gateway, investigate, invoke_runtime, check_tags
+ui/                      Analyst UI (Streamlit) and its Streamlit-free clients for Cognito, the human-path API, the Runtime, CloudWatch spans
 data/synthetic/seed7     The dataset (committed) with labels
 surv-tools.json          Gateway tool schema, generated from src/tools/schema.py
 policies/, evals/        Phase 4 and 5 (empty so far)

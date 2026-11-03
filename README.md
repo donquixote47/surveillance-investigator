@@ -62,6 +62,7 @@ data/synthetic/     seed7 dataset with labels (committed, 23 MB, deterministic)
 surv-tools.json     Gateway tool schema, generated from src/tools/schema.py
 evals/              Evaluation harness, ground-truth files, run outputs (Phase 5)
 scripts/            build_dataset, replay_alert, load_dynamodb, smoke_gateway, investigate, invoke_runtime, check_tags
+ui/                 Analyst UI (Streamlit, loopback) and its clients: Cognito login, human-path API, Runtime, CloudWatch spans
 ```
 
 ## Quick start (local, no AWS)

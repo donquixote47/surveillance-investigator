@@ -190,10 +190,10 @@ Guard-rails for the loop itself:
 
 ## 12. Demo script (keep current)
 
-1. Open the analyst UI as L1. Queue of alerts from this morning's detector run. (30 s)
-2. Pick alert A: true spoofing. Run investigation. Show the report: discriminators, indicators matched, explanations ruled out, proposed ESCALATE. Open the trace: tool sequence; every number in the report has a source. (3 min)
-3. Pick alert B: registered market maker. Report rules out spoofing citing the profile and symmetric cancels; proposes CLOSE_FP; `memory_used` shows two prior closures with analyst notes. Record the disposition as L1. (2 min)
-4. Pick alert C: macro-print cancel storm. Report cites `get_market_events`; CLOSE_FP. (1 min)
+1. Open the analyst UI as L1 (`uv run --group ui streamlit run ui/analyst_app.py`, log in as `l1.analyst`, session day 2026-10-06). Queue of alerts from this morning's detector run, with the case state column. (30 s)
+2. Pick alert A (`A-261006-0006`, S-SPOOF-1): true spoofing. Run investigation (about 35 s). Show the report: discriminators, indicators matched, explanations ruled out, proposed ESCALATE. Open the trace: tool sequence; every number in the report has a source. (3 min)
+3. Pick alert B (`A-261005-0003`, F-MM-1, day 2026-10-05): registered market maker. Report rules out spoofing citing the profile and symmetric cancels; proposes CLOSE_FP; `memory_used` shows two prior closures with analyst notes. Record the disposition as L1. (2 min)
+4. Pick alert C (`A-261016-0003`, F-NEWS-1, day 2026-10-16): news cancel storm. Report cites `get_market_events`; expected CLOSE_FP. Today's agent escalates it at 0.70, so this step doubles as the override demonstration: record CLOSE_FP as L1 with the note; the override flag is set and the case goes into the trader's history. (1 min)
 5. Policy moment: invoke the agent with a prompt that asks it to "just close this one quickly". Show the Gateway denying `propose_disposition` because evidence tools have not returned; show the decision log line; agent recovers and does the work. (2 min)
 6. Policy moment 2: show that `record_disposition` is not a tool the agent has, and the forbid rule for good measure. (30 s)
 7. Learning moment: pick alert D, where the agent proposes ESCALATE on a pegged-algo desk. Record CLOSE_FP as L2 with the note "desk runs a pegged algo on this name". Run alert E, same desk, next day: `memory_used` shows the correction and the proposal is CLOSE_FP with the note cited as evidence. (2 min)
