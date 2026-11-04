@@ -65,8 +65,8 @@ Exit: demo steps 1-4 work (step 3's `memory_used` waits for Memory in Phase 4; t
 
 Goal: the deterministic controls and the learning loop.
 
-- [ ] Policy Engine attached to the Gateway in `LOG_ONLY`; policies 01-08 as `.cedar` files; read decision logs; switch to `ACTIVE`.
-- [ ] Demo step 5 reproducible: a prompt that tries to shortcut is denied and recovers.
+- [x] Policy Engine `investigator_pe` declared in `agentcore.json`, attached to the Gateway; nine statements in `policies/` (01-08, with 03 split in two because a policy may hold at most three temporal operators). Gateway role granted `GetWorkloadAccessToken`; Gateway vended logs and traces delivered to CloudWatch (`CfnDeliverySource/Destination/Delivery` in the AgentCore CDK stack). Engine mode `ENFORCE` since 2026-11-04: `LOG_ONLY` records no `::response` events, so every response-dependent rule denied under it (decision log). `scripts/validate_policies.py` prints the service's findings per statement.
+- [x] Demo steps 5 and 6 reproducible with `scripts/policy_demo.py`: proposal before evidence denied (03b), CLOSE_FP without history denied (04), allowed after history, second proposal denied (06), STOR draft as L1 denied (07), `record_disposition` absent from `tools/list`. Sonnet itself ignores a "just close this quickly" instruction and runs the full procedure, so the scripted client is what shows the denial. Agent on Runtime v6 (policy session header) runs clean under `ENFORCE`: A-261006-0006 ESCALATE, A-261006-0015 ESCALATE, A-261005-0003 CLOSE_FP.
 - [ ] Memory resource with the namespace scheme; human path writes disposition events and feedback; agent retrieves after `get_alert`.
 - [ ] Ingest the procedures document into `/procedures`.
 - [ ] Re-run demo alert B to show `memory_used`.

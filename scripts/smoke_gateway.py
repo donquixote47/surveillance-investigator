@@ -57,12 +57,20 @@ def gateway_url() -> str:
 
 
 async def run(url: str, token: str, alert_id: str, tools: list[str], verbose: bool) -> int:
+    # mcp 2.x: headers go on a pre-built httpx client, the transport yields (read, write)
+    import uuid
+
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
     from mcp.shared._httpx_utils import create_mcp_http_client
 
-    # mcp 2.x: headers go on a pre-built httpx client, the transport yields (read, write)
-    http = create_mcp_http_client(headers={"Authorization": f"Bearer {token}"})
+    # every Gateway call names a policy session; temporal policies look at this session's history only
+    http = create_mcp_http_client(
+        headers={
+            "Authorization": f"Bearer {token}",
+            "x-amzn-bedrock-agentcore-policy-session-id": f"smoke-{uuid.uuid4().hex}",
+        }
+    )
     failures = 0
     async with streamable_http_client(f"{url}/mcp", http_client=http) as (read, write):
         async with ClientSession(read, write) as session:

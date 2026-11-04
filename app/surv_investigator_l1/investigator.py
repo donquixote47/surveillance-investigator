@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -32,6 +33,7 @@ log = logging.getLogger("surv.investigator")
 DEFAULT_MODEL = "eu.anthropic.claude-sonnet-5-5"
 REGION = os.environ.get("AWS_REGION", "eu-west-2")
 PROPOSE = f"{TOOL_PREFIX}propose_disposition"
+POLICY_SESSION_HEADER = "x-amzn-bedrock-agentcore-policy-session-id"
 DRAFT_STOR = f"{TOOL_PREFIX}draft_stor_narrative"
 
 
@@ -187,8 +189,13 @@ def build_agent(
     mode: str = "investigate",
     analyst: str | None = None,
     model_id: str | None = None,
+    policy_session_id: str | None = None,
 ) -> tuple[Agent, InvestigationGuard, MCPClient]:
+    """`policy_session_id` scopes the Gateway's temporal policies: one investigation = one policy session, so
+    "evidence before proposal" and "one proposal per alert" are judged on this run's history only. The Runtime
+    session id is reused when there is one, so policy session, Runtime session and trace line up."""
     model_id = model_id or os.environ.get("SURV_MODEL_ID", DEFAULT_MODEL)
+    policy_session_id = policy_session_id or f"surv-{alert_id}-{uuid.uuid4().hex}"
     # Claude 5.5: `temperature` is rejected; adaptive thinking is on by default (Sonnet at effort "high") and its
     # tokens count against max_tokens, so the budget must cover thinking plus the report. Effort is a tuning knob
     # for Phase 5 (A/B low vs high).
@@ -199,7 +206,11 @@ def build_agent(
         max_tokens=int(os.environ.get("SURV_MAX_TOKENS", "32000")),
         additional_request_fields={"thinking": {"type": "adaptive"}, "output_config": {"effort": effort}},
     )
-    mcp = MCPClient(url=gateway_mcp_url(), headers={"Authorization": f"Bearer {access_token}"}, startup_timeout=60)
+    mcp = MCPClient(
+        url=gateway_mcp_url(),
+        headers={"Authorization": f"Bearer {access_token}", POLICY_SESSION_HEADER: policy_session_id},
+        startup_timeout=60,
+    )
     guard = InvestigationGuard(alert_id=alert_id, mode=mode)
     agent = Agent(
         model=model,
@@ -213,6 +224,7 @@ def build_agent(
             "surv.mode": mode,
             "surv.analyst": analyst or "unknown",
             "surv.model_id": model_id,
+            "surv.policy_session_id": policy_session_id,
         },
         name="surv_investigator_l1",
         description="Level-1 spoofing/layering alert investigator",
@@ -233,7 +245,12 @@ def investigate(
     """Run one investigation to completion and return everything the caller needs to show or store."""
     t0 = time.time()
     agent, guard, _mcp = build_agent(
-        alert_id=alert_id, access_token=access_token, mode=mode, analyst=analyst, model_id=model_id
+        alert_id=alert_id,
+        access_token=access_token,
+        mode=mode,
+        analyst=analyst,
+        model_id=model_id,
+        policy_session_id=session_id,
     )
     prompt = f"Investigate alert {alert_id}."
     if mode == "stor_drafting":
