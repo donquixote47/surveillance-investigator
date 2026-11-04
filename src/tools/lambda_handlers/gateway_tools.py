@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from tools import data_access as da
+from tools import memory_access as mem
 from tools import procedures
 from tools.schema import REQUIRED_INPUTS, TARGET_NAME, TOOL_NAMES
 
@@ -414,6 +415,35 @@ def get_procedures(ev: dict) -> dict:
     return {"topic": ev["topic"], "text": procedures.get(ev["topic"])}
 
 
+def recall_memory(ev: dict) -> dict:
+    alert, err = _alert_or_error(ev["alert_id"])
+    if err:
+        return err
+    q = (
+        ev.get("query") or ""
+    ).strip() or "prior dispositions, overrides and analyst notes on this trader and instrument"
+    k = int(ev.get("top_k") or 5)
+    trader_notes = mem.recall(mem.trader_ns(ev["trader_id"]), q, k)
+    tr = da.get_trader(ev["trader_id"]) or {}
+    desk = tr.get("desk")
+    desk_notes = mem.recall(mem.desk_ns(desk), q, k) if desk else []
+    instrument_notes = mem.recall(mem.instrument_ns(ev["instrument"]), q, min(k, 3))
+    procs = mem.recall(mem.PROCEDURES_NS, q, 2)
+    return {
+        "alert_id": alert["alert_id"],
+        "trader_id": ev["trader_id"],
+        "desk": desk,
+        "trader_notes": trader_notes,
+        "desk_notes": desk_notes,
+        "instrument_notes": [
+            {k2: v for k2, v in r.items() if k2 in ("text", "score", "source")} for r in instrument_notes
+        ],
+        "procedures": [{k2: v for k2, v in r.items() if k2 in ("text", "score", "source")} for r in procs],
+        "count": len(trader_notes) + len(desk_notes) + len(instrument_notes) + len(procs),
+        "note": "context only: prior dispositions never replace evidence from the current window (closure standard)",
+    }
+
+
 def propose_disposition(ev: dict) -> dict:
     alert, err = _alert_or_error(ev["alert_id"])
     if err:
@@ -514,6 +544,7 @@ TOOL_IMPL: dict[str, Any] = {
     "get_market_events": get_market_events,
     "get_instrument_stats": get_instrument_stats,
     "get_procedures": get_procedures,
+    "recall_memory": recall_memory,
     "propose_disposition": propose_disposition,
     "draft_stor_narrative": draft_stor_narrative,
 }

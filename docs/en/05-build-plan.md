@@ -67,12 +67,12 @@ Goal: the deterministic controls and the learning loop.
 
 - [x] Policy Engine `investigator_pe` declared in `agentcore.json`, attached to the Gateway; nine statements in `policies/` (01-08, with 03 split in two because a policy may hold at most three temporal operators). Gateway role granted `GetWorkloadAccessToken`; Gateway vended logs and traces delivered to CloudWatch (`CfnDeliverySource/Destination/Delivery` in the AgentCore CDK stack). Engine mode `ENFORCE` since 2026-11-04: `LOG_ONLY` records no `::response` events, so every response-dependent rule denied under it (decision log). `scripts/validate_policies.py` prints the service's findings per statement.
 - [x] Demo steps 5 and 6 reproducible with `scripts/policy_demo.py`: proposal before evidence denied (03b), CLOSE_FP without history denied (04), allowed after history, second proposal denied (06), STOR draft as L1 denied (07), `record_disposition` absent from `tools/list`. Sonnet itself ignores a "just close this quickly" instruction and runs the full procedure, so the scripted client is what shows the denial. Agent on Runtime v6 (policy session header) runs clean under `ENFORCE`: A-261006-0006 ESCALATE, A-261006-0015 ESCALATE, A-261005-0003 CLOSE_FP.
-- [ ] Memory resource with the namespace scheme; human path writes disposition events and feedback; agent retrieves after `get_alert`.
-- [ ] Ingest the procedures document into `/procedures`.
-- [ ] Re-run demo alert B to show `memory_used`.
-- [ ] Demo step 7 reproducible: record an override on alert D as L2 with a note; alert E (same desk, next day) cites the correction in `memory_used` and proposes CLOSE_FP.
+- [x] Memory `investigator_memory` (SEMANTIC strategy, `/traders/{actorId}/notes/`) declared in `agentcore.json`; `src/tools/memory_access.py`; human path writes a direct record per disposition and per feedback (trader and desk namespaces) and a conversational event for extraction; new Gateway tool `recall_memory` (12 tools now; policies 01/02 extended; deployed in two steps because the engine validates tool names against the deployed manifest). Lambda layer now carries boto3 1.43.123 (the runtime's copy rejected `metadata` on memory records). Design §7 rewritten to what was built.
+- [x] `scripts/memory_admin.py ingest-procedures` (3 records in `/procedures/`), `seed-history` (18 prior dispositions, fanned out to 36 trader+desk records), `list`, `delete`.
+- [x] Demo B through the Runtime (v8): `memory_used` cites the desk's prior closures, "same explanation holds on today's tape", CLOSE_FP 0.85.
+- [x] Demo step 7: feedback on D `A-261016-0003` (recorded as an L1 override) -> E `A-261023-0001`, same desk a week later, cites it in `memory_used` and proposes CLOSE_FP 0.65. Needed one change to the firm's procedures, not the prompt: the closure standard now says how an accepted explanation accounts for feature (a) and that feature (b) is a benefit (favourable move with reversion, or positive round trip), not any opposite-side execution. Regression: S-SPOOF-1 x2, S-SPOOF-2, S-SPOOF-5, S-LAYER-1 still ESCALATE.
 
-Exit: demo steps 5-7 work; policy decision logs visible; memory influence and an analyst correction visible in a report.
+Exit: demo steps 5-7 work; policy decision logs visible; memory influence and an analyst correction visible in a report. **Phase 4 complete 2026-11-05.**
 
 ## Phase 5 - Evaluation harness and learning loop (moderate AWS cost: two or three full dataset runs on a Sonnet-class model)
 

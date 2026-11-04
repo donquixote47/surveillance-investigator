@@ -69,6 +69,7 @@ uv run scripts/replay_alert.py data/synthetic/seed7 --scenario S-SPOOF-5 --revea
 uv run scripts/check_tags.py                               # tag audit
 uv run scripts/policy_demo.py                              # demo steps 5-6: the Gateway denying shortcuts, by policy name
 uv run scripts/validate_policies.py                        # the engine's findings for every file in policies/
+uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # Memory records; also ingest-procedures, seed-history, delete
 uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
 python3 .kiro/hooks/scripts/docs-sync-check.py             # docs parity (empty output = clean)
 ```

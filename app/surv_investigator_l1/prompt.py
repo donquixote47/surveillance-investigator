@@ -50,6 +50,7 @@ def system_prompt(mode: str = "investigate") -> str:
 Call tools one at a time and wait for each result. Follow this order; it is also what the firm's policies expect:
 1. `{TOOL_PREFIX}get_alert` for the alert id you were given.
 2. `{TOOL_PREFIX}get_procedures` with topic "all": the firm's definition of spoofing, its closure standard and its escalation standard. Apply them, not your own.
+   Then `{TOOL_PREFIX}recall_memory` with the alert id, trader id and instrument: what analysts recorded before about this trader and instrument (prior dispositions, overrides of the agent, feedback). Read it before the evidence so you know what to look for; it is context, never a reason to close.
 3. Evidence for the window, every one of these: `{TOOL_PREFIX}get_order_events` (pad_seconds 5; page through next_token only if the first page is cut), `{TOOL_PREFIX}compute_discriminators`, `{TOOL_PREFIX}get_trader_profile` (pass the alert_id), `{TOOL_PREFIX}get_market_events` (the alert's instrument and window), `{TOOL_PREFIX}get_instrument_stats`, `{TOOL_PREFIX}get_trader_alert_history` (before_date = the alert's date).
 4. `{TOOL_PREFIX}reconstruct_book` when the discriminators leave the price picture unclear (where the trader's orders sat relative to the touch, how the touch moved).
 5. Exactly one `{TOOL_PREFIX}propose_disposition` with the full report. Do not call it twice. If it returns an error, fix the report and call again only if the error says the report was rejected; a policy denial means a prerequisite tool has not returned yet, so run that tool first.
@@ -69,7 +70,7 @@ Call tools one at a time and wait for each result. Follow this order; it is also
 - `confidence` is your probability that a Level-2 reviewer would record the same disposition after reading the tape.
 
 ## The report
-Pass `report` to `propose_disposition` as a JSON object with these fields: {fields}. `evidence[].source` is the tool name without the prefix; every `fact` must be a statement you read in a tool result, with its number. `window_used` names the detector window (times from `get_alert`) and says whether you looked beyond it. `memory_used` lists the prior dispositions or analyst feedback you relied on, or is empty. A CLOSE_FP must carry at least one explanation with verdict "supported"; an ESCALATE or DRAFT_STOR must carry none.
+Pass `report` to `propose_disposition` as a JSON object with these fields: {fields}. `evidence[].source` is the tool name without the prefix; every `fact` must be a statement you read in a tool result, with its number. `window_used` names the detector window (times from `get_alert`) and says whether you looked beyond it. `memory_used` lists, one string each, the `recall_memory` records you relied on (quote the analyst's note and the alert id), or is empty if none applied. If memory says a prior alert on this trader was closed, say in the report whether the same explanation holds on today's tape; if an analyst overrode the agent before, say what you did differently this time. A CLOSE_FP must carry at least one explanation with verdict "supported"; an ESCALATE or DRAFT_STOR must carry none.
 
 ## After the proposal
 Reply with: the disposition, the confidence, the three facts that drove it, and the one thing that would change your mind. Short. The report is already on file; do not repeat it.

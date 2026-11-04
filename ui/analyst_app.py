@@ -157,7 +157,11 @@ def report_view(report: dict, confidence: float | None, disposition: str | None)
     st.markdown(f"**What would change the agent's mind:** {report.get('what_would_change_my_mind', '')}")
     st.caption(f"Window: {report.get('window_used', '')}")
     if report.get("memory_used"):
-        st.markdown("**Memory used:** " + "; ".join(report["memory_used"]))
+        st.markdown("**Memory used** (what analysts recorded before, and what the agent did with it):")
+        for m in report["memory_used"]:
+            st.markdown(f"- {m}")
+    else:
+        st.caption("Memory used: nothing from prior analyst decisions applied to this alert")
     if report.get("tool_calls"):
         st.caption("Tools (from the agent's trace): " + " → ".join(report["tool_calls"]))
 
@@ -221,6 +225,10 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
             + ("  ·  **override** of the agent's proposal" if case.get("override") else "")
         )
         st.markdown(f"> {case.get('analyst_note', '')}")
+        st.caption(
+            "This decision is now in AgentCore Memory under the trader and the desk; "
+            "the agent will recall it next time."
+        )
     if case.get("feedback"):
         st.markdown("**Feedback on this case**")
         for f in case["feedback"]:
@@ -244,7 +252,9 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
                 st.success(f"recorded {r['recorded_disposition']}" + (" (override)" if r.get("override") else ""))
                 st.rerun()
     with st.form(f"feedback-{alert_id}"):
-        fb = st.text_input("Feedback for the agent (goes to the case now, to Memory in Phase 4)")
+        fb = st.text_input(
+            "Feedback for the agent (saved on the case and written to AgentCore Memory for the trader and the desk)"
+        )
         if st.form_submit_button("Send feedback"):
             r = api.feedback(alert_id, fb)
             st.error(r["error"]) if r.get("error") else st.success("feedback saved")

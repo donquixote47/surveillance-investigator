@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from boto3.dynamodb.conditions import Key
 
 from tools import data_access as da
+from tools import memory_access as mem
 
 DISPOSITIONS = ("CLOSE_FP", "ESCALATE", "DRAFT_STOR")
 L1_ALLOWED = ("CLOSE_FP", "ESCALATE")
@@ -194,10 +195,13 @@ def record_disposition(alert_id: str, body: dict, user: str, groups: list[str]) 
             "override": override,
         }
     )
+    desk = (da.get_trader(alert["trader_id"]) or {}).get("desk")
+    memory_written = _to_memory(lambda: mem.record_disposition(alert, case, disp, user, note, override, desk))
     return _resp(
         200,
         {
             "alert_id": alert_id,
+            "memory_written": memory_written,
             "recorded_disposition": disp,
             "proposed_disposition": proposed,
             "override": override,
@@ -206,6 +210,16 @@ def record_disposition(alert_id: str, body: dict, user: str, groups: list[str]) 
             "status": status,
         },
     )
+
+
+def _to_memory(fn) -> bool:
+    """Memory is a secondary store: a failure must not lose the DynamoDB record that was just written."""
+    try:
+        fn()
+        return True
+    except Exception as exc:  # logged, not raised
+        print(f"memory write failed: {type(exc).__name__}: {exc}")
+        return False
 
 
 def send_feedback(alert_id: str, body: dict, user: str, groups: list[str]) -> dict:
@@ -234,10 +248,13 @@ def send_feedback(alert_id: str, body: dict, user: str, groups: list[str]) -> di
             ":f": [entry],
         },
     )
+    desk = (da.get_trader(alert["trader_id"]) or {}).get("desk")
+    memory_written = _to_memory(lambda: mem.record_feedback(alert, user, note, desk))
     return _resp(
         200,
         {
             "alert_id": alert_id,
+            "memory_written": memory_written,
             "feedback": entry,
             "memory": "written to AgentCore Memory in Phase 4" if not os.environ.get("MEMORY_ID") else "queued",
         },

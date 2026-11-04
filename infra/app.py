@@ -32,6 +32,7 @@ SurvFirmStack(
     "SurvFirm",
     env=cdk.Environment(account=account, region=REGION),
     gateway_role_arn=app.node.try_get_context("gatewayRoleArn"),
+    memory_id=app.node.try_get_context("memoryId"),
     description="Mock surveillance back end for the AgentCore investigator (synthetic data only)",
 )
 

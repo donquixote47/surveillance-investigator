@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Build the Lambda layer with pandas and numpy wheels for the Lambda runtime (Python 3.14, arm64).
+# Build the Lambda layer with pandas, numpy and a current boto3 for the Lambda runtime (Python 3.14, arm64).
+#
+# boto3 is included because the runtime's bundled copy lags the AgentCore Memory API (its BatchCreateMemoryRecords
+# did not know `metadata` on 2026-11-04); the layer pins the same version uv.lock resolved for the project.
 #
 # pyarrow is deliberately left out: the tools Lambda reads DynamoDB, never parquet, and pandas 3.x falls back to
 # Python-backed strings without it. pyarrow alone is 139 MB unzipped; without it the layer is about 80 MB unzipped.
@@ -26,7 +29,9 @@ pinned() {  # read the locked version of a package from uv.lock
 
 PANDAS="$(pinned pandas)"
 NUMPY="$(pinned numpy)"
-echo "layer: pandas==$PANDAS numpy==$NUMPY for cp${PY_VERSION/./} $PLATFORM"
+BOTO3="$(pinned boto3)"
+BOTOCORE="$(pinned botocore)"
+echo "layer: pandas==$PANDAS numpy==$NUMPY boto3==$BOTO3 for cp${PY_VERSION/./} $PLATFORM"
 
 rm -rf "$OUT"
 mkdir -p "$OUT/python"
@@ -37,8 +42,8 @@ uv pip install \
   --only-binary=:all: \
   --no-deps \
   --target "$OUT/python" \
-  "pandas==$PANDAS" "numpy==$NUMPY" \
-  python-dateutil tzdata
+  "pandas==$PANDAS" "numpy==$NUMPY" "boto3==$BOTO3" "botocore==$BOTOCORE" \
+  python-dateutil tzdata jmespath s3transfer urllib3
 
 # trim what Lambda never needs: tests, headers for compiling against numpy, bytecode caches
 find "$OUT/python" -type d \( -name tests -o -name test -o -name __pycache__ \) -prune -exec rm -rf {} +

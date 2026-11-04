@@ -39,7 +39,27 @@
       }
     }
   ],
-  "memories": [],
+  "memories": [
+    {
+      "name": "investigator_memory",
+      "description": "Analyst dispositions and corrections per trader, instrument notes, firm procedures. Written by the human path, read by the agent through the Gateway.",
+      "eventExpiryDuration": 90,
+      "strategies": [
+        {
+          "type": "SEMANTIC",
+          "name": "analyst_knowledge",
+          "description": "Facts an analyst stated about a trader, an instrument or the firm procedures",
+          "namespaceTemplates": [
+            "/traders/{actorId}/notes/"
+          ]
+        }
+      ],
+      "tags": {
+        "Project": "agentcore-surveillance-investigator",
+        "auto-delete": "no"
+      }
+    }
+  ],
   "knowledgeBases": [],
   "credentials": [],
   "evaluators": [],
@@ -92,9 +112,18 @@
         {
           "name": "p01_permit_read_tools",
           "description": "01 Read tools: any authenticated analyst may call the evidence tools. Deny-by-default means every",
-          "statement": "// 01 Read tools: any authenticated analyst may call the evidence tools. Deny-by-default means every\n// prerequisite of a temporal rule needs its own permit, or it is never recorded as a response.\npermit (\n  principal is AgentCore::OAuthUser,\n  action in [\n    AgentCore::Action::\"surv___get_alert\",\n    AgentCore::Action::\"surv___get_procedures\",\n    AgentCore::Action::\"surv___get_order_events\",\n    AgentCore::Action::\"surv___reconstruct_book\",\n    AgentCore::Action::\"surv___compute_discriminators\",\n    AgentCore::Action::\"surv___get_trader_profile\",\n    AgentCore::Action::\"surv___get_trader_alert_history\",\n    AgentCore::Action::\"surv___get_market_events\",\n    AgentCore::Action::\"surv___get_instrument_stats\"\n  ],\n  resource == AgentCore::Gateway::\"arn:aws:bedrock-agentcore:eu-west-2:384308066035:gateway/surv-default-surv-investigator-gsq1ismkrw\"\n);\n",
+          "statement": "// 01 Read tools: any authenticated analyst may call the evidence tools. Deny-by-default means every\n// prerequisite of a temporal rule needs its own permit, or it is never recorded as a response.\npermit (\n  principal is AgentCore::OAuthUser,\n  action in [\n    AgentCore::Action::\"surv___get_alert\",\n    AgentCore::Action::\"surv___get_procedures\",\n    AgentCore::Action::\"surv___recall_memory\",\n    AgentCore::Action::\"surv___get_order_events\",\n    AgentCore::Action::\"surv___reconstruct_book\",\n    AgentCore::Action::\"surv___compute_discriminators\",\n    AgentCore::Action::\"surv___get_trader_profile\",\n    AgentCore::Action::\"surv___get_trader_alert_history\",\n    AgentCore::Action::\"surv___get_market_events\",\n    AgentCore::Action::\"surv___get_instrument_stats\"\n  ],\n  resource == AgentCore::Gateway::\"arn:aws:bedrock-agentcore:eu-west-2:384308066035:gateway/surv-default-surv-investigator-gsq1ismkrw\"\n);\n",
           "sourceFile": "policies/01-permit-read-tools.cedar",
           "validationMode": "FAIL_ON_ANY_FINDINGS",
+          "enforcementMode": "ACTIVE",
+          "authorizationPhase": "INITIATE"
+        },
+        {
+          "name": "p02_forbid_unknown_tools",
+          "description": "Defence in depth: any action outside the eleven known tools is forbidden for everyone; a tool added later is denied until this list is edited",
+          "statement": "// 02 Defence in depth for \"the agent never records a disposition\". The engine's Cedar schema is generated from\n// the Gateway's tool manifest, so a policy cannot even name a tool that does not exist (a forbid on\n// surv___record_disposition is rejected at creation: \"unrecognized action\"). What CAN be written is the\n// closed list: any action outside the twelve known tools is forbidden for everyone. If a record_disposition\n// tool is ever added to the target, it is denied until someone edits this list on purpose.\n// The resource must be the specific Gateway ARN: with `resource is AgentCore::Gateway` the validator does not bind\n// the Gateway's tool manifest and rejects every tool name as unrecognized (observed 2026-11-04).\nforbid (\n  principal,\n  action,\n  resource == AgentCore::Gateway::\"arn:aws:bedrock-agentcore:eu-west-2:384308066035:gateway/surv-default-surv-investigator-gsq1ismkrw\"\n)\nunless {\n  action in [\n    AgentCore::Action::\"surv___get_alert\",\n    AgentCore::Action::\"surv___get_procedures\",\n    AgentCore::Action::\"surv___recall_memory\",\n    AgentCore::Action::\"surv___get_order_events\",\n    AgentCore::Action::\"surv___reconstruct_book\",\n    AgentCore::Action::\"surv___compute_discriminators\",\n    AgentCore::Action::\"surv___get_trader_profile\",\n    AgentCore::Action::\"surv___get_trader_alert_history\",\n    AgentCore::Action::\"surv___get_market_events\",\n    AgentCore::Action::\"surv___get_instrument_stats\",\n    AgentCore::Action::\"surv___propose_disposition\",\n    AgentCore::Action::\"surv___draft_stor_narrative\"\n  ]\n};\n",
+          "sourceFile": "policies/02-forbid-unknown-tools.cedar",
+          "validationMode": "IGNORE_ALL_FINDINGS",
           "enforcementMode": "ACTIVE",
           "authorizationPhase": "INITIATE"
         },
@@ -157,15 +186,6 @@
           "description": "08 Bound cost and loops: at most 6 order-event pulls per session. `count` includes the current request,",
           "statement": "// 08 Bound cost and loops: at most 6 order-event pulls per session. `count` includes the current request,\n// so the seventh call in the window is the first one denied. Behaviour shaping, not a security boundary:\n// the caller names the session.\nforbid (\n  principal,\n  action == AgentCore::Action::\"surv___get_order_events\",\n  resource == AgentCore::Gateway::\"arn:aws:bedrock-agentcore:eu-west-2:384308066035:gateway/surv-default-surv-investigator-gsq1ismkrw\"\n)\nwhen temporal {\n  exists (n: Long).\n    (count for (t: Timepoint).\n      where (formerly within 2h (AgentCore::Action::\"surv___get_order_events\"::request{ eventResource: resource } && tp(t)))) == n\n    && n > 6\n};\n",
           "sourceFile": "policies/08-cap-event-pulls.dw",
-          "validationMode": "IGNORE_ALL_FINDINGS",
-          "enforcementMode": "ACTIVE",
-          "authorizationPhase": "INITIATE"
-        },
-        {
-          "name": "p02_forbid_unknown_tools",
-          "description": "Defence in depth: any action outside the eleven known tools is forbidden for everyone; a tool added later is denied until this list is edited",
-          "statement": "// 02 Defence in depth for \"the agent never records a disposition\". The engine's Cedar schema is generated from\n// the Gateway's tool manifest, so a policy cannot even name a tool that does not exist (a forbid on\n// surv___record_disposition is rejected at creation: \"unrecognized action\"). What CAN be written is the\n// closed list: any action outside the eleven known tools is forbidden for everyone. If a record_disposition\n// tool is ever added to the target, it is denied until someone edits this list on purpose.\n// The resource must be the specific Gateway ARN: with `resource is AgentCore::Gateway` the validator does not bind\n// the Gateway's tool manifest and rejects every tool name as unrecognized (observed 2026-11-04).\nforbid (\n  principal,\n  action,\n  resource == AgentCore::Gateway::\"arn:aws:bedrock-agentcore:eu-west-2:384308066035:gateway/surv-default-surv-investigator-gsq1ismkrw\"\n)\nunless {\n  action in [\n    AgentCore::Action::\"surv___get_alert\",\n    AgentCore::Action::\"surv___get_procedures\",\n    AgentCore::Action::\"surv___get_order_events\",\n    AgentCore::Action::\"surv___reconstruct_book\",\n    AgentCore::Action::\"surv___compute_discriminators\",\n    AgentCore::Action::\"surv___get_trader_profile\",\n    AgentCore::Action::\"surv___get_trader_alert_history\",\n    AgentCore::Action::\"surv___get_market_events\",\n    AgentCore::Action::\"surv___get_instrument_stats\",\n    AgentCore::Action::\"surv___propose_disposition\",\n    AgentCore::Action::\"surv___draft_stor_narrative\"\n  ]\n};\n",
-          "sourceFile": "policies/02-forbid-unknown-tools.cedar",
           "validationMode": "IGNORE_ALL_FINDINGS",
           "enforcementMode": "ACTIVE",
           "authorizationPhase": "INITIATE"

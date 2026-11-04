@@ -50,7 +50,15 @@ LAYER_DIR = ROOT / "infra" / "build" / "layer"
 
 
 class SurvFirmStack(Stack):
-    def __init__(self, scope: Construct, construct_id: str, *, gateway_role_arn: str | None = None, **kwargs) -> None:
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        gateway_role_arn: str | None = None,
+        memory_id: str | None = None,
+        **kwargs,
+    ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
         # ----- tables -----
@@ -119,6 +127,8 @@ class SurvFirmStack(Stack):
             "CASES_HISTORY_TABLE": cases_history.table_name,
             "CASES_TABLE": cases.table_name,
         }
+        if memory_id:  # AgentCore Memory lives in the AgentCore stack; its id arrives as a context value
+            table_env["MEMORY_ID"] = memory_id
 
         # ----- bucket for parquet datasets and reports -----
         bucket = s3.Bucket(
@@ -149,11 +159,11 @@ class SurvFirmStack(Stack):
         pandas_layer = lambda_.LayerVersion(
             self,
             "PandasLayer",
-            layer_version_name="surv-pandas-py314-arm64",
+            layer_version_name="surv-deps-py314-arm64",
             code=lambda_.Code.from_asset(str(LAYER_DIR)),
             compatible_runtimes=[lambda_.Runtime.PYTHON_3_14],
             compatible_architectures=[lambda_.Architecture.ARM_64],
-            description="pandas + numpy manylinux_2_28 wheels for Python 3.14 arm64 (infra/build_layer.sh)",
+            description="pandas + numpy + boto3 manylinux_2_28 wheels for Python 3.14 arm64 (infra/build_layer.sh)",
             removal_policy=RemovalPolicy.DESTROY,
         )
 
@@ -183,6 +193,12 @@ class SurvFirmStack(Stack):
         for t in read_tables:
             t.grant_read_data(tools_fn)
         cases.grant_write_data(tools_fn)  # propose_disposition; the function has no code path for recorded_*
+        if memory_id:
+            memory_arn = f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:memory/{memory_id}"
+            # the agent's tool only reads Memory; the human path writes it (records + events for extraction)
+            tools_fn.add_to_role_policy(
+                iam.PolicyStatement(actions=["bedrock-agentcore:RetrieveMemoryRecords"], resources=[memory_arn])
+            )
 
         human_fn = lambda_.Function(
             self,
@@ -192,6 +208,7 @@ class SurvFirmStack(Stack):
             architecture=lambda_.Architecture.ARM_64,
             handler="tools.lambda_handlers.human_path.handler",
             code=code,
+            layers=[pandas_layer],  # for the current boto3 (Memory API); pandas is unused here
             memory_size=512,
             timeout=Duration.seconds(30),
             environment=table_env,
@@ -208,6 +225,17 @@ class SurvFirmStack(Stack):
         )
         for t in (alerts, cases, cases_history, traders):
             t.grant_read_write_data(human_fn)
+        if memory_id:
+            human_fn.add_to_role_policy(
+                iam.PolicyStatement(
+                    actions=[
+                        "bedrock-agentcore:BatchCreateMemoryRecords",
+                        "bedrock-agentcore:CreateEvent",
+                        "bedrock-agentcore:UpdateMemoryRecordExpirySpecification",
+                    ],
+                    resources=[memory_arn],
+                )
+            )
 
         # ----- Cognito: analysts, groups L1 and L2 -----
         pool = cognito.UserPool(

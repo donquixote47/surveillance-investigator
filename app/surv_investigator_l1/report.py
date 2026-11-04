@@ -24,6 +24,7 @@ EVIDENCE_SOURCES = {
     "get_market_events",
     "get_instrument_stats",
     "get_procedures",
+    "recall_memory",
     "memory",
 }
 

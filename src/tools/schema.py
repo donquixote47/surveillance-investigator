@@ -361,6 +361,65 @@ TOOLS: list[dict] = [
         "outputSchema": _obj({"topic": _s(""), "text": _s("")}, "", ["topic", "text"]),
     },
     {
+        "name": "recall_memory",
+        "description": (
+            "What analysts have recorded before about this trader, the trader's desk and this instrument, "
+            "and the firm's procedures, "
+            "retrieved from AgentCore Memory by meaning. Returns prior dispositions (with override flags and the "
+            "analyst's note), analyst feedback, instrument notes. Context for the investigation, never a reason on its "
+            "own to close an alert. Call it right after get_alert, before the evidence tools."
+        ),
+        "inputSchema": _obj(
+            {
+                "alert_id": _s("the alert under investigation"),
+                "trader_id": _s("the alerted trader"),
+                "instrument": _s("the alert's instrument"),
+                "query": _s("what you want to know, e.g. 'prior dispositions and analyst notes on this trader'"),
+                "top_k": _i("records per namespace, default 5"),
+            },
+            "",
+            ["alert_id", "trader_id", "instrument"],
+        ),
+        "outputSchema": _obj(
+            {
+                "alert_id": _s(""),
+                "trader_id": _s(""),
+                "desk": _s("the trader's desk, from the profile"),
+                "trader_notes": _arr(
+                    _obj(
+                        {
+                            "text": _s(""),
+                            "score": _n(""),
+                            "source": _s(""),
+                            "metadata": _obj({}, ""),
+                            "record_id": _s(""),
+                        },
+                        "",
+                    ),
+                    "prior dispositions, overrides and feedback on this trader",
+                ),
+                "desk_notes": _arr(
+                    _obj(
+                        {
+                            "text": _s(""),
+                            "score": _n(""),
+                            "source": _s(""),
+                            "metadata": _obj({}, ""),
+                            "record_id": _s(""),
+                        },
+                        "",
+                    ),
+                    "the same, for every trader on this desk (corrections carry across days through the desk)",
+                ),
+                "instrument_notes": _arr(_obj({"text": _s(""), "score": _n(""), "source": _s("")}, ""), ""),
+                "procedures": _arr(_obj({"text": _s(""), "score": _n(""), "source": _s("")}, ""), ""),
+                "count": _i("total records returned"),
+            },
+            "",
+            ["alert_id", "trader_id", "trader_notes", "count"],
+        ),
+    },
+    {
         "name": "propose_disposition",
         "description": (
             "The agent's only write. Records a PROPOSED disposition and the investigation report for the alert. "

@@ -5,6 +5,7 @@ permit (
   action in [
     AgentCore::Action::"surv___get_alert",
     AgentCore::Action::"surv___get_procedures",
+    AgentCore::Action::"surv___recall_memory",
     AgentCore::Action::"surv___get_order_events",
     AgentCore::Action::"surv___reconstruct_book",
     AgentCore::Action::"surv___compute_discriminators",

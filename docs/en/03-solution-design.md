@@ -142,20 +142,23 @@ Observed decisions (`scripts/policy_demo.py`, 2026-11-04, engine `ENFORCE`): a p
 
 Session-scoped counts can be reset by starting a new session; they shape behaviour and are not a security boundary. The hard boundary is 02 plus the tool not existing on the Gateway. Gateway per-user rate limits (section 8) add a brake on volume, with a measured burst allowance of 15-20 calls, so they do not replace the count either.
 ## 7. Memory scheme
+One Memory resource `investigator_memory` (deployed as `surv_default_investigator_memory-38ATWRDsvk`, declared in `agentcore.json`, raw-event expiry 90 days) with one built-in SEMANTIC strategy `analyst_knowledge` whose namespace template is `/traders/{actorId}/notes/`. Access code: `src/tools/memory_access.py`.
 
-One Memory resource `surv_investigator_memory`, strategies: episodic (dispositions), semantic (procedures and analyst feedback), summary (per-trader summaries).
+Two ways in, by design:
+- **Direct records** (`BatchCreateMemoryRecords`) for facts the firm authors itself. The human-path Lambda writes one record per recorded disposition and one per feedback note; `scripts/memory_admin.py` seeds the dataset's `cases_history` and ingests the procedures. Direct records are deterministic and visible on the next call, which a system of record needs. Each carries metadata (`kind`, `alert_id`, `trader_id`, `instrument`, `date`, `recorded`, `proposed`, `override`, `recorded_by`).
+- **Extraction** from a conversational event (`CreateEvent`, actor = the trader id) for the free-text feedback, so the SEMANTIC strategy distils it asynchronously. Observed: a one-sentence feedback produced two extracted facts within a minute, one of them a general rule ("a cancel within 200 ms of an unscheduled news item on a name is classified as a news reaction"); retrieval returns both kinds, marked `source: recorded by the human path` or `extracted by the semantic strategy`.
 
-Namespaces:
+Namespaces (segments made of `[a-zA-Z0-9-_]`, so `SYN.A` is stored under `SYN_A`):
+- `/traders/{trader_id}/notes/` : dispositions, overrides, feedback on this trader (direct and extracted).
+- `/desks/{desk}/notes/` : the same facts fanned out to the trader's desk. The scenario traders are one per day, so a correction only reaches tomorrow's alert through the desk; the agent's `recall_memory` queries both.
+- `/instruments/{instrument}/notes/` : instrument facts, written by hand with `memory_admin.py`.
+- `/procedures/` : the three procedure topics, one record each.
 
-- `/traders/{trader_id}/dispositions` : JSON events `{alert_id, scenario, proposed, recorded, override, analyst_note, ts}` written by the human path after each recording.
-- `/traders/{trader_id}/feedback` : free-text analyst corrections ("this desk runs a pegged algo on XYZ; cancels on both sides are normal").
-- `/instruments/{instrument}/notes` : instrument-specific facts (tick size changes, market-maker programmes).
-- `/procedures` : ingested procedures document, retrieved semantically.
+Retrieval is a Gateway tool, `recall_memory` (alert id, trader id, instrument, free-text query), implemented in the same Lambda as the other tools, so it passes through Policy, appears in the Gateway log, and its result is a tool result the report can cite. It returns `trader_notes`, `desk_notes`, `instrument_notes`, `procedures`, each with a relevance score. The agent calls it right after `get_procedures`, before the evidence tools (prompt), and lists what it relied on in `memory_used`, one string per record, saying what it did with it. `RetrieveMemoryRecords` rejects a trailing slash in `namespace` even though `BatchCreateMemoryRecords` accepts one; the code strips it.
 
-Retrieval is one of the first steps, after `get_alert` and before evidence tools, so the agent knows what to look for. The report's `memory_used` field makes memory influence visible, and Policy 03 ensures memory can never replace current-window evidence.
+Observed on the demo alerts (2026-11-05): B (`A-261005-0003`, market maker) cites the desk's two prior closures and says "same explanation holds on today's tape, checked against the tape, not relied on alone" -> CLOSE_FP 0.85. E (`A-261023-0001`, F-NEWS-1 on desk PROP-EQ, 2026-10-23) cites the analyst's feedback recorded on D (`A-261016-0003`, same desk, 2026-10-16), states the sale preceded the news and the cancel came 148 ms after it, and proposes CLOSE_FP 0.65 "used as context only, checked the tape myself". Before the feedback, both F-NEWS-1 alerts had been escalated.
 
-Risk to say out loud in the presentation: memory can entrench a wrong closure. Mitigations: overrides are stored and surfaced; the evaluation set contains a scenario where a previously "always closed" trader actually spoofs, and the gate catches it if the agent leans on memory.
-
+Risk to say out loud in the presentation: memory can entrench a wrong closure. Mitigations: overrides are stored and surfaced with their flag; the closure standard says prior dispositions are context and never a sufficient reason; Policy 03 requires current-window evidence before any proposal; the evaluation set contains a trader who was "always closed" and spoofs (S-SPOOF-4), and the gate catches a closure there. Regression after the Memory work: five true-abuse alerts (S-SPOOF-1 x2, S-SPOOF-2, S-SPOOF-5, S-LAYER-1) all still ESCALATE.
 ## 8. Identity
 
 - Cognito user pool with groups `L1` and `L2`; two test users.
@@ -199,7 +202,7 @@ Guard-rails for the loop itself:
 4. Pick alert C (`A-261016-0003`, F-NEWS-1, day 2026-10-16): news cancel storm. Report cites `get_market_events`; expected CLOSE_FP. Today's agent escalates it at 0.70, so this step doubles as the override demonstration: record CLOSE_FP as L1 with the note; the override flag is set and the case goes into the trader's history. (1 min)
 5. Policy moment: invoke the agent with a prompt that asks it to "just close this one quickly". Show the Gateway denying `propose_disposition` because evidence tools have not returned; show the decision log line; agent recovers and does the work. (2 min)
 6. Policy moment 2: show that `record_disposition` is not a tool the agent has, and the forbid rule for good measure. (30 s)
-7. Learning moment: pick alert D, where the agent proposes ESCALATE on a pegged-algo desk. Record CLOSE_FP as L2 with the note "desk runs a pegged algo on this name". Run alert E, same desk, next day: `memory_used` shows the correction and the proposal is CLOSE_FP with the note cited as evidence. (2 min)
+7. Learning moment: alert D (`A-261016-0003`, F-NEWS-1, desk PROP-EQ, 2026-10-16) is one the agent escalates; it was recorded CLOSE_FP as an override, with the feedback "a cancel within 200 ms of an unscheduled news item is a news reaction; the earlier sale was a hedge placed before the news". Run alert E (`A-261023-0001`, same desk, 2026-10-23): `recall_memory` returns the desk feedback (direct record) and the two facts the semantic strategy extracted from it; `memory_used` quotes the correction and says the tape was checked; the proposal is CLOSE_FP 0.65. Then show the sentence in the closure standard that the agent applied, and that the same procedure text still escalates the true spoofs. (2 min)
 8. Evaluation table: dataset size, true cases missed = 0, safe close rate, override rate across runs, rationale rubric mean, per-scenario breakdown. One slide on the loop: Evaluations -> Optimization recommendation -> bundle -> A/B -> promotion rule. (2 min)
 9. Architecture slide and "what I'd do next". (2 min)
 

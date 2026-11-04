@@ -69,6 +69,7 @@ uv run scripts/replay_alert.py data/synthetic/seed7 --scenario S-SPOOF-5 --revea
 uv run scripts/check_tags.py                               # έλεγχος tags
 uv run scripts/policy_demo.py                              # βήματα 5-6 του demo: το Gateway αρνείται παρακάμψεις, με όνομα policy
 uv run scripts/validate_policies.py                        # τα ευρήματα του engine για κάθε αρχείο στο policies/
+uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # εγγραφές Memory· επίσης ingest-procedures, seed-history, delete
 uv run --group ui streamlit run ui/analyst_app.py          # UI αναλυτή στο http://127.0.0.1:8501 (μόνο loopback)
 python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία εγγράφων (κενή έξοδος = καθαρό)
 ```

@@ -152,3 +152,14 @@ def test_round_trip_is_signed_profit_in_ticks() -> None:
     d = compute_discriminators(alert(end=T0 + 12 * S), tape(rows), 1000.0)
     sell_vwap = (9_998 * 100 + 9_996 * 200) / 300
     assert d.round_trip_ticks == sell_vwap - 10_004  # about -7.3: he sold well below where he bought
+
+
+def test_memory_namespaces_are_regex_safe():
+    import re
+
+    from tools import memory_access as mem
+
+    pat = re.compile(r"^[a-zA-Z0-9/*][a-zA-Z0-9\-_/*]*$")
+    for ns in (mem.trader_ns("T-X1016-03"), mem.instrument_ns("SYN.A"), mem.instrument_ns("BRK/B"), mem.PROCEDURES_NS):
+        assert pat.match(ns.rstrip("/")), ns
+    assert mem.instrument_ns("SYN.A") == "/instruments/SYN_A/notes/"
