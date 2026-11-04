@@ -20,11 +20,12 @@
 | Εργαλείο | Έκδοση που χρησιμοποιήθηκε | Εγκατάσταση |
 |---|---|---|
 | Python | 3.14.2 (καρφωμένη στο `.python-version`) | python.org ή `uv python install 3.14` |
-| uv | 0.12.x | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| uv | 0.13.x | `curl -LsSf https://astral.sh/uv/install.sh \| sh` (αναβάθμιση: `uv self update`) |
 | Node | 26.x (το CDK προειδοποιεί, δουλεύει) | nodejs.org |
-| AWS CLI | 2.38+ | aws.amazon.com/cli |
+| AWS CLI | 2.39+ | aws.amazon.com/cli |
 | AWS CDK CLI | 2.1147+ (παλαιότερο αρνείται το schema της aws-cdk-lib 2.275) | `npm install -g aws-cdk` |
 | AgentCore CLI | 1.0.1 | `npm install -g @aws/agentcore` |
+| TypeScript (στο `agentcore/cdk`) | 7.0.x, το εγκαθιστά το `npm install` εκεί | το CLI τρέχει το build μόνο του |
 | Διαπιστευτήρια AWS | λογαριασμός 384308066035, χρήστης IAM `ai-admin` ή αντίστοιχος | `aws configure` |
 
 Μετά:

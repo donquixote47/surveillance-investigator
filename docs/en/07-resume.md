@@ -20,11 +20,12 @@ The SessionStart hook (`.kiro/hooks/session-brief.json`) prints STATUS, the last
 | Tool | Version used | Install |
 |---|---|---|
 | Python | 3.14.2 (pinned in `.python-version`) | python.org or `uv python install 3.14` |
-| uv | 0.12.x | `curl -LsSf https://astral.sh/uv/install.sh \| sh` |
+| uv | 0.13.x | `curl -LsSf https://astral.sh/uv/install.sh \| sh` (upgrade: `uv self update`) |
 | Node | 26.x (CDK warns, works) | nodejs.org |
-| AWS CLI | 2.38+ | aws.amazon.com/cli |
+| AWS CLI | 2.39+ | aws.amazon.com/cli |
 | AWS CDK CLI | 2.1147+ (older refuses aws-cdk-lib 2.275's schema) | `npm install -g aws-cdk` |
 | AgentCore CLI | 1.0.1 | `npm install -g @aws/agentcore` |
+| TypeScript (in `agentcore/cdk`) | 7.0.x, installed by `npm install` there | the CLI runs the build itself |
 | AWS credentials | account 384308066035, IAM user `ai-admin` or equivalent | `aws configure` |
 
 Then:

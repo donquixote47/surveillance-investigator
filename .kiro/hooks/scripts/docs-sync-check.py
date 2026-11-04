@@ -25,9 +25,9 @@ MARKER = os.path.join(ROOT, ".kiro", ".docs-sync-last")
 GUARD = os.path.join(ROOT, ".kiro", ".docs-sync-blocked")
 NUDGE_STATE = os.path.join(ROOT, ".kiro", ".docs-nudge-state")
 
-SRC_PATHS = ["src", "infra", "policies", "evals", "scripts", "agentcore", "agentcore.json", "pyproject.toml"]
+SRC_PATHS = ["src", "app", "ui", "infra", "policies", "evals", "scripts", "agentcore", "agentcore.json", "pyproject.toml"]
 DOC_PATHS = ["README.md", "docs"]
-EXCLUDE_DIRS = {"__pycache__", ".venv", "node_modules", "cdk.out", ".git", "runs"}
+EXCLUDE_DIRS = {"__pycache__", ".venv", "node_modules", "cdk.out", ".git", "runs", ".cache", ".cli", "dist", "build", ".ruff_cache", ".pytest_cache"}
 EXCLUDE_NAMES = {".DS_Store"}
 MTIME_TOLERANCE_S = 2  # en and el written in the same turn count as in sync
 
