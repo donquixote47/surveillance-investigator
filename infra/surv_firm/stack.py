@@ -1,6 +1,6 @@
 """SurvFirmStack: DynamoDB tables, S3 bucket, the Gateway tools Lambda, the human-path HTTP API with Cognito.
 
-Every resource is tagged Project=agentcore-surveillance-investigator and auto-remove=no at the app level
+Every resource is tagged Project=agentcore-surveillance-investigator and auto-delete=no at the app level
 (infra/app.py). Removal policies are DESTROY so `cdk destroy` leaves nothing behind at the end of the project;
 the tag protects the resources from the account's automatic cleaner in the meantime.
 """

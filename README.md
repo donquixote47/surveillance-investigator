@@ -13,7 +13,7 @@ Repository: `https://github.com/donquixote47/surveillance-investigator` (private
 | Phase | 3 - Agent on Runtime, in progress: agent deployed and invoked end to end; analyst UI and demo alerts next (Phases 0-2 complete; see `docs/en/05-build-plan.md` and `docs/en/STATUS.md`) |
 | Region | eu-west-2 |
 | Stack | Python 3.14 (uv), Strands Agents 1.63, Claude Sonnet 5.5 (eu. inference profile), AgentCore CLI 1.0.1 (`agentcore.json` for AgentCore resources), AWS CDK (Python) for the mock back end |
-| Cost rule | Zero third-party cost. AWS cost is not a constraint but is announced before every deploy and tracked in STATUS; every resource carries `Project` and `auto-remove=no` tags (`scripts/check_tags.py`) |
+| Cost rule | Zero third-party cost. AWS cost is not a constraint but is announced before every deploy and tracked in STATUS; every resource carries `Project` and `auto-delete=no` tags (`scripts/check_tags.py`) |
 | Deployed resources | eu-west-2: stack `SurvFirm` (DynamoDB, Lambdas, Cognito, HTTP API), stack `AgentCore-surv-default` (Gateway + rate limits, Runtime); full table in `docs/en/STATUS.md`. Dataset `data/synthetic/seed7` (committed): 167 alerts, 17% true abuse, loaded in DynamoDB |
 
 ## The problem in one paragraph

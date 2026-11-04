@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""List every AWS resource that belongs to this project and flag the ones missing `auto-remove=no`.
+"""List every AWS resource that belongs to this project and flag the ones missing `auto-delete=no`.
 
     uv run scripts/check_tags.py              # report
-    uv run scripts/check_tags.py --fix        # add the missing tags (asks first)
+    uv run scripts/check_tags.py --fix        # add missing tags and remove stale keys (asks first)
 
 Two sources, because AgentCore resources are not all visible through the Resource Groups Tagging API:
   1. Resource Groups Tagging API: everything tagged Project=<project> in eu-west-2 (the CDK stack's resources).
@@ -21,7 +21,8 @@ import boto3
 
 REGION = "eu-west-2"
 PROJECT = "agentcore-surveillance-investigator"
-REQUIRED = {"Project": PROJECT, "auto-remove": "no"}
+REQUIRED = {"Project": PROJECT, "auto-delete": "no"}
+STALE_KEYS = {"auto-remove"}  # the key used by mistake on 2026-11-03; must not remain anywhere
 NAME_PREFIX = "surv"
 
 
@@ -84,6 +85,10 @@ def missing(tags: dict[str, str]) -> dict[str, str]:
     return {k: v for k, v in REQUIRED.items() if tags.get(k) != v}
 
 
+def stale(tags: dict[str, str]) -> list[str]:
+    return sorted(k for k in tags if k in STALE_KEYS)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--region", default=REGION)
@@ -91,14 +96,17 @@ def main() -> int:
     args = ap.parse_args()
 
     problems: list[tuple[str, str, dict[str, str]]] = []  # (how to tag, arn, tags to add)
+    removals: list[tuple[str, str, list[str]]] = []  # (how to untag, arn, keys to remove)
 
     print(f"== resources tagged Project={PROJECT} ({args.region}, Tagging API)")
     for arn, tags in tagged_resources(args.region):
-        m = missing(tags)
-        flag = "MISSING " + ",".join(m) if m else "ok"
+        m, s = missing(tags), stale(tags)
+        flag = ("MISSING " + ",".join(m)) if m else ("STALE " + ",".join(s)) if s else "ok"
         print(f"  {flag:28s} {arn}")
         if m:
             problems.append(("tagging-api", arn, m))
+        if s:
+            removals.append(("tagging-api", arn, s))
 
     print("== AgentCore control plane")
     for kind, name, arn in agentcore_resources(args.region):
@@ -110,19 +118,21 @@ def main() -> int:
         if not ours:
             print(f"  {'not ours':28s} {kind:18s} {name:32s} {arn}")
             continue
-        m = missing(tags)
-        flag = "MISSING " + ",".join(m) if m else "ok"
+        m, s = missing(tags), stale(tags)
+        flag = ("MISSING " + ",".join(m)) if m else ("STALE " + ",".join(s)) if s else "ok"
         print(f"  {flag:28s} {kind:18s} {name:32s} {arn}")
         if m:
             problems.append(("agentcore", arn, m))
+        if s:
+            removals.append(("agentcore", arn, s))
 
-    if not problems:
-        print("all project resources carry the required tags")
+    if not problems and not removals:
+        print("all project resources carry the required tags and no stale keys")
         return 0
-    print(f"{len(problems)} resource(s) need tags")
+    print(f"{len(problems)} resource(s) need tags; {len(removals)} carry stale keys")
     if not args.fix:
         return 1
-    if input("add the missing tags now? [y/N] ").strip().lower() != "y":
+    if input("apply the changes now? [y/N] ").strip().lower() != "y":
         return 1
     ac = boto3.client("bedrock-agentcore-control", region_name=args.region)
     rg = boto3.client("resourcegroupstaggingapi", region_name=args.region)
@@ -132,6 +142,12 @@ def main() -> int:
         else:
             rg.tag_resources(ResourceARNList=[arn], Tags=add)
         print(f"  tagged {arn} {add}")
+    for how, arn, keys in removals:
+        if how == "agentcore":
+            ac.untag_resource(resourceArn=arn, tagKeys=keys)
+        else:
+            rg.untag_resources(ResourceARNList=[arn], TagKeys=keys)
+        print(f"  untagged {arn} {keys}")
     return 0
 
 

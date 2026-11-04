@@ -2,7 +2,7 @@
 
 Run from the repo root with `uv run --group infra cdk ...` or `cd infra && uv run cdk ...` (cdk.json points here).
 
-Every construct in the app carries the two project tags. `auto-remove=no` is what the account's cleaner looks
+Every construct in the app carries the two project tags. `auto-delete=no` is what the account's cleaner looks
 for; `Project` is what `scripts/check_tags.py` filters on.
 """
 
@@ -36,6 +36,6 @@ SurvFirmStack(
 )
 
 cdk.Tags.of(app).add("Project", PROJECT_TAG)
-cdk.Tags.of(app).add("auto-remove", "no")
+cdk.Tags.of(app).add("auto-delete", "no")
 
 app.synth()

@@ -146,8 +146,8 @@ Format: date, decision, alternatives considered, reason, consequences. Newest at
 - **Reason:** George objected, and he was right: the programmatic checks are the kind of check that had missed all three defects. The project's own rule (data doc 2.4) says the hand-check is where the generator is audited.
 - **Consequences:** 17 alerts read by a human. Two caveats recorded for the Phase 3 prompt: `price_move_ticks` is uninformative when the trader executed on the resting side, and a spoofer's own market order can sweep up to his resting level in a thin book. Phase 2 starts next.
 
-## 2026-11-03 Cost is not a constraint; every resource carries `auto-remove=no`
-- **Decision:** No data cuts to save money (the full seed7 tape goes to DynamoDB). Every AWS resource the project creates carries `Project=agentcore-surveillance-investigator` and `auto-remove=no`; `scripts/check_tags.py` audits both sources (Resource Groups Tagging API and the AgentCore control plane) and can add missing tags.
+## 2026-11-03 Cost is not a constraint; every resource carries `auto-delete=no`
+- **Decision:** No data cuts to save money (the full seed7 tape goes to DynamoDB). Every AWS resource the project creates carries `Project=agentcore-surveillance-investigator` and `auto-delete=no`; `scripts/check_tags.py` audits both sources (Resource Groups Tagging API and the AgentCore control plane) and can add missing tags.
 - **Alternatives:** load five sessions instead of twenty (proposed by the assistant to keep the load under $1); tag only the CDK stack.
 - **Reason:** George's instruction. The account's cleaner removes untagged resources; AgentCore resources created by the CLI are not covered by the CDK app's tags, so they need the audit script.
 - **Consequences:** Loading seed7 costs about $3 of writes once (Pricing API, London). `cdk.Tags.of(app)` covers the stack; AgentCore resources are tagged at creation or by `check_tags.py --fix`.
@@ -206,3 +206,9 @@ Format: date, decision, alternatives considered, reason, consequences. Newest at
 - **Alternatives:** leave floors loose; pin exact versions; stay on TypeScript 5.9 or 6.0.
 - **Reason:** George asked for latest stable everywhere. Loose floors let a fresh `uv sync` on another machine resolve to older packages than the ones tested; exact pins would fight `uv lock --upgrade`. TypeScript 7 is the registry's `latest` and compiled after one explicit `types: ["node"]`; staying on 6 would only postpone the same change.
 - **Consequences:** `uv.lock` is the reproducible record; `uv sync --all-groups` on a clean machine gives these versions. The Lambda layer (pandas 3.1.0, numpy 2.5.4) was already at latest, so `SurvFirm` did not change. Tests 40 pass; Runtime v2 investigated F-ALGO-1 `A-261005-0012` -> CLOSE_FP 0.75 (label CLOSE_FP). The check-and-upgrade routine is recorded in `agentcore-gotchas.md`.
+
+## 2026-11-04 Tag key corrected to `auto-delete`
+- **Decision:** The protective tag on every resource is `auto-delete=no`. The key used since 2026-11-03, `auto-remove`, was wrong (George's correction). Every mention in code, `agentcore.json`, docs and steering was replaced; earlier decision-log entries now read `auto-delete` too, so a search finds one key.
+- **Alternatives:** carry both keys for a while; leave the history with the old key.
+- **Reason:** The account's cleaner looks for one exact key; a resource with only the wrong key is unprotected. Two keys would hide which one matters.
+- **Consequences:** `cdk bootstrap` re-run with the new tags (CDKToolkit stack UPDATE_COMPLETE), `SurvFirm` and `AgentCore-surv-default` redeployed (CloudFormation replaces its tag sets, so the old key disappeared from all 26 stack resources), the hand-tagged Gateway workload identity re-tagged and the old key removed. `scripts/check_tags.py` now also flags stale keys (`STALE_KEYS = {"auto-remove"}`) and removes them with `--fix`. Audit after the change: 27 resources with `auto-delete=no`, 0 with `auto-remove`.

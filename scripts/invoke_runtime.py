@@ -38,7 +38,9 @@ def runtime_arn() -> str:
     raise SystemExit(f"runtime {RUNTIME_NAME} not found in {REGION}")
 
 
-def invoke(alert_id: str, user: str, mode: str, instruction: str | None, session_id: str | None, qualifier: str = "DEFAULT") -> tuple[dict, str, float]:
+def invoke(
+    alert_id: str, user: str, mode: str, instruction: str | None, session_id: str | None, qualifier: str = "DEFAULT"
+) -> tuple[dict, str, float]:
     env = load_env(CREDS)
     token = access_token(env, user)
     arn = runtime_arn()
@@ -71,15 +73,21 @@ def main() -> int:
     ap.add_argument("--qualifier", default="DEFAULT")
     ap.add_argument("--json", type=Path, default=None)
     args = ap.parse_args()
-    out, session_id, elapsed = invoke(args.alert_id, args.user, args.mode, args.instruction, args.session_id, args.qualifier)
-    print(f"== {args.alert_id} via Runtime  session={session_id}  {elapsed:.1f}s wall  agent={out.get('duration_s')}s  model={out.get('model_id')}")
+    out, session_id, elapsed = invoke(
+        args.alert_id, args.user, args.mode, args.instruction, args.session_id, args.qualifier
+    )
+    print(
+        f"== {args.alert_id} via Runtime  session={session_id}  {elapsed:.1f}s wall  agent={out.get('duration_s')}s  model={out.get('model_id')}"
+    )
     if out.get("error"):
         print(f"!! {out['error']}")
     for c in out.get("tool_calls", []):
         print(f"   {c.get('status', '?'):5s} {c['tool']:28s} {c.get('ms', 0):6d} ms")
     p = out.get("proposal")
     if p:
-        print(f"-- proposal: {p['disposition']}  confidence {p['confidence']}  analyst={out.get('analyst')} groups={out.get('groups')}")
+        print(
+            f"-- proposal: {p['disposition']}  confidence {p['confidence']}  analyst={out.get('analyst')} groups={out.get('groups')}"
+        )
         print(f"   gateway: {out.get('proposal_result')}")
         print(f"   summary: {p['report']['summary']}")
     for r in out.get("rejections", []):

@@ -25,7 +25,7 @@ try {
   }
   // Every resource the CLI creates carries the project tags (same pair as infra/app.py).
   Tags.of(app).add('Project', 'agentcore-surveillance-investigator');
-  Tags.of(app).add('auto-remove', 'no');
+  Tags.of(app).add('auto-delete', 'no');
   app.synth();
 } catch (error) {
   console.error('AgentCore CDK synthesis failed:', error instanceof Error ? error.message : error);
