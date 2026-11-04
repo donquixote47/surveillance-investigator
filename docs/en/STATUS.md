@@ -2,7 +2,7 @@
 
 | Item | Value |
 |---|---|
-| Phase | 3 complete (2026-11-03): agent on Runtime, analyst UI (Streamlit), demo alerts A/B/C run and recorded. Next: Phase 4 (policies, Memory, Code Interpreter). Phase 2 deployed 2026-11-03: SurvFirm stack, seed7 in DynamoDB, Gateway `surv-investigator` with Lambda target `surv`, smoke test through MCP with an L1 token passed, per-analyst rate limits active and probed. **Phase 2 complete.** (Phase 1 completed 2026-11-02; see `05-build-plan.md`) |
+| Phase | 4 in progress (2026-11-04): Policy Engine with nine policies enforced on the Gateway, demo steps 5-6 reproducible; next Memory. Phase 3 complete (2026-11-03): agent on Runtime, analyst UI (Streamlit), demo alerts A/B/C run and recorded. Next: Phase 4 (policies, Memory, Code Interpreter). Phase 2 deployed 2026-11-03: SurvFirm stack, seed7 in DynamoDB, Gateway `surv-investigator` with Lambda target `surv`, smoke test through MCP with an L1 token passed, per-analyst rate limits active and probed. **Phase 2 complete.** (Phase 1 completed 2026-11-02; see `05-build-plan.md`) |
 | Repository | `https://github.com/donquixote47/surveillance-investigator` (private), branch `main`; local clone `shared/tam-work/projects/agentcore-surveillance-investigator` |
 | Region | eu-west-2 |
 | Stack | Python 3.14.2 (uv 0.13.7), Strands Agents 1.63.0, strands-agents-tools 0.8.12, bedrock-agentcore 1.25.3, boto3 1.43.123, pandas 3.1.0, pyarrow 26.0.1, AgentCore CLI 1.0.1 (`@aws/agentcore`), `@aws/agentcore-cdk` 1.0.1, AWS CDK CLI 2.1147.0 with aws-cdk-lib 2.275.0 (Python stack and the CLI's TypeScript stack, TypeScript 7.0.2); moto 5.2.5; Streamlit 1.66.1. All at registry latest on 2026-11-03; floors in `pyproject.toml` pinned to these tested versions |
@@ -10,11 +10,11 @@
 | Deployed AWS resources | See the table below (two CloudFormation stacks, 1 Gateway, all tagged; `scripts/check_tags.py` clean) |
 | Dataset | `data/synthetic/seed7` (20 sessions 2026-10-05..30): 167 alerts, 28 TRUE_ABUSE (17%), 52 background, 1.82 M order events, recall on injected abuse 100%, 0 missed injections; `report.md` and `manifest.json` inside |
 | Last evaluation run | Agent, eight hand-picked alerts (not the evaluation set): 6 of 8 match the label with Sonnet 5.5 (latest: F-ALGO-1 `A-261005-0012` -> CLOSE_FP 0.75 on Runtime v2); both misses are F-NEWS-1 escalated (safe). Haiku 5.5 escalated the market maker Sonnet closed. Threshold baseline: raw safe close 96%, gate failed (6 of 7 S-SPOOF-5 alerts proposed CLOSE_FP via R5), reported n/a |
-| Cost to date | About $5: $3.2 Phase 2 plus about 12 investigations (Sonnet about 35k input / 3k output tokens each ≈ $0.10; Haiku runs cents) and Runtime seconds.  DynamoDB writes for seed7 (≈4.2 M WRU incl. GSI and the duplicate partial load) plus a few dozen Lambda, Cognito and Gateway calls; model calls still under $0.01 |
+| Cost to date | About $6: $3.2 Phase 2 plus about 12 investigations (Sonnet about 35k input / 3k output tokens each ≈ $0.10; Haiku runs cents) and Runtime seconds.  DynamoDB writes for seed7 (≈4.2 M WRU incl. GSI and the duplicate partial load) plus a few dozen Lambda, Cognito and Gateway calls; model calls still under $0.01 |
 
 ## Next step
 
-Phase 4: Policy Engine attached to the Gateway in LOG_ONLY (policies 01-08 in `policies/`), Memory resource with the namespaces of design section 7 and the human path writing dispositions and feedback into it, the agent reading Memory after `get_alert`; then switch policies to ACTIVE after reading decision logs. The two F-NEWS-1 escalations are the first learning-loop case.
+Phase 4, second half: Memory resource with the namespaces of design section 7 and the human path writing dispositions and feedback into it, the agent reading Memory after `get_alert`; then switch policies to ACTIVE after reading decision logs. The two F-NEWS-1 escalations are the first learning-loop case.
 
 ## Deployed resources
 
@@ -29,8 +29,10 @@ Phase 4: Policy Engine attached to the Gateway in LOG_ONLY (policies 01-08 in `p
 | CDKToolkit bootstrap stack | `CDKToolkit` in eu-west-2 (assets bucket `cdk-hnb659fds-assets-384308066035-eu-west-2`) | 2026-11-03 | $0 idle |
 | AgentCore Gateway | `surv-default-surv-investigator` (`surv-default-surv-investigator-gsq1ismkrw`), URL `https://surv-default-surv-investigator-gsq1ismkrw.gateway.bedrock-agentcore.eu-west-2.amazonaws.com`, CUSTOM_JWT from the pool, exceptionLevel DEBUG, in stack `AgentCore-surv-default` | 2026-11-03 | $5 per million InvokeTool calls (pricing page, 2026-11-03) |
 | Gateway target | `surv` (`B191VDQHAI`), Lambda `surv-gateway-tools`, 11 tools from `surv-tools.json`; Gateway role may invoke only this function | 2026-11-03 | included above |
+| Policy Engine | `surv_default_investigator_pe` (`surv_default_investigator_pe-rmckq8ojd0`), attached to the Gateway in `ENFORCE`, nine policies ACTIVE (p01-p08 incl. p03a/p03b), in stack `AgentCore-surv-default` | 2026-11-04 | $0.000025 per authorization request |
+| Gateway logs and traces | delivery sources `<gateway id>-logs` -> log group `/aws/vendedlogs/bedrock-agentcore/surv-default-surv-investigator-gsq1ismkrw` (30-day retention), `<gateway id>-traces` -> X-Ray | 2026-11-04 | CloudWatch Logs ingestion, cents |
 | Gateway rate limits | `per-analyst-requests` (60/min per `$.context.jwt.sub`), `per-analyst-writes` (3/min per analyst on `propose_disposition` and `draft_stor_narrative`), both ACTIVE, in stack `AgentCore-surv-default` | 2026-11-03 | free |
-| AgentCore Runtime | `surv_default_surv_investigator_l1` (`arn:aws:bedrock-agentcore:eu-west-2:384308066035:runtime/surv_default_surv_investigator_l1-lrnjCN5vBp`), v2 (v1 2026-11-03 morning; v2 after the dependency upgrade), PYTHON_3_14 direct code deploy, HTTP, CUSTOM_JWT (analyst pool), `Authorization` allowlisted, env `SURV_GATEWAY_URL`, `SURV_MODEL_ID`; log group `/aws/bedrock-agentcore/runtimes/surv_default_surv_investigator_l1-lrnjCN5vBp-DEFAULT` | 2026-11-03 | billed per active session second; sessions end when the invocation returns (no idle UI session kept open) |
+| AgentCore Runtime | `surv_default_surv_investigator_l1` (`arn:aws:bedrock-agentcore:eu-west-2:384308066035:runtime/surv_default_surv_investigator_l1-lrnjCN5vBp`), v6 (v1 2026-11-03; v2 dependency upgrade; v6 2026-11-04 sends the policy session header), PYTHON_3_14 direct code deploy, HTTP, CUSTOM_JWT (analyst pool), `Authorization` allowlisted, env `SURV_GATEWAY_URL`, `SURV_MODEL_ID`; log group `/aws/bedrock-agentcore/runtimes/surv_default_surv_investigator_l1-lrnjCN5vBp-DEFAULT` | 2026-11-03 | billed per active session second; sessions end when the invocation returns (no idle UI session kept open) |
 | Gateway workload identity | `surv-default-surv-investigator-gsq1ismkrw` (auto-created; tagged by hand, the stack did not tag it) | 2026-11-03 | $0 through Gateway |
 
 ## Open verification items (from the docs)

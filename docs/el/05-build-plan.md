@@ -65,8 +65,8 @@
 
 Στόχος: οι ντετερμινιστικοί έλεγχοι και ο βρόχος μάθησης.
 
-- [ ] Policy Engine συνδεδεμένος στο Gateway σε κατάσταση `LOG_ONLY`· policies 01-08 ως αρχεία `.cedar`· ανάγνωση των logs αποφάσεων· μετάβαση σε `ACTIVE`.
-- [ ] Το βήμα 5 του demo αναπαραγώγιμο: ένα prompt που προσπαθεί να παρακάμψει τη διαδικασία απορρίπτεται και ο agent ανακάμπτει.
+- [x] Policy Engine `investigator_pe` δηλωμένο στο `agentcore.json`, συνδεδεμένο στο Gateway· εννέα δηλώσεις στο `policies/` (01-08, με το 03 χωρισμένο στα δύο γιατί μια policy χωρά το πολύ τρεις χρονικούς τελεστές). Ο ρόλος του Gateway πήρε `GetWorkloadAccessToken`· τα vended logs και traces του Gateway παραδίδονται στο CloudWatch (`CfnDeliverySource/Destination/Delivery` στο CDK stack του AgentCore). Λειτουργία engine `ENFORCE` από 2026-11-04: το `LOG_ONLY` δεν καταγράφει γεγονότα `::response`, άρα κάθε κανόνας που εξαρτάται από response απέρριπτε κάτω από αυτό (ημερολόγιο αποφάσεων). Το `scripts/validate_policies.py` τυπώνει τα ευρήματα της υπηρεσίας ανά δήλωση.
+- [x] Τα βήματα 5 και 6 του demo αναπαραγώγιμα με `scripts/policy_demo.py`: πρόταση πριν από στοιχεία απορρίπτεται (03b), CLOSE_FP χωρίς ιστορικό απορρίπτεται (04), επιτρέπεται μετά το ιστορικό, δεύτερη πρόταση απορρίπτεται (06), προσχέδιο STOR ως L1 απορρίπτεται (07), το `record_disposition` απουσιάζει από το `tools/list`. Το ίδιο το Sonnet αγνοεί μια οδηγία «κλείσε το γρήγορα» και τρέχει όλη τη διαδικασία, οπότε ο scripted client είναι αυτό που δείχνει την άρνηση. Ο agent στο Runtime v6 (κεφαλίδα policy session) τρέχει καθαρά κάτω από `ENFORCE`: A-261006-0006 ESCALATE, A-261006-0015 ESCALATE, A-261005-0003 CLOSE_FP.
 - [ ] Πόρος Memory με το σχήμα namespaces· η ανθρώπινη διαδρομή γράφει γεγονότα disposition και ανατροφοδότηση· ο agent ανακτά μετά το `get_alert`.
 - [ ] Εισαγωγή του εγγράφου διαδικασιών στο `/procedures`.
 - [ ] Επανεκτέλεση του demo alert B για να φανεί το `memory_used`.

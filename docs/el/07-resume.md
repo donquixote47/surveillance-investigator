@@ -67,6 +67,8 @@ uv run scripts/invoke_runtime.py A-261006-0006             # το αναπτυγ
 uv run scripts/invoke_runtime.py A-261005-0002 --user L2 --mode stor_drafting
 uv run scripts/replay_alert.py data/synthetic/seed7 --scenario S-SPOOF-5 --reveal   # ανάγνωση ταινίας με το χέρι
 uv run scripts/check_tags.py                               # έλεγχος tags
+uv run scripts/policy_demo.py                              # βήματα 5-6 του demo: το Gateway αρνείται παρακάμψεις, με όνομα policy
+uv run scripts/validate_policies.py                        # τα ευρήματα του engine για κάθε αρχείο στο policies/
 uv run --group ui streamlit run ui/analyst_app.py          # UI αναλυτή στο http://127.0.0.1:8501 (μόνο loopback)
 python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία εγγράφων (κενή έξοδος = καθαρό)
 ```

@@ -67,6 +67,8 @@ uv run scripts/invoke_runtime.py A-261006-0006             # the deployed Runtim
 uv run scripts/invoke_runtime.py A-261005-0002 --user L2 --mode stor_drafting
 uv run scripts/replay_alert.py data/synthetic/seed7 --scenario S-SPOOF-5 --reveal   # read a tape by hand
 uv run scripts/check_tags.py                               # tag audit
+uv run scripts/policy_demo.py                              # demo steps 5-6: the Gateway denying shortcuts, by policy name
+uv run scripts/validate_policies.py                        # the engine's findings for every file in policies/
 uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
 python3 .kiro/hooks/scripts/docs-sync-check.py             # docs parity (empty output = clean)
 ```
