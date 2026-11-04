@@ -26,9 +26,24 @@ SOURCE_RULES = [
         ],
     ),
     (
-        "src/agent/",
+        "app/",
         [
-            "03-solution-design.md: section 2 (agent role), section 5 (InvestigationReport schema), section 7 (memory use)",
+            "03-solution-design.md: section 2 (agent role), section 5 (InvestigationReport schema and guard), section 7 (memory use)",
+            "STATUS.md Runtime row after `agentcore deploy` (new Runtime version)",
+        ],
+    ),
+    (
+        "ui/",
+        [
+            "03-solution-design.md: section 8 identity (what the UI sends), section 12 demo script",
+            "07-resume.md everyday commands if a new entry point appears",
+        ],
+    ),
+    (
+        "agentcore/",
+        [
+            "03-solution-design.md: section 2 services, section 6 policies, section 8 rate limits and identity",
+            "STATUS.md deployed-resources table after `agentcore deploy`",
         ],
     ),
     (
