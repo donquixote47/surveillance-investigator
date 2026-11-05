@@ -74,6 +74,8 @@ Goal: the deterministic controls and the learning loop.
 
 Exit: demo steps 5-7 work; policy decision logs visible; memory influence and an analyst correction visible in a report. **Phase 4 complete 2026-11-05.**
 
+Verification sweep before Phase 5 (2026-11-05), the paths that had never run end to end: (1) L2 path: `policy_demo.py --user L2 --stor` shows 05 and 07 *permitting* (12 tools visible to L2, DRAFT_STOR proposal allowed, `draft_stor_narrative` allowed and returns STOR fields); the agent itself on S-SPOOF-2 chose ESCALATE over DRAFT_STOR because no numeric benefit shows on that scenario (repetition is its tell), a Phase 5 item. (2) `POST /disposition` after the Memory change: case, `cases_history`, alert status, and Memory records under the trader and the desk all written; read back through `get_trader_alert_history` and `recall_memory`. (3) Guard recovery from a Gateway denial: unit test (a denied proposal is released, the retry is not blocked by the one-proposal rule). (4) Policy 08 headroom: the largest alert window holds 320 events, one page; the cap of 6 pulls is seven times that. (5) Fresh `git clone` + `uv sync --all-groups` + `pytest`: 41 pass, dataset present, replay works.
+
 ## Phase 5 - Evaluation harness and learning loop (moderate AWS cost: two or three full dataset runs on a Sonnet-class model)
 
 Goal: the metric table, and evidence that the agent improves in a governed way.

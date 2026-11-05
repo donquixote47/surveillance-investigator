@@ -173,3 +173,54 @@ def test_guard_blocks_stor_draft_in_l1_mode():
     ev2 = _Event("surv___draft_stor_narrative", {"alert_id": "A-1"})
     g2.before_tool(ev2)
     assert ev2.cancel_tool is False
+
+
+class _AfterEvent:
+    def __init__(self, name, inputs, result, cancel_message=None):
+        self.tool_use = {"toolUseId": "t2", "name": name, "input": inputs}
+        self.result = result
+        self.cancel_message = cancel_message
+        self.invocation_state = {}
+
+
+def test_guard_releases_the_proposal_when_the_gateway_denies_it():
+    """A policy denial reaches Strands as an error tool result; the guard must forget the proposal so the model can
+    run the missing prerequisite and propose again, and it must keep the Gateway's reason for the record."""
+    g = InvestigationGuard(alert_id="A-261006-0006")
+    report = {k: v for k, v in GOOD.items() if k not in ("proposed_disposition", "confidence")}
+    inputs = {"alert_id": "A-261006-0006", "disposition": "ESCALATE", "confidence": 0.8, "report": report}
+    before = _Event(PROPOSE, inputs)
+    g.before_tool(before)
+    assert g.proposal is not None
+    denied = {
+        "toolUseId": "t2",
+        "status": "error",
+        "content": [
+            {
+                "text": "Tool Execution Denied: Tool call not allowed due to policy enforcement [Policy evaluation denied due to p03b_profile_and_market_before_proposal-x]"
+            }
+        ],
+    }
+    g.after_tool(_AfterEvent(PROPOSE, inputs, denied))
+    assert g.proposal is None, "a denied proposal must not count as the one proposal per run"
+    assert g.proposal_result is None
+    assert any("p03b" in r for r in g.rejections)
+    assert g.calls[-1]["status"] == "error"
+
+    # the model runs the prerequisite and proposes again: allowed this time
+    g.before_tool(_Event("surv___get_trader_profile", {"trader_id": "T-X1006-04", "alert_id": "A-261006-0006"}))
+    again = _Event(PROPOSE, inputs)
+    g.before_tool(again)
+    assert again.cancel_tool is False, "second attempt after a denial must not be blocked by the one-proposal rule"
+    ok = {
+        "toolUseId": "t3",
+        "status": "success",
+        "content": [
+            {
+                "text": '{"alert_id": "A-261006-0006", "disposition": "ESCALATE", "case_id": "C-A-261006-0006", "status": "PROPOSED"}'
+            }
+        ],
+    }
+    g.after_tool(_AfterEvent(PROPOSE, inputs, ok))
+    assert g.proposal_result["case_id"] == "C-A-261006-0006"
+    assert g.proposal["report"]["tool_calls"][-1] == "get_trader_profile"

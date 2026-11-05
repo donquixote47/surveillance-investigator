@@ -3,6 +3,7 @@
 
     uv run scripts/policy_demo.py                   # alert A-261005-0001 (a disposable background alert)
     uv run scripts/policy_demo.py --alert A-261005-0002 --user L1
+    uv run scripts/policy_demo.py --user L2 --stor          # step 4 proposes DRAFT_STOR; step 6 shows 05 and 07 permitting
 
 Sequence, all in one policy session, as the analyst's own token:
   1. propose_disposition with no evidence in the session   -> DENIED (03a: no get_alert/order_events/discriminators)
@@ -53,7 +54,7 @@ def outcome(res_or_exc) -> str:
     return "ALLOWED " + text[:90].replace("\n", " ")
 
 
-async def run(alert_id: str, user: str) -> None:
+async def run(alert_id: str, user: str, stor: bool) -> None:
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
     from mcp.shared._httpx_utils import create_mcp_http_client
@@ -123,7 +124,8 @@ async def run(alert_id: str, user: str) -> None:
                 ),
             )
 
-            print("\n4. get_trader_alert_history, then propose CLOSE_FP")
+            final = "DRAFT_STOR" if stor else "CLOSE_FP"
+            print(f"\n4. get_trader_alert_history, then propose {final}")
             print(
                 "   history ->",
                 outcome(
@@ -138,7 +140,7 @@ async def run(alert_id: str, user: str) -> None:
                 outcome(
                     await call(
                         "propose_disposition",
-                        {"alert_id": alert_id, "disposition": "CLOSE_FP", "confidence": 0.8, "report": REPORT},
+                        {"alert_id": alert_id, "disposition": final, "confidence": 0.8, "report": REPORT},
                     )
                 ),
             )
@@ -164,10 +166,13 @@ def main() -> int:
     ap.add_argument("--alert", default="A-261005-0001")
     ap.add_argument("--user", choices=["L1", "L2"], default="L1")
     ap.add_argument("--keep", action="store_true", help="keep the demo proposal in surv-cases")
+    ap.add_argument(
+        "--stor", action="store_true", help="propose DRAFT_STOR in step 4 (with --user L2 step 6 is then ALLOWED)"
+    )
     args = ap.parse_args()
     t0 = time.time()
     try:
-        asyncio.run(run(args.alert, args.user))
+        asyncio.run(run(args.alert, args.user, args.stor))
     finally:
         if not args.keep:
             boto3.resource("dynamodb", region_name=REGION).Table("surv-cases").delete_item(Key={"alert_id": args.alert})
