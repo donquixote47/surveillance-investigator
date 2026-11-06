@@ -1,0 +1,418 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261005-0002-f1cd714d",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-06T09:06:44+00:00",
+  "wall_s": 50.4
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261005-0002",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.7,
+   "report": {
+    "alert_id": "A-261005-0002",
+    "scenario": "SPOOFING",
+    "summary": "T-MM-01 is a registered market maker on SYN.A. In the window it ran a symmetric two-sided quote of 364 per side. It re-quoted every 1-7 s, alternating between 9991/9995 and 9992/9996. The 'opposite-side execution' of 129 was a partial fill of its own resting SELL quote (O-00004919 at 9995). A BUY quote had filled 57 earlier (O-00004792). The detector's 'dominant side' is arbitrary, since gross submitted was 9464 on both sides. Order size is 0.15x top-5 depth, close to desk-typical size, with no ICEBERG, no layering and no repetition. The 3-tick round trip equals the quoted spread captured by passive fills. The drift in the touch from 9992/9993 to 9994/9995 happened while the trader's quotes sat 2-3 ticks behind the touch. The one point against closure is the positive price move and round trip, which I treat as ordinary spread capture, not displayed-size manipulation. Prior CLOSE_FPs were context only; I re-tested the same explanation on today's tape.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_trader_profile",
+      "fact": "role MARKET_MAKER, registered_mm_instruments includes SYN.A, typical_order_size 317, typical_daily_otr 14.4, no risk-limit events in window"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "gross_submitted_dominant 9464 and gross_submitted_other 9464; cancel_symmetry 0.996; order_types LIMIT only (52); parent_order_ids empty"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 0.150; distance_from_touch_ticks 1.58; distinct_price_levels 2; large_order_ids empty"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "opposite_side_fill_qty 129 at 9995; same_side_fill_qty 57, all before the opposite trade; same_side_fill_share 0.006; modify_reduction_qty 0"
+     },
+     {
+      "id": "E5",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks 2.5; post_cancel_move_ticks -0.5; reversion_ticks 0.5; round_trip_ticks 3.0; repetitions_in_session 0"
+     },
+     {
+      "id": "E6",
+      "source": "get_order_events",
+      "fact": "BUY and SELL quotes of 364 are cancelled and replaced together every ~1-7 s. The 129 fill was a PARTIAL_FILL on SELL O-00004919 (9995) at 10:00:34.015. A 57 PARTIAL_FILL on BUY O-00004792 came at 09:59:44.747. Both sides' remainders were cancelled at 10:00:36."
+     },
+     {
+      "id": "E7",
+      "source": "compute_discriminators",
+      "fact": "otr 52.0 and cancel_ratio 0.99 against typical daily OTR 14.4; market_wide_cancels_1s_before_first_cancel 1"
+     },
+     {
+      "id": "E8",
+      "source": "get_market_events",
+      "fact": "no public events in the window"
+     },
+     {
+      "id": "E9",
+      "source": "get_trader_alert_history",
+      "fact": "two prior SPOOFING alerts (H-T-MM-01-01, H-T-MM-01-02) closed FP as market making, no overrides"
+     }
+    ],
+    "indicators_matched": [
+     "high order-to-trade ratio (Annex II 4(f))"
+    ],
+    "indicators_not_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "several price levels on one side (layering)",
+     "repetition of the cycle within the session",
+     "price moved in the trader's favour before the execution and reverted after the cancel"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making (registered on instrument; two-sided symmetric quotes; cancels follow the touch)",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E8",
+       "E7"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.7,
+    "what_would_change_my_mind": "Evidence that the BUY quotes were placed to move the touch, for example one-sided size appearing, or cancels timed to the SELL fill instead of the regular re-quote cadence, or the same pattern repeating across sessions. A Level-2 view that the 3-tick positive round trip with 0.5 tick reversion counts as feature (b) would also push this to ESCALATE.",
+    "memory_used": [
+     "H-T-MM-01-01 (2026-09-23) and H-T-MM-01-02 (2026-09-13): 'registered market maker; two-sided quotes re-priced on fair value moves; no opposite-side benefit' - CLOSE_FP, no override. The same MM explanation holds on today's tape (symmetric quotes, own-quote fills), but the positive round trip here is noted as a difference."
+    ],
+    "window_used": "Detector window 09:59:34.015-10:00:39.015 (65 s) with 5 s padding on the order events. No longer frame was examined.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261005-0002",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-261005-0002",
+   "proposed_at": "2026-11-06T09:07:30+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261005-0002"
+    },
+    "ms": 205,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 204,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261005-0002",
+     "instrument": "SYN.A",
+     "trader_id": "T-MM-01",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1134,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261005-0002",
+     "pad_seconds": 5
+    },
+    "ms": 247,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261005-0002"
+    },
+    "ms": 4592,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-MM-01",
+     "alert_id": "A-261005-0002"
+    },
+    "ms": 249,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1791194374015545186,
+     "window_end": 1791194439015545186
+    },
+    "ms": 182,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-05",
+     "instrument": "SYN.A"
+    },
+    "ms": 197,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-MM-01",
+     "before_date": "2026-10-05"
+    },
+    "ms": 198,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261005-0002",
+     "confidence": 0.7,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 205,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** CLOSE_FP, confidence 0.70. This is a proposal, and a human analyst decides.\n\n**Three facts that drove it:**\n1. T-MM-01 is a registered market maker on SYN.A and quoted symmetrically. Gross submitted was 9,464 on each side, cancel symmetry was 0.996, and all 52 orders were plain LIMIT orders. Resting size was 0.15\u00d7 top-5 depth, the closest order sat about 1.6 ticks from the touch on average, and there was no layering. The 364 order size is close to the desk's typical 317.\n2. The \"opposite-side execution\" was a 129 partial fill on the trader's own resting SELL quote (O-00004919 at 9995). A 57 fill on the BUY quote (O-00004792) came earlier. The cancels follow a regular re-quote cadence of 1\u20137 seconds on both sides, and there are no repeats in the session.\n3. The positive price move (+2.5 ticks) and round trip (+3.0 ticks) look like ordinary spread capture, with only 0.5 ticks of reversion. The bid and ask drifted up while the trader's quotes sat 2\u20133 ticks behind the touch, so I don't see the resting BUY as moving the price.\n\n**What would change my mind:** Evidence that the BUY quotes were placed to move the price, such as one-sided size or cancels timed to the SELL fill, or the same pattern across sessions. A Level-2 view that the +3-tick round trip counts as a benefit would also push this to ESCALATE. That is the weak point in this closure.",
+  "usage": {
+   "input_tokens": 68067,
+   "output_tokens": 4749,
+   "total_tokens": 72816,
+   "model_calls": 4
+  },
+  "duration_s": 43.8,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261005-0002-f1cd714d",
+  "error": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261005-0002",
+  "case_id": "C-A-261005-0002",
+  "confidence": "0.7",
+  "date": "2026-10-05",
+  "proposal_count": "4",
+  "proposed_at": "2026-11-06T09:07:30+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "T-MM-01 is a registered market maker on SYN.A. In the window it ran a symmetric two-sided quote of 364 per side. It re-quoted every 1-7 s, alternating between 9991/9995 and 9992/9996. The 'opposite-side execution' of 129 was a partial fill of its own resting SELL quote (O-00004919 at 9995). A BUY quote had filled 57 earlier (O-00004792). The detector's 'dominant side' is arbitrary, since gross submitted was 9464 on both sides. Order size is 0.15x top-5 depth, close to desk-typical size, with no ICEBERG, no layering and no repetition. The 3-tick round trip equals the quoted spread captured by passive fills. The drift in the touch from 9992/9993 to 9994/9995 happened while the trader's quotes sat 2-3 ticks behind the touch. The one point against closure is the positive price move and round trip, which I treat as ordinary spread capture, not displayed-size manipulation. Prior CLOSE_FPs were context only; I re-tested the same explanation on today's tape.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_trader_profile",
+     "fact": "role MARKET_MAKER, registered_mm_instruments includes SYN.A, typical_order_size 317, typical_daily_otr 14.4, no risk-limit events in window"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "gross_submitted_dominant 9464 and gross_submitted_other 9464; cancel_symmetry 0.996; order_types LIMIT only (52); parent_order_ids empty"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 0.150; distance_from_touch_ticks 1.58; distinct_price_levels 2; large_order_ids empty"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "opposite_side_fill_qty 129 at 9995; same_side_fill_qty 57, all before the opposite trade; same_side_fill_share 0.006; modify_reduction_qty 0"
+    },
+    {
+     "id": "E5",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks 2.5; post_cancel_move_ticks -0.5; reversion_ticks 0.5; round_trip_ticks 3.0; repetitions_in_session 0"
+    },
+    {
+     "id": "E6",
+     "source": "get_order_events",
+     "fact": "BUY and SELL quotes of 364 are cancelled and replaced together every ~1-7 s. The 129 fill was a PARTIAL_FILL on SELL O-00004919 (9995) at 10:00:34.015. A 57 PARTIAL_FILL on BUY O-00004792 came at 09:59:44.747. Both sides' remainders were cancelled at 10:00:36."
+    },
+    {
+     "id": "E7",
+     "source": "compute_discriminators",
+     "fact": "otr 52.0 and cancel_ratio 0.99 against typical daily OTR 14.4; market_wide_cancels_1s_before_first_cancel 1"
+    },
+    {
+     "id": "E8",
+     "source": "get_market_events",
+     "fact": "no public events in the window"
+    },
+    {
+     "id": "E9",
+     "source": "get_trader_alert_history",
+     "fact": "two prior SPOOFING alerts (H-T-MM-01-01, H-T-MM-01-02) closed FP as market making, no overrides"
+    }
+   ],
+   "indicators_not_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "several price levels on one side (layering)",
+    "repetition of the cycle within the session",
+    "price moved in the trader's favour before the execution and reverted after the cancel"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "high order-to-trade ratio (Annex II 4(f))"
+   ],
+   "alert_id": "A-261005-0002",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making (registered on instrument; two-sided symmetric quotes; cancels follow the touch)",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E8",
+      "E7"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "H-T-MM-01-01 (2026-09-23) and H-T-MM-01-02 (2026-09-13): 'registered market maker; two-sided quotes re-priced on fair value moves; no opposite-side benefit' - CLOSE_FP, no override. The same MM explanation holds on today's tape (symmetric quotes, own-quote fills), but the positive round trip here is noted as a difference."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 09:59:34.015-10:00:39.015 (65 s) with 5 s padding on the order events. No longer frame was examined.",
+   "what_would_change_my_mind": "Evidence that the BUY quotes were placed to move the touch, for example one-sided size appearing, or cancels timed to the SELL fill instead of the regular re-quote cadence, or the same pattern repeating across sessions. A Level-2 view that the 3-tick positive round trip with 0.5 tick reversion counts as feature (b) would also push this to ESCALATE."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-MM-01"
+ }
+}

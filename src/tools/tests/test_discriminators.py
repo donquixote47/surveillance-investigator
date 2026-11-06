@@ -163,3 +163,41 @@ def test_memory_namespaces_are_regex_safe():
     for ns in (mem.trader_ns("T-X1016-03"), mem.instrument_ns("SYN.A"), mem.instrument_ns("BRK/B"), mem.PROCEDURES_NS):
         assert pat.match(ns.rstrip("/")), ns
     assert mem.instrument_ns("SYN.A") == "/instruments/SYN_A/notes/"
+
+
+def test_same_side_fills_are_split_around_the_opposite_trade() -> None:
+    """F-ICE-1 / F-PARTIAL-1: the resting order trades first, then the trader goes the other way (genuine);
+    S-SPOOF-5: nothing trades on the resting order until after the trader's opposite trade (caught in the book)."""
+    genuine = [
+        row(T0, "B0", "X", "NEW", "BUY", 9_998, 8000, 8000),
+        row(T0 + 2 * S, "B0", "X", "PARTIAL_FILL", "BUY", 9_998, 1500, 6500),
+        row(T0 + 4 * S, "B0", "X", "PARTIAL_FILL", "BUY", 9_998, 1500, 5000),
+        row(T0 + 6 * S, "S1", "X", "NEW", "SELL", None, 400, 400, "MARKET"),
+        row(T0 + 6 * S, "S1", "X", "FILL", "SELL", 10_002, 400, 0, "MARKET"),
+        row(T0 + 7 * S, "B0", "X", "PARTIAL_FILL", "BUY", 9_998, 500, 4500),
+        row(T0 + 8 * S, "B0", "X", "CANCEL", "BUY", 9_998, 4500, 0),
+    ]
+    d = compute_discriminators(alert(), tape(genuine), 1000.0)
+    assert d.same_side_fill_qty == 3500
+    assert d.same_side_fill_qty_before_opposite_trade == 3000 and d.same_side_fill_qty_after_opposite_trade == 500
+    assert d.same_side_fill_share == 0.4375
+    assert any("before any opposite-side execution" in n for n in d.notes)
+
+    caught = [
+        row(T0, "B0", "X", "NEW", "BUY", 9_996, 8000, 8000),
+        row(T0 + 2 * S, "S1", "X", "NEW", "SELL", None, 400, 400, "MARKET"),
+        row(T0 + 2 * S, "S1", "X", "FILL", "SELL", 10_002, 400, 0, "MARKET"),
+        row(T0 + 2 * S + 200_000_000, "B0", "X", "PARTIAL_FILL", "BUY", 9_996, 1500, 6500),  # sweep hits him
+        row(T0 + 2 * S + 600_000_000, "B0", "X", "CANCEL", "BUY", 9_996, 6500, 0),
+    ]
+    d = compute_discriminators(alert(), tape(caught), 1000.0)
+    assert d.same_side_fill_qty_before_opposite_trade == 0 and d.same_side_fill_qty_after_opposite_trade == 1500
+    assert any("only after the opposite-side execution" in n for n in d.notes)
+
+    no_opposite = [
+        row(T0, "B0", "X", "NEW", "BUY", 9_998, 8000, 8000),
+        row(T0 + 2 * S, "B0", "X", "PARTIAL_FILL", "BUY", 9_998, 1000, 7000),
+        row(T0 + 3 * S, "B0", "X", "CANCEL", "BUY", 9_998, 7000, 0),
+    ]
+    d = compute_discriminators(alert(), tape(no_opposite), 1000.0)
+    assert d.same_side_fill_qty_before_opposite_trade == 1000 and d.same_side_fill_qty_after_opposite_trade == 0

@@ -38,6 +38,12 @@ class Discriminators:
     distinct_price_levels: int  # distinct prices of dominant-side orders placed in the window
     large_order_ids: list[str]  # dominant-side orders >= 3 x depth
     same_side_fill_qty: int  # executions on the dominant side's own orders (genuine intent)
+    # the same executions split around the trader's first opposite-side execution: fills BEFORE it show an order
+    # that was working (iceberg slices, partial fills); fills only AFTER it are a third party catching a spoof in
+    # the book (S-SPOOF-5). With no opposite-side execution, everything counts as "before".
+    same_side_fill_qty_before_opposite_trade: int
+    same_side_fill_qty_after_opposite_trade: int
+    same_side_fill_share: float  # same_side_fill_qty / gross submitted on the dominant side; 0 when nothing submitted
     opposite_side_fill_qty: int
     opposite_side_fills: list[dict]  # ts, price_ticks, qty, ms_before_first_cancel
     modify_reduction_qty: int
@@ -168,9 +174,25 @@ def compute_discriminators(
 
     large_ids = [str(r.order_id) for r in dnew.itertuples() if r.qty >= large_multiple * depth]
 
-    same_fill = int(nonmkt[(nonmkt["side"] == dom) & nonmkt["event"].isin(FILL_EVENTS)]["qty"].sum())
+    same_rows = nonmkt[(nonmkt["side"] == dom) & nonmkt["event"].isin(FILL_EVENTS)]
+    same_fill = int(same_rows["qty"].sum())
     opp_rows = win[(win["side"] == other) & win["event"].isin(FILL_EVENTS)]
     opp_fill = int(opp_rows["qty"].sum())
+    first_opp_ts = int(opp_rows["ts"].min()) if not opp_rows.empty else None
+    same_before = same_fill if first_opp_ts is None else int(same_rows[same_rows["ts"] < first_opp_ts]["qty"].sum())
+    same_after = same_fill - same_before
+    gross_dom = g_buy if dom == str(Side.BUY) else g_sell
+    same_share = round(same_fill / gross_dom, 4) if gross_dom else 0.0
+    if same_before > 0:
+        notes.append(
+            f"{same_before} executed on the trader's own {dom} orders before any opposite-side execution: "
+            "the resting order was trading"
+        )
+    elif same_after > 0:
+        notes.append(
+            f"{same_after} executed on the trader's own {dom} orders only after the opposite-side execution: "
+            "consistent with a third party hitting a resting order before it was pulled"
+        )
     first_cancel_ts = int(dcancel["ts"].min()) if not dcancel.empty else None
     opp_fills = [
         {
@@ -266,6 +288,9 @@ def compute_discriminators(
         distinct_price_levels=levels,
         large_order_ids=large_ids,
         same_side_fill_qty=same_fill,
+        same_side_fill_qty_before_opposite_trade=same_before,
+        same_side_fill_qty_after_opposite_trade=same_after,
+        same_side_fill_share=same_share,
         opposite_side_fill_qty=opp_fill,
         opposite_side_fills=opp_fills,
         modify_reduction_qty=int(reductions),

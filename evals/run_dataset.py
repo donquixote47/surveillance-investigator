@@ -106,8 +106,8 @@ def runtime_arn() -> str:
 class RuntimeBackend:
     name = "runtime"
 
-    def __init__(self, tokens: Tokens, mode: str):
-        self.tokens, self.mode = tokens, mode
+    def __init__(self, tokens: Tokens, mode: str, memory: bool = True):
+        self.tokens, self.mode, self.memory = tokens, mode, memory
         self.url = (
             f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{quote(runtime_arn(), safe='')}/invocations"
         )
@@ -120,7 +120,10 @@ class RuntimeBackend:
             "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
         }
         r = self.client.post(
-            self.url, params={"qualifier": "DEFAULT"}, headers=headers, json={"alert_id": alert_id, "mode": self.mode}
+            self.url,
+            params={"qualifier": "DEFAULT"},
+            headers=headers,
+            json={"alert_id": alert_id, "mode": self.mode, "memory": self.memory},
         )
         if r.status_code != 200:
             return {"alert_id": alert_id, "error": f"HTTP {r.status_code}: {r.text[:600]}", "session_id": session_id}
@@ -135,7 +138,7 @@ class LocalBackend:
 
     name = "local"
 
-    def __init__(self, tokens: Tokens, mode: str, model_id: str | None, analyst: str):
+    def __init__(self, tokens: Tokens, mode: str, model_id: str | None, analyst: str, memory: bool = True):
         os.environ.setdefault("SURV_GATEWAY_URL", gateway_url())
         sys.path.insert(0, str(ROOT / "app" / "surv_investigator_l1"))
         from investigator import investigate
@@ -156,6 +159,7 @@ class LocalBackend:
             analyst=self.analyst,
             model_id=self.model_id,
             session_id=session_id,
+            memory=self.memory,
         )
         return res.to_dict()
 
@@ -348,6 +352,7 @@ def main() -> int:
     )
     ap.add_argument("--user", choices=["L1", "L2"], default="L1")
     ap.add_argument("--mode", choices=["investigate", "stor_drafting"], default="investigate")
+    ap.add_argument("--no-memory", action="store_true", help="hide recall_memory from the agent (data doc 4.5.1 arm)")
     ap.add_argument("--concurrency", type=int, default=2)
     ap.add_argument("--retries", type=int, default=1, help="retries per alert on throttling or 5xx")
     ap.add_argument("--alerts", nargs="*", default=None)
@@ -406,6 +411,7 @@ def main() -> int:
             "model_id": args.model if args.backend == "local" else None,
             "user": args.user,
             "mode": args.mode,
+            "memory": not args.no_memory,
             "concurrency": args.concurrency,
             "selection": {"alerts": args.alerts, "scenario": args.scenario, "sample": args.sample, "seed": args.seed},
             "n_selected": len(selection),
@@ -417,9 +423,9 @@ def main() -> int:
     env = load_env(CREDS)
     tokens = Tokens(env, args.user)
     if args.backend == "runtime":
-        backend: Any = RuntimeBackend(tokens, args.mode)
+        backend: Any = RuntimeBackend(tokens, args.mode, memory=not args.no_memory)
     else:
-        backend = LocalBackend(tokens, args.mode, args.model, env[f"SURV_{args.user}_USER"])
+        backend = LocalBackend(tokens, args.mode, args.model, env[f"SURV_{args.user}_USER"], memory=not args.no_memory)
     cases = Cases()
 
     print(

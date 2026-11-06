@@ -40,7 +40,7 @@ LOG_GROUP = "/aws/bedrock-agentcore/runtimes/surv_default_surv_investigator_l1-l
 logging.basicConfig(level=logging.WARNING)
 _lock = threading.Lock()
 
-TIME_RE = re.compile(r"\b\d{1,2}:\d{2}:\d{2}(?:\.\d{1,9})?\b")
+TIME_RE = re.compile(r"\b\d{1,2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:-\d{2}(?:\.\d{1,9})?)?\b")  # 13:20:39-43 is one range
 NUM_RE = re.compile(r"(?<![\w.])[-+]?\d{1,3}(?:,\d{3})+(?:\.\d+)?(?![\d.])|(?<![\w.])[-+]?\d+(?:\.\d+)?(?![\d.]\d)")
 SMALL_INT_SKIP = 12
 
@@ -96,8 +96,11 @@ def check_fact(fact: str, ground: str, ground_nums: list[float]) -> tuple[int, l
     unmatched = []
     toks = fact_tokens(fact)
     for raw, v, dec in toks:
-        if v is None:  # time string: verbatim, or the same time with more decimals in the tool text
-            if raw in ground or re.search(re.escape(raw) + r"\d*", ground):
+        if (
+            v is None
+        ):  # time string: verbatim, or the same time with more decimals in the tool text; ranges by their start
+            start = raw.split("-")[0]
+            if start in ground or re.search(re.escape(start) + r"\d*", ground):
                 continue
             unmatched.append(raw)
             continue

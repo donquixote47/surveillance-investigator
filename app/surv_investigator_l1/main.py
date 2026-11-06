@@ -1,6 +1,7 @@
 """AgentCore Runtime entrypoint for the Level-1 investigator (HTTP protocol).
 
-Payload: {"alert_id": "A-261006-0006", "mode": "investigate" | "stor_drafting", "instruction": "optional free text"}
+Payload: {"alert_id": "A-261006-0006", "mode": "investigate" | "stor_drafting", "instruction": "optional free text",
+          "memory": true | false (default true; false hides `recall_memory` for the Memory on/off evaluation arm)}
 Headers: Authorization: Bearer <analyst's Cognito access token>  (allowlisted on the Runtime; forwarded to the Gateway)
 
 Returns the InvestigationResult as JSON: the proposal and its report, the Gateway's answer, the tool trajectory
@@ -75,6 +76,7 @@ def invoke(payload: dict, context: RequestContext):
         analyst=analyst,
         session_id=getattr(context, "session_id", None),
         extra_instruction=(payload.get("instruction") or None),
+        memory=bool(payload.get("memory", True)),
     )
     out = result.to_dict()
     out["analyst"] = analyst

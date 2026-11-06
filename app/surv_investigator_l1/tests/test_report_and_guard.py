@@ -224,3 +224,12 @@ def test_guard_releases_the_proposal_when_the_gateway_denies_it():
     g.after_tool(_AfterEvent(PROPOSE, inputs, ok))
     assert g.proposal_result["case_id"] == "C-A-261006-0006"
     assert g.proposal["report"]["tool_calls"][-1] == "get_trader_profile"
+
+
+def test_prompt_memory_switch():
+    from prompt import TOOL_PREFIX, system_prompt
+
+    on, off = system_prompt("investigate", memory=True), system_prompt("investigate", memory=False)
+    assert f"{TOOL_PREFIX}recall_memory` with the alert id" in on and "memory_used` lists" in on
+    assert "Memory is switched off" in off and "`memory_used` is an empty list" in off
+    assert "Read it before the evidence" not in off

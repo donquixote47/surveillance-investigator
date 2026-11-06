@@ -167,7 +167,8 @@ TOOLS: list[dict] = [
         "description": (
             "The deterministic numbers an analyst computes for a spoofing alert, from the tape and the instrument's "
             "average depth: order-to-trade ratio, cancel ratio and latency, peak resting size vs depth, distance from "
-            "the touch at placement, same-side vs opposite-side executions, MODIFY reductions, cancel symmetry across "
+            "the touch at placement, same-side vs opposite-side executions and whether the same-side executions came "
+            "before or after the trader's opposite-side trade, MODIFY reductions, cancel symmetry across "
             "sides, price move before the trader's opposite-side execution, post-cancel move and reversion, round-trip "
             "P&L in ticks, repetitions over the session, and how many other traders cancelled in the second before "
             "this trader's first cancel. Vocabulary follows Delegated Regulation (EU) 2016/522 Annex II. Every value "
@@ -192,6 +193,14 @@ TOOLS: list[dict] = [
                 "distinct_price_levels": _i(""),
                 "large_order_ids": _arr(_s(""), "dominant-side orders >= 3 x depth"),
                 "same_side_fill_qty": _i("executed on the trader's own dominant-side orders"),
+                "same_side_fill_qty_before_opposite_trade": _i(
+                    "of those, executed before the trader's first opposite-side execution (an order that was working)"
+                ),
+                "same_side_fill_qty_after_opposite_trade": _i(
+                    "of those, executed after the trader's first opposite-side execution (a third party hitting a "
+                    "resting order before it was pulled)"
+                ),
+                "same_side_fill_share": _n("same_side_fill_qty / gross submitted on the dominant side"),
                 "opposite_side_fill_qty": _i(""),
                 "opposite_side_fills": _arr(
                     _obj(

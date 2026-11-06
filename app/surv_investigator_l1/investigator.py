@@ -190,6 +190,7 @@ def build_agent(
     analyst: str | None = None,
     model_id: str | None = None,
     policy_session_id: str | None = None,
+    memory: bool = True,
 ) -> tuple[Agent, InvestigationGuard, MCPClient]:
     """`policy_session_id` scopes the Gateway's temporal policies: one investigation = one policy session, so
     "evidence before proposal" and "one proposal per alert" are judged on this run's history only. The Runtime
@@ -210,12 +211,14 @@ def build_agent(
         url=gateway_mcp_url(),
         headers={"Authorization": f"Bearer {access_token}", POLICY_SESSION_HEADER: policy_session_id},
         startup_timeout=60,
+        # Memory off (evaluation arm, data doc 4.5.1): the recall tool is not offered to the model at all
+        tool_filters=None if memory else {"rejected": [f"{TOOL_PREFIX}recall_memory"]},
     )
     guard = InvestigationGuard(alert_id=alert_id, mode=mode)
     agent = Agent(
         model=model,
         tools=[mcp],
-        system_prompt=system_prompt(mode),
+        system_prompt=system_prompt(mode, memory=memory),
         hooks=[guard],
         tool_executor=SequentialToolExecutor(),  # temporal policies need each response recorded before the next request
         callback_handler=None,
@@ -225,6 +228,7 @@ def build_agent(
             "surv.analyst": analyst or "unknown",
             "surv.model_id": model_id,
             "surv.policy_session_id": policy_session_id,
+            "surv.memory": "on" if memory else "off",
         },
         name="surv_investigator_l1",
         description="Level-1 spoofing/layering alert investigator",
@@ -241,6 +245,7 @@ def investigate(
     model_id: str | None = None,
     session_id: str | None = None,
     extra_instruction: str | None = None,
+    memory: bool = True,
 ) -> InvestigationResult:
     """Run one investigation to completion and return everything the caller needs to show or store."""
     t0 = time.time()
@@ -251,6 +256,7 @@ def investigate(
         analyst=analyst,
         model_id=model_id,
         policy_session_id=session_id,
+        memory=memory,
     )
     prompt = f"Investigate alert {alert_id}."
     if mode == "stor_drafting":

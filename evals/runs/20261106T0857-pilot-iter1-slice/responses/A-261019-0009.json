@@ -1,0 +1,412 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261106T0857-pilot-iter1-slice-A-261019-0009-21b52d38",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-06T09:00:43+00:00",
+  "wall_s": 47.0
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261019-0009",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.8,
+   "report": {
+    "alert_id": "A-261019-0009",
+    "scenario": "SPOOFING",
+    "summary": "Agency trader T-X1019-08 worked a 22256 BUY ICEBERG (parent C-T-X1019-08-A) at the touch (9999). It executed 4941 (22% of submitted, far above the 556 opposite-side qty) in partial fills BEFORE any SELL. A 556 SELL under a different parent (C-T-X1019-08-B) executed at 16:41:59 and the remaining 17315 was cancelled about 4s later after the market ran away from the bid. The order was working (feature a absent) and hidden iceberg size cannot be a display signal. The SELL belongs to a different client parent, so it is not a round trip for this agency trader (feature b absent). Closed as false positive.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "BUY O-00038217 ICEBERG 22256 at 9999, parent C-T-X1019-08-A, with partial fills from 16:41:40 to 16:41:52 leaving 17315, cancelled 16:42:03"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "same_side_fill_qty_before_opposite_trade 4941, after 0, same_side_fill_share 0.222, opposite_side_fill_qty 556"
+     },
+     {
+      "id": "E3",
+      "source": "get_order_events",
+      "fact": "SELL O-00038265 556 under parent C-T-X1019-08-B, different from the BUY parent C-T-X1019-08-A"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "distance_from_touch_ticks 0.0, distinct_price_levels 1, repetitions_in_session 1, otr 0.3, cancel_symmetry 0.0, round_trip_ticks 4.0, reversion_ticks 0.0, max_resting_size_vs_depth 8.64"
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "Role AGENCY, registered_mm_instruments empty, risk_limit_events_in_window empty"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "No market events in window (events: empty)"
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts in 90 days"
+     }
+    ],
+    "indicators_matched": [
+     "size large relative to visible depth"
+    ],
+    "indicators_not_matched": [
+     "orders with no intention to execute",
+     "opposite-side execution before the cancel (different client parent)",
+     "orders away from the touch",
+     "high order-to-trade ratio",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "iceberg / genuine execution of the resting order: 4941 filled before the opposite trade, ICEBERG order type",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "market making: not registered, one-sided",
+      "ruled_out_by": [
+       "E5",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing: cancel_symmetry 0.0",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation: no risk event",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event: no event recorded",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger: order worked 27s with fills",
+      "ruled_out_by": [
+       "E1",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out: round trip positive",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.8,
+    "what_would_change_my_mind": "Evidence that the SELL (parent -B) and the BUY iceberg (parent -A) are the same client's or trader's own strategy, or repeated cycles in other sessions.",
+    "memory_used": [],
+    "window_used": "Detector window 16:40:59.007 to 16:42:04.169 plus 5s padding on the order events; no longer frame examined.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261019-0009",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-261019-0009",
+   "proposed_at": "2026-11-06T09:01:26+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [
+   "report rejected before it reached the Gateway; fix these and call propose_disposition again:\n- legitimate_explanations_considered.0.ruled_out: Extra inputs are not permitted",
+   "report rejected before it reached the Gateway; fix these and call propose_disposition again:\n- legitimate_explanations_considered.1: Value error, explanation 'market making (E5 not registered, E4 cancel_symmetry 0.0)' is ruled_out but cites no evidence\n- legitimate_explanations_considered.2: Value error, explanation 'algorithmic re-pricing (E4 cancel_symmetry 0.0)' is ruled_out but cites no evidence\n- legitimate_explanations_considered.3: Value error, explanation 'risk-limit or kill-switch cancellation (E5 no risk events)' is ruled_out but cites no evidence\n- legitimate_explanations_considered.4: Value error, explanation 'reaction to a public event (E6 no events)' is ruled_out but cites no evidence\n- legitimate_explanations_considered.5: Value error, explanation 'fat finger (E1, E2 order worked for 27s with fills)' is ruled_out but cites no evidence\n- legitimate_explanations_considered.6: Value error, explanation 'momentum trader stopped out (E4 round trip positive)' is ruled_out but cites no evidence"
+  ],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261019-0009"
+    },
+    "ms": 209,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 188,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261019-0009",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1019-08"
+    },
+    "ms": 1213,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261019-0009",
+     "pad_seconds": 5
+    },
+    "ms": 210,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261019-0009"
+    },
+    "ms": 397,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1019-08",
+     "alert_id": "A-261019-0009"
+    },
+    "ms": 195,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1792428059007541586,
+     "window_end": 1792428124169879036
+    },
+    "ms": 194,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-19",
+     "instrument": "SYN.A"
+    },
+    "ms": 212,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1019-08",
+     "before_date": "2026-10-19"
+    },
+    "ms": 238,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261019-0009",
+     "confidence": 0.8,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 0,
+    "status": "error"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261019-0009",
+     "confidence": 0.8,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 0,
+    "status": "error"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261019-0009",
+     "confidence": 0.8,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 248,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** CLOSE_FP, with confidence 0.80. The proposal is on file as case C-A-261019-0009 and awaits a human decision.\n\n**What drove it:**\n1. **The BUY order was working.** It was a 22,256-lot ICEBERG at the touch (9999). It had 4,941 lots of fills (22% of the quantity submitted) before any SELL, against only 556 lots sold. That means no resting order the trader didn't intend to execute.\n2. **No benefit from the SELL.** The 556-lot SELL sits under a different parent order (C-T-X1019-08-B, against the BUY's C-T-X1019-08-A). For an agency trader, that is a different client's order, not a round trip.\n3. **No other spoofing signs.** The BUY sat at the touch on one price level, the session shows one cycle, and there was no reversion after the cancel. The trader's profile shows no registered market making or risk events, and there were no market events.\n\n**What would change my mind:** Evidence that the SELL and the BUY iceberg belong to the same client or the same strategy, or repeated cycles in other sessions.",
+  "usage": {
+   "input_tokens": 78906,
+   "output_tokens": 6050,
+   "total_tokens": 84956,
+   "model_calls": 6
+  },
+  "duration_s": 41.3,
+  "session_id": "surv-eval-20261106T0857-pilot-iter1-slice-A-261019-0009-21b52d38",
+  "error": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261019-0009",
+  "case_id": "C-A-261019-0009",
+  "confidence": "0.8",
+  "date": "2026-10-19",
+  "proposal_count": "2",
+  "proposed_at": "2026-11-06T09:01:26+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "Agency trader T-X1019-08 worked a 22256 BUY ICEBERG (parent C-T-X1019-08-A) at the touch (9999). It executed 4941 (22% of submitted, far above the 556 opposite-side qty) in partial fills BEFORE any SELL. A 556 SELL under a different parent (C-T-X1019-08-B) executed at 16:41:59 and the remaining 17315 was cancelled about 4s later after the market ran away from the bid. The order was working (feature a absent) and hidden iceberg size cannot be a display signal. The SELL belongs to a different client parent, so it is not a round trip for this agency trader (feature b absent). Closed as false positive.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "BUY O-00038217 ICEBERG 22256 at 9999, parent C-T-X1019-08-A, with partial fills from 16:41:40 to 16:41:52 leaving 17315, cancelled 16:42:03"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "same_side_fill_qty_before_opposite_trade 4941, after 0, same_side_fill_share 0.222, opposite_side_fill_qty 556"
+    },
+    {
+     "id": "E3",
+     "source": "get_order_events",
+     "fact": "SELL O-00038265 556 under parent C-T-X1019-08-B, different from the BUY parent C-T-X1019-08-A"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "distance_from_touch_ticks 0.0, distinct_price_levels 1, repetitions_in_session 1, otr 0.3, cancel_symmetry 0.0, round_trip_ticks 4.0, reversion_ticks 0.0, max_resting_size_vs_depth 8.64"
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "Role AGENCY, registered_mm_instruments empty, risk_limit_events_in_window empty"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "No market events in window (events: empty)"
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts in 90 days"
+    }
+   ],
+   "indicators_not_matched": [
+    "orders with no intention to execute",
+    "opposite-side execution before the cancel (different client parent)",
+    "orders away from the touch",
+    "high order-to-trade ratio",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "size large relative to visible depth"
+   ],
+   "alert_id": "A-261019-0009",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "iceberg / genuine execution of the resting order: 4941 filled before the opposite trade, ICEBERG order type",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "market making: not registered, one-sided",
+     "ruled_out_by": [
+      "E5",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing: cancel_symmetry 0.0",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation: no risk event",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event: no event recorded",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger: order worked 27s with fills",
+     "ruled_out_by": [
+      "E1",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out: round trip positive",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 16:40:59.007 to 16:42:04.169 plus 5s padding on the order events; no longer frame examined.",
+   "what_would_change_my_mind": "Evidence that the SELL (parent -B) and the BUY iceberg (parent -A) are the same client's or trader's own strategy, or repeated cycles in other sessions."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1019-08"
+ }
+}

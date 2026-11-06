@@ -314,7 +314,8 @@ def render_markdown(
     lines.append(
         f"- Dataset `{run.get('dataset')}`, {m['n']} alerts ({m['n_true_abuse']} TRUE_ABUSE, "
         f"{m['n_false_positive']} FALSE_POSITIVE); backend `{run.get('backend')}`, model `{run.get('model_id')}`, "
-        f"analyst `{run.get('user')}`, mode `{run.get('mode')}`, concurrency {run.get('concurrency')}."
+        f"analyst `{run.get('user')}`, mode `{run.get('mode')}`, memory {'on' if run.get('memory', True) else 'OFF'}, "
+        f"concurrency {run.get('concurrency')}."
     )
     lines.append(
         f"- Started {run.get('started_at')}, finished {run.get('finished_at')} ({run.get('elapsed_min')} min)."
