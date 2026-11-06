@@ -87,7 +87,7 @@ Goal: the metric table, and evidence that the agent improves in a governed way.
 - [ ] Memory on/off run to quantify memory's effect on safe close rate, override rate, S-SPOOF-4 and F-MM-1 (data doc section 4.5.1).
 - [x] `evals/ingest_overrides.py`: overrides from `cases` become rows of `labels/overrides.parquet` with truth, the analyst's note, who recorded it and the run whose proposal it overrode (or `ui`, flagged when the recording predates the current proposal). One override in the table so far (alert E).
 - [ ] Optimization iteration: configuration bundle v1 from the current prompt; recommendation against the rationale evaluator; bundle v2; A/B v1 vs v2 through the Gateway on a dataset replay; offline promotion rule; decision-log entry (section 4.5.3).
-- [ ] `src/detector/tune.py`: threshold re-tuning report, old vs new (section 4.5.4). Applied to the next dataset build only.
+- [x] `src/detector/tune.py`: 60-point grid over K, P, C (`evals/runs/tune-seed7.md`). Best at recall 1.0 is K 6 (97 alerts, 28.9% precision) but it sits 2x under the smallest injected spoof, so the next build takes K 4 at most (data doc 4.6). Not applied to seed7.
 - [ ] Model-comparison arm: Opus 5.5 vs Sonnet 5.5 as a configuration-bundle change, same prompt and seed; gate, safe close rate, override rate on the hard scenarios (F-SPOOFLIKE-HARD-1, S-SPOOF-3, S-SPOOF-4), rubric, cost and latency per alert; promotion decision in the log (data doc section 4.3).
 
 Exit: demo step 8's table exists with gate = 0 missed and an override-rate trend across at least two runs; one Optimization iteration documented end to end. If the gate fails, the table says so and the next step is the fix, not the presentation.
