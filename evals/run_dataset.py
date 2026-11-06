@@ -48,6 +48,7 @@ from metrics import CLOSE, ESCALATE, compute, regression, render_markdown, rows_
 from smoke_gateway import CREDS, access_token, gateway_url, load_env  # noqa: E402
 
 REGION = "eu-west-2"
+ACCOUNT = "384308066035"
 RUNTIME_NAME = "surv_default_surv_investigator_l1"
 CASES_TABLE = "surv-cases"
 RUNS_DIR = ROOT / "evals" / "runs"
@@ -106,8 +107,15 @@ def runtime_arn() -> str:
 class RuntimeBackend:
     name = "runtime"
 
-    def __init__(self, tokens: Tokens, mode: str, memory: bool = True):
+    def __init__(self, tokens: Tokens, mode: str, memory: bool = True, bundle: str | None = None):
         self.tokens, self.mode, self.memory = tokens, mode, memory
+        self.baggage = None
+        if (
+            bundle
+        ):  # "<bundleId>:<versionId>" -> the W3C baggage header the Runtime reads (configuration-bundles-runtime)
+            bid, vid = bundle.split(":", 1)
+            arn = f"arn:aws:bedrock-agentcore:{REGION}:{ACCOUNT}:configuration-bundle/{bid}"
+            self.baggage = f"aws.agentcore.configbundle_arn={arn},aws.agentcore.configbundle_version={vid}"
         self.url = (
             f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/{quote(runtime_arn(), safe='')}/invocations"
         )
@@ -119,6 +127,8 @@ class RuntimeBackend:
             "Content-Type": "application/json",
             "X-Amzn-Bedrock-AgentCore-Runtime-Session-Id": session_id,
         }
+        if self.baggage:
+            headers["baggage"] = self.baggage
         r = self.client.post(
             self.url,
             params={"qualifier": "DEFAULT"},
@@ -247,14 +257,29 @@ def row_from(
         "session_id": resp.get("session_id") or meta.get("session_id"),
         "attempt": meta.get("attempt"),
         "model_id": resp.get("model_id"),
+        "bundle": resp.get("bundle"),
     }
 
 
 def transient(resp: dict[str, Any]) -> bool:
+    """Errors worth one retry after a pause: throttling anywhere in the chain (the Gateway's 429 surfaces as the
+    Runtime's 500, which the invocation endpoint reports as HTTP 424), 5xx, timeouts, closed MCP connections."""
     e = (resp.get("error") or "").lower()
     return any(
         k in e
-        for k in ("throttl", "rate", "too many", "http 429", "http 5", "timeout", "timed out", "service unavailable")
+        for k in (
+            "throttl",
+            "rate",
+            "too many",
+            "429",
+            "http 424",
+            "http 5",
+            "error (5",
+            "timeout",
+            "timed out",
+            "service unavailable",
+            "connection to the mcp server was closed",
+        )
     )
 
 
@@ -353,6 +378,9 @@ def main() -> int:
     ap.add_argument("--user", choices=["L1", "L2"], default="L1")
     ap.add_argument("--mode", choices=["investigate", "stor_drafting"], default="investigate")
     ap.add_argument("--no-memory", action="store_true", help="hide recall_memory from the agent (data doc 4.5.1 arm)")
+    ap.add_argument(
+        "--bundle", default=None, help="configuration bundle '<bundleId>:<versionId>' or a name from evals/bundles.json"
+    )
     ap.add_argument("--concurrency", type=int, default=2)
     ap.add_argument("--retries", type=int, default=1, help="retries per alert on throttling or 5xx")
     ap.add_argument("--alerts", nargs="*", default=None)
@@ -363,6 +391,9 @@ def main() -> int:
     ap.add_argument("--notes", default="")
     ap.add_argument("--compare", type=Path, default=None, help="previous run dir for the regression report")
     ap.add_argument("--resume", type=Path, default=None, help="existing run dir: skip alerts with a saved response")
+    ap.add_argument(
+        "--retry-errors", action="store_true", help="with --resume: also re-run alerts whose saved response is an error"
+    )
     ap.add_argument("--rescore", type=Path, default=None, help="recompute results from a run's saved responses")
     ap.add_argument("--dry-run", action="store_true", help="baselines on the selection only, no invocations")
     args = ap.parse_args()
@@ -389,7 +420,11 @@ def main() -> int:
         out_dir = args.resume
         run = json.loads((out_dir / "run.json").read_text())
         run_id = run["run_id"]
-        done = {p.stem for p in (out_dir / "responses").glob("*.json")}
+        done = set()
+        for p in (out_dir / "responses").glob("*.json"):
+            if args.retry_errors and (json.loads(p.read_text()).get("response") or {}).get("error"):
+                continue  # re-run it; the new response overwrites the errored one
+            done.add(p.stem)
         selection = [lab for lab in selection if lab["alert_id"] not in done]
         print(f"resuming {run_id}: {len(done)} saved, {len(selection)} to go")
     else:
@@ -412,6 +447,7 @@ def main() -> int:
             "user": args.user,
             "mode": args.mode,
             "memory": not args.no_memory,
+            "bundle": args.bundle,
             "concurrency": args.concurrency,
             "selection": {"alerts": args.alerts, "scenario": args.scenario, "sample": args.sample, "seed": args.seed},
             "n_selected": len(selection),
@@ -422,9 +458,20 @@ def main() -> int:
 
     env = load_env(CREDS)
     tokens = Tokens(env, args.user)
+    bundle = args.bundle
+    if bundle and ":" not in bundle:  # a name from the local registry
+        reg_path = ROOT / "evals" / "bundles.json"
+        reg = json.loads(reg_path.read_text()) if reg_path.exists() else {}
+        if bundle not in reg:
+            raise SystemExit(f"unknown bundle name {bundle}; known: {sorted(reg)}")
+        bundle = reg[bundle]["baggage"]
+        run["bundle"] = f"{args.bundle} ({bundle})"
+        (out_dir / "run.json").write_text(json.dumps(run, indent=1))
     if args.backend == "runtime":
-        backend: Any = RuntimeBackend(tokens, args.mode, memory=not args.no_memory)
+        backend: Any = RuntimeBackend(tokens, args.mode, memory=not args.no_memory, bundle=bundle)
     else:
+        if bundle:
+            raise SystemExit("--bundle needs --backend runtime (the bundle is resolved by the Runtime app)")
         backend = LocalBackend(tokens, args.mode, args.model, env[f"SURV_{args.user}_USER"], memory=not args.no_memory)
     cases = Cases()
 

@@ -123,11 +123,13 @@ def compute(rows: list[dict[str, Any]], *, model_id: str | None = None) -> dict[
     cost = (sum(tin) * price[0] + sum(tout) * price[1]) / 1e6 if price and (tin or tout) else None
 
     prior_recorded = sorted(r["alert_id"] for r in rows if r.get("prior_recorded"))
+    bundles_seen = sorted({str(r.get("bundle")) for r in rows if r.get("bundle")})
     view_mismatch = sorted(r["alert_id"] for r in rows if r.get("model_view_agrees") is False)
     return {
         "n": n,
         "prior_recorded": prior_recorded,
         "model_view_mismatch": view_mismatch,
+        "bundles_seen": bundles_seen,
         "n_true_abuse": n_true,
         "n_false_positive": n_fp,
         "proposed_counts": dict(proposed),
@@ -315,7 +317,7 @@ def render_markdown(
         f"- Dataset `{run.get('dataset')}`, {m['n']} alerts ({m['n_true_abuse']} TRUE_ABUSE, "
         f"{m['n_false_positive']} FALSE_POSITIVE); backend `{run.get('backend')}`, model `{run.get('model_id')}`, "
         f"analyst `{run.get('user')}`, mode `{run.get('mode')}`, memory {'on' if run.get('memory', True) else 'OFF'}, "
-        f"concurrency {run.get('concurrency')}."
+        f"bundle {run.get('bundle') or 'none (code defaults)'}, concurrency {run.get('concurrency')}."
     )
     lines.append(
         f"- Started {run.get('started_at')}, finished {run.get('finished_at')} ({run.get('elapsed_min')} min)."
@@ -357,6 +359,8 @@ def render_markdown(
             f"| alerts with a disposition recorded before this run (visible to the agent through history and Memory) "
             f"| {len(m['prior_recorded'])}: {', '.join(m['prior_recorded'])} |"
         )
+    if m.get("bundles_seen"):
+        lines.append(f"| configuration bundle reported by the agent | {', '.join(m['bundles_seen'])} |")
     if m.get("model_view_mismatch"):
         lines.append(f"| model's proposal differs from what `cases` holds | {', '.join(m['model_view_mismatch'])} |")
     lat, tok = m["latency"], m["tokens"]

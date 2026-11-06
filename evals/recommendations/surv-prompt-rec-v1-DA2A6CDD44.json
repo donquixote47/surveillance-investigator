@@ -2,7 +2,7 @@
  "recommendation_id": "surv-prompt-rec-v1-DA2A6CDD44",
  "recommendation_arn": "arn:aws:bedrock-agentcore:eu-west-2:384308066035:recommendation/surv-prompt-rec-v1-DA2A6CDD44",
  "name": "surv-prompt-rec-v1",
- "status": "IN_PROGRESS",
+ "status": "COMPLETED",
  "run_id": "20261105T1238-sonnet-v1",
  "evaluator_arn": "arn:aws:bedrock-agentcore:eu-west-2:384308066035:evaluator/surv_rationale_rubric-VNJHkl2TKt",
  "trace_window": [
@@ -11,6 +11,10 @@
  ],
  "input_prompt_chars": 7141,
  "started_at": "2026-11-06T09:18:58+00:00",
- "fetched_at": "2026-11-06T09:20:32+00:00",
- "result_keys": []
+ "fetched_at": "2026-11-06T09:31:15+00:00",
+ "result_keys": [
+  "systemPromptRecommendationResult"
+ ],
+ "recommended_prompt_chars": 7639,
+ "explanation": "The optimizer examined a set of surveillance-analyst agent trajectories and identified a consistent failure pattern: cases involving registered market makers with positive `round_trip_ticks` and non-zero `opposite_side_fill_qty` were being incorrectly closed as false positives rather than escalated. In the failed traces, all legitimate explanations were ruled out in the escalated cases, while in the incorrectly closed cases the \"market making\" explanation was marked \"supported\" despite the positive round trip constituting mixed evidence. The optimizer concluded that the agent was over-applying the market-maker exemption and treating spread capture as a sufficient reason to dismiss a positive round trip without book-level verification.\n\nFrom this, the optimizer identified six substantive problems and drove corresponding changes into the revised prompt. First, the trigger for calling `surv___reconstruct_book` was made more explicit: step 4 of the workflow now states that a positive `round_trip_ticks` combined with non-zero `opposite_side_fill_qty` is always an unclear price picture, and the book must be reconstructed even for a registered market maker to verify whether the round trip reflects passive spread capture or a genuine benefit. Second, a new explicit rule was added stating that a positive `round_trip_ticks` is itself a possible feature (b) of spoofing and must not be dismissed as spread capture without `reconstruct_book` confirmation; a registered market maker with positive round trip and opposite-side fills presents mixed evidence and should be escalated unless the book clearly shows passive fills only. Third, the caveats section was extended to clarify that while `price_move_ticks` is uninformative when `same_side_fill_qty` is large, this caveat does not neutralize positive `round_trip_ticks`, which must always be evaluated independently. Fourth, the dispositions guidance was tightened so that a supported explanation with ambiguous benefit counts as mixed evidence rather than grounds for closure, and CLOSE_FP requires both core features to be absent and a genuinely supported explanation. Fifth, a confidence cap was introduced for closures that carry a positive round trip, preventing overconfident closure proposals in ambiguous market-maker cases. Sixth, the DRAFT_STOR threshold was clarified so that high `repetitions_in_session` combined with a clearly present feature (a) favors DRAFT_STOR even when feature (b) is not perfectly resolved.\n\nThe optimizer preserved the original prompt's overall structure, tool-call ordering, full list of eight legitimate explanations with their discriminator-reading guidance, the complete report field schema, the prohibition on the Level-1 analyst calling `surv___draft_stor_narrative`, and the safety invariant requiring explicit user approval before any disposition is proposed with silence not treated as consent. The revised artifact was iteratively trimmed to remain within the character budget derived from the original prompt length."
 }

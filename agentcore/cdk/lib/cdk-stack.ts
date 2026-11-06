@@ -81,6 +81,19 @@ export class AgentCoreStack extends Stack {
         ],
       }),
     );
+
+    // ---- Configuration bundles (Optimization, data doc 4.5.3 and the model arm in 4.3): the Runtime app resolves
+    // the bundle referenced in the request's `baggage` header through the control plane
+    // (bedrock_agentcore.config_bundle.client -> GetConfigurationBundleVersion). The CLI's generated role does not
+    // include it; without it get_config_bundle() raises and the agent falls back to its code defaults.
+    const runtime = this.application.runtime('surv_investigator_l1');
+    runtime.addToRolePolicy(
+      new iam.PolicyStatement({
+        sid: 'ReadConfigurationBundles',
+        actions: ['bedrock-agentcore:GetConfigurationBundle', 'bedrock-agentcore:GetConfigurationBundleVersion'],
+        resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:configuration-bundle/surv-*`],
+      }),
+    );
     new bedrockagentcore.CfnGatewayRateLimit(this, 'PerAnalystRequests', {
       gatewayIdentifier: gateway.gatewayId,
       rateLimitId: 'per-analyst-requests',

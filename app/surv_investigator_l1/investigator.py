@@ -37,6 +37,24 @@ POLICY_SESSION_HEADER = "x-amzn-bedrock-agentcore-policy-session-id"
 DRAFT_STOR = f"{TOOL_PREFIX}draft_stor_narrative"
 
 
+def bundle_config() -> tuple[dict[str, Any], str]:
+    """The AgentCore configuration bundle for this request, if the caller sent one (W3C `baggage` header with
+    `aws.agentcore.configbundle_arn` and `_version`; the Gateway sets it during an A/B test, the evaluation harness
+    sets it by hand). Returns ({}, "none") outside a Runtime request or when no bundle is referenced. Keys we read:
+    `system_prompt`, `model_id`, `effort`. Any failure falls back to the code defaults and is logged."""
+    try:
+        from bedrock_agentcore.runtime import BedrockAgentCoreContext
+
+        ref = BedrockAgentCoreContext.get_config_bundle_ref()
+        if ref is None:
+            return {}, "none"
+        cfg = BedrockAgentCoreContext.get_config_bundle() or {}
+        return cfg, f"{ref.bundle_id}:{ref.bundle_version}"
+    except Exception as exc:  # bundle service unavailable, or not running under the Runtime app
+        log.warning("config bundle unavailable, using code defaults: %s", exc)
+        return {}, "error"
+
+
 def gateway_mcp_url() -> str:
     """The Gateway is declared with protocolType None, so its URL is a bare origin and MCP lives at /mcp."""
     url = os.environ.get("SURV_GATEWAY_URL") or os.environ.get("AGENTCORE_GATEWAY_SURV_INVESTIGATOR_URL")
@@ -177,6 +195,7 @@ class InvestigationResult:
     duration_s: float
     session_id: str | None = None
     error: str | None = None
+    bundle: str = "none"
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -195,12 +214,16 @@ def build_agent(
     """`policy_session_id` scopes the Gateway's temporal policies: one investigation = one policy session, so
     "evidence before proposal" and "one proposal per alert" are judged on this run's history only. The Runtime
     session id is reused when there is one, so policy session, Runtime session and trace line up."""
-    model_id = model_id or os.environ.get("SURV_MODEL_ID", DEFAULT_MODEL)
+    cfg, bundle = bundle_config()
+    model_id = cfg.get("model_id") or model_id or os.environ.get("SURV_MODEL_ID", DEFAULT_MODEL)
     policy_session_id = policy_session_id or f"surv-{alert_id}-{uuid.uuid4().hex}"
     # Claude 5.5: `temperature` is rejected; adaptive thinking is on by default (Sonnet at effort "high") and its
     # tokens count against max_tokens, so the budget must cover thinking plus the report. Effort is a tuning knob
     # for Phase 5 (A/B low vs high).
-    effort = os.environ.get("SURV_EFFORT", "medium")
+    effort = cfg.get("effort") or os.environ.get("SURV_EFFORT", "medium")
+    # A bundle's system_prompt is used verbatim (that is what a bundle is for); the mode/memory variants apply only
+    # to the code's own prompt. The harness uses bundles with the default mode and memory on.
+    prompt_text = cfg.get("system_prompt") or system_prompt(mode, memory=memory)
     model = BedrockModel(
         model_id=model_id,
         region_name=REGION,
@@ -218,7 +241,7 @@ def build_agent(
     agent = Agent(
         model=model,
         tools=[mcp],
-        system_prompt=system_prompt(mode, memory=memory),
+        system_prompt=prompt_text,
         hooks=[guard],
         tool_executor=SequentialToolExecutor(),  # temporal policies need each response recorded before the next request
         callback_handler=None,
@@ -229,6 +252,7 @@ def build_agent(
             "surv.model_id": model_id,
             "surv.policy_session_id": policy_session_id,
             "surv.memory": "on" if memory else "off",
+            "surv.bundle": bundle,
         },
         name="surv_investigator_l1",
         description="Level-1 spoofing/layering alert investigator",
@@ -304,4 +328,5 @@ def investigate(
         duration_s=round(time.time() - t0, 1),
         session_id=session_id,
         error=error,
+        bundle=agent.trace_attributes.get("surv.bundle", "none") if hasattr(agent, "trace_attributes") else "none",
     )
