@@ -1,0 +1,426 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261028-0008-5df06810",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-06T09:51:22+00:00",
+  "wall_s": 33.9
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261028-0008",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.68,
+   "report": {
+    "alert_id": "A-261028-0008",
+    "scenario": "LAYERING",
+    "summary": "Prop trader placed 5 BUY limit orders of 5708 each (28540 gross) on five levels 9985-9989 within ~60 ms, about 11.7x average top-5 depth and far above typical size 500. About 1.2 s later a SELL market order hit the bid at 9991 for 649 filled. All five BUYs were cancelled within ~0.85 s of that sale, with none executed. The bid rose 0.5 tick before the sale and reverted 0.5 after the cancels. No legitimate explanation is supported. Both core features appear present, but the benefit is small and the cycle did not repeat, so I propose ESCALATE and not a STOR draft; Level 2 decides.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "5 BUY LIMIT orders of 5708 at 9989, 9988, 9987, 9986, 9985 placed 14:31:24.731-.791; SELL MARKET O-00027061 filled 317+332 at 9991 at 14:31:26.035; all five BUYs cancelled 14:31:26.250-.890"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 11.73; distance_from_touch_ticks 3.0; distinct_price_levels 5; cancel_ratio 1.0; OTR 6.0; same_side_fill_qty 0"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "opposite_side_fill_qty 649, ms_before_first_cancel 215.0; price_move_ticks 0.5, post_cancel_move_ticks -0.5, reversion_ticks 0.5; repetitions_in_session 0; round_trip_ticks null"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "cancel_symmetry 0.0; parent_order_ids empty; order types all LIMIT; market_wide_cancels_1s_before_first_cancel 1"
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "registered_mm_instruments empty; typical_order_size 500; typical_daily_otr 4.0; risk_limit_events_in_window empty"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "no events in window"
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_alert_history",
+      "fact": "no prior alerts in 90 days"
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2433.5, avg_spread 2.34 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute",
+     "opposite-side execution before the cancel",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "several price levels on one side (layering)",
+     "price moved in the trader's favour before the execution and reverted after the cancel"
+    ],
+    "indicators_not_matched": [
+     "repetition of the cycle within the session",
+     "high order-to-trade ratio (OTR 6.0 vs typical 4.0, not markedly elevated)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E5",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5",
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E4",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.68,
+    "what_would_change_my_mind": "Evidence that the BUY ladder was a genuine working order, such as a parent order or client instruction, or that the SELL was a pre-planned hedge unrelated to the ladder. A repeat of the cycle in the session or on other days would move this toward DRAFT_STOR.",
+    "memory_used": [
+     "Desk feedback from l1.analyst on A-261016-0003 (a cancel within 200 ms of unscheduled news is a news reaction): not applicable here, because no market event is recorded in the window (E6). The first cancel came 215 ms after the sale, not after any news."
+    ],
+    "window_used": "Detector window 14:30:26.035-14:31:31.035 (65 s) with 5 s padding on the order events. No longer frame was examined beyond the 90-day alert history, which has no prior alerts.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261028-0008",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261028-0008",
+   "proposed_at": "2026-11-06T09:51:53+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261028-0008"
+    },
+    "ms": 195,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 198,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261028-0008",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1028-07",
+     "query": "prior dispositions and analyst notes on this trader"
+    },
+    "ms": 1124,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261028-0008",
+     "pad_seconds": 5
+    },
+    "ms": 184,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261028-0008"
+    },
+    "ms": 320,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1028-07",
+     "alert_id": "A-261028-0008"
+    },
+    "ms": 176,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1793197826035451003,
+     "window_end": 1793197891035451003
+    },
+    "ms": 175,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-28",
+     "instrument": "SYN.A"
+    },
+    "ms": 190,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1028-07",
+     "before_date": "2026-10-28"
+    },
+    "ms": 255,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261028-0008",
+     "confidence": 0.68,
+     "disposition": "ESCALATE",
+     "report": "<report>"
+    },
+    "ms": 215,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** ESCALATE, confidence 0.68. The proposal is recorded as case C-A-261028-0008 and awaits a human decision.\n\n**The three facts that drove it:**\n1. The trader placed 5 BUY limit orders of 5,708 each (28,540 gross) at 9985\u20139989. That is about 11.7\u00d7 average top-5 depth and far above the trader's typical size of 500. A SELL market order then filled 649 at 9991, 215 ms before the first cancel. All five BUYs were cancelled with zero fills.\n2. The bid rose 0.5 tick before the sale and reverted 0.5 tick after the cancels. This is a small but real favourable move.\n3. No legitimate explanation is supported:\n   - The trader has no registered market-making instruments.\n   - The cancels are not symmetric (symmetry 0.0).\n   - There are no parent orders.\n   - There are no market events or risk events in the window.\n\n**What would change my mind:** evidence that the BUY ladder was a genuine working order, such as a client instruction, or that the SELL was an unrelated, pre-planned hedge. A repeat of the cycle would push it toward DRAFT_STOR. I did not propose a STOR draft because there was no repetition and the benefit is small.",
+  "usage": {
+   "input_tokens": 51487,
+   "output_tokens": 3227,
+   "total_tokens": 54714,
+   "model_calls": 5
+  },
+  "duration_s": 28.3,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261028-0008-5df06810",
+  "error": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261028-0008",
+  "case_id": "C-A-261028-0008",
+  "confidence": "0.68",
+  "date": "2026-10-28",
+  "proposal_count": "2",
+  "proposed_at": "2026-11-06T09:51:53+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "Prop trader placed 5 BUY limit orders of 5708 each (28540 gross) on five levels 9985-9989 within ~60 ms, about 11.7x average top-5 depth and far above typical size 500. About 1.2 s later a SELL market order hit the bid at 9991 for 649 filled. All five BUYs were cancelled within ~0.85 s of that sale, with none executed. The bid rose 0.5 tick before the sale and reverted 0.5 after the cancels. No legitimate explanation is supported. Both core features appear present, but the benefit is small and the cycle did not repeat, so I propose ESCALATE and not a STOR draft; Level 2 decides.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "5 BUY LIMIT orders of 5708 at 9989, 9988, 9987, 9986, 9985 placed 14:31:24.731-.791; SELL MARKET O-00027061 filled 317+332 at 9991 at 14:31:26.035; all five BUYs cancelled 14:31:26.250-.890"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 11.73; distance_from_touch_ticks 3.0; distinct_price_levels 5; cancel_ratio 1.0; OTR 6.0; same_side_fill_qty 0"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "opposite_side_fill_qty 649, ms_before_first_cancel 215.0; price_move_ticks 0.5, post_cancel_move_ticks -0.5, reversion_ticks 0.5; repetitions_in_session 0; round_trip_ticks null"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "cancel_symmetry 0.0; parent_order_ids empty; order types all LIMIT; market_wide_cancels_1s_before_first_cancel 1"
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "registered_mm_instruments empty; typical_order_size 500; typical_daily_otr 4.0; risk_limit_events_in_window empty"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "no events in window"
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_alert_history",
+     "fact": "no prior alerts in 90 days"
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2433.5, avg_spread 2.34 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "repetition of the cycle within the session",
+    "high order-to-trade ratio (OTR 6.0 vs typical 4.0, not markedly elevated)"
+   ],
+   "scenario": "LAYERING",
+   "indicators_matched": [
+    "orders with no intention to execute",
+    "opposite-side execution before the cancel",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "several price levels on one side (layering)",
+    "price moved in the trader's favour before the execution and reverted after the cancel"
+   ],
+   "alert_id": "A-261028-0008",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E5",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5",
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E4",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "Desk feedback from l1.analyst on A-261016-0003 (a cancel within 200 ms of unscheduled news is a news reaction): not applicable here, because no market event is recorded in the window (E6). The first cancel came 215 ms after the sale, not after any news."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 14:30:26.035-14:31:31.035 (65 s) with 5 s padding on the order events. No longer frame was examined beyond the 90-day alert history, which has no prior alerts.",
+   "what_would_change_my_mind": "Evidence that the BUY ladder was a genuine working order, such as a parent order or client instruction, or that the SELL was a pre-planned hedge unrelated to the ladder. A repeat of the cycle in the session or on other days would move this toward DRAFT_STOR."
+  },
+  "scenario": "LAYERING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1028-07"
+ }
+}

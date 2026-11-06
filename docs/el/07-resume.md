@@ -71,7 +71,22 @@ uv run scripts/policy_demo.py                              # βήματα 5-6 τ
 uv run scripts/validate_policies.py                        # τα ευρήματα του engine για κάθε αρχείο στο policies/
 uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # εγγραφές Memory· επίσης ingest-procedures, seed-history, delete
 uv run --group ui streamlit run ui/analyst_app.py          # UI αναλυτή στο http://127.0.0.1:8501 (μόνο loopback)
-python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία εγγράφων (κενή έξοδος = καθαρό)
+python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία docs (κενή έξοδος = καθαρό)
+```
+Φάση 5 (αξιολόγηση), με τη σειρά που περνά ένα run· όλα τα αποτελέσματα στο `evals/runs/<run_id>/` γίνονται commit:
+```
+uv run evals/run_dataset.py --sample 6 --tag pilot                     # έξι alerts μέσω του Runtime ως l1.analyst (~1,2 $)
+uv run evals/run_dataset.py --tag sonnet-vN --notes "..."              # όλα τα 167 alerts, ~57 λεπτά, ~34 $ σε tokens Sonnet
+uv run evals/run_dataset.py --scenario F-ICE-1 S-SPOOF-5 --tag slice   # μια φέτα· --no-memory κρύβει το recall_memory· --bundle <name> στέλνει config bundle
+uv run evals/run_dataset.py --resume evals/runs/<run_id> --retry-errors # ολοκλήρωση κομμένου run, επανεκτέλεση alerts με σφάλμα
+uv run evals/run_dataset.py --rescore evals/runs/<run_id>              # επανυπολογισμός του results.md από τις αποθηκευμένες απαντήσεις (δωρεάν)
+uv run evals/faithfulness.py evals/runs/<run_id>                       # αριθμοί στα τεκμήρια έναντι spans αποτελεσμάτων tools (δωρεάν)
+uv run evals/evaluate_sessions.py evals/runs/<run_id>                  # Correctness, GoalSuccessRate, Trajectory, rubric (~25 $ για 167)
+uv run evals/ingest_overrides.py --dry-run                             # overrides αναλυτών στον surv-cases -> labels/overrides.parquet
+uv run evals/evaluators.py list|create|update rationale_rubric         # ο custom κριτής (evals/evaluators/*.json)
+uv run evals/recommend.py start evals/runs/<run_id>; ... get <id>      # recommendation του Optimization έναντι του rubric· διάβασε το .diff
+uv run evals/bundles.py create <name> [--prompt-file f] [--model m]    # configuration bundle· το evals/bundles.json είναι το τοπικό μητρώο
+uv run python -m detector.tune --out evals/runs/tune-seed7.md          # πλέγμα κατωφλίων του detector (τοπικά, ~2,5 λεπτά)
 ```
 
 Χρήσιμα alert ids: `A-261006-0006` (S-SPOOF-1, πραγματικό spoof), `A-261005-0002` (market maker υποβάθρου, ψευδώς θετικό), `A-261006-0015` (S-SPOOF-5, το δύσκολο spoof που χάνει το threshold baseline), `A-261015-0008` (F-NEWS-1, ακύρωση σε καταιγίδα ειδήσεων). Labels: `data/synthetic/seed7/labels/labels.parquet` (δεν φορτώνονται ποτέ κάπου που φτάνει ο agent).

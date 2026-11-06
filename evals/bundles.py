@@ -11,13 +11,14 @@ request from the W3C `baggage` header (`investigator.bundle_config`); the harnes
     uv run evals/bundles.py show <bundleId> <versionId>
     uv run evals/bundles.py delete <bundleId> --yes
 
-Bundle names are prefixed `surv-`. Every bundle is tagged like the rest of the project.
+Bundle names are prefixed `surv_` (the API allows letters, digits and underscores only). Every bundle is tagged like the rest of the project.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -51,14 +52,13 @@ def create(name: str, prompt_file: Path | None, model: str, effort: str, descrip
 
         text = system_prompt("investigate")
         prompt_source = "app/surv_investigator_l1/prompt.py system_prompt('investigate') at creation time"
-    full = f"surv-{name}"
+    full = "surv_" + re.sub(r"[^a-zA-Z0-9_]", "_", name)  # API pattern [a-zA-Z][a-zA-Z0-9_]{0,99}
     r = cp().create_configuration_bundle(
         clientToken=str(uuid.uuid4()),
         bundleName=full,
         description=description or f"{full}: model {model}, effort {effort}, prompt from {prompt_source}",
         components={RUNTIME_ARN: {"configuration": {"system_prompt": text, "model_id": model, "effort": effort}}},
         commitMessage=f"created by evals/bundles.py on {datetime.now(UTC).isoformat(timespec='seconds')}",
-        createdBy="evals/bundles.py",
         tags=TAGS,
     )
     rec = {

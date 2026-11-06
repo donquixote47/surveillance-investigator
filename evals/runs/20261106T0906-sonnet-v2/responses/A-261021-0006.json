@@ -1,0 +1,434 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261021-0006-a04f0445",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-06T09:36:12+00:00",
+  "wall_s": 34.0
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261021-0006",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "DRAFT_STOR",
+   "confidence": 0.72,
+   "report": {
+    "alert_id": "A-261021-0006",
+    "scenario": "SPOOFING",
+    "summary": "PROP trader (no MM registration, typical size 500) placed one SELL LIMIT of 23688 (9.5x avg top-5 depth) at 10007, 3 ticks from the touch. 1.4s later a BUY MARKET of 1235 filled at 10002-10005. The SELL was cancelled 474 ms after the fill with zero executions. The touch moved +1 tick for the trader and reverted 1.5 ticks after the cancel. The cycle repeated 5 times in the session. No legitimate explanation is supported. Level 2 should draft the STOR.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "NEW SELL LIMIT O-00022613 qty 23688 at 10007 at 13:34:48.972 with bid 10000 / ask 10004; CANCEL of the full 23688 at 13:34:50.795"
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "BUY MARKET O-00022620 qty 1235 filled at 13:34:50.321 in three parts: 334@10002, 391@10003, 510@10005"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "same_side_fill_qty 0; opposite_side_fill_qty 1235; ms_before_first_cancel 474.2; max_resting_size_vs_depth 9.50; distance_from_touch_ticks 3.0"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks 1.0; post_cancel_move_ticks -1.5; reversion_ticks 1.5; cancel_ratio 1.0; otr 1.0; repetitions_in_session 5; cancel_symmetry 0.0; round_trip_ticks null"
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "role PROP, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, risk_limit_events_in_window empty"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "no market events in the window"
+     },
+     {
+      "id": "E7",
+      "source": "compute_discriminators",
+      "fact": "market_wide_cancels_1s_before_first_cancel 1; no parent_order_ids; order type LIMIT only"
+     },
+     {
+      "id": "E8",
+      "source": "get_trader_alert_history",
+      "fact": "no prior alerts in 90 days"
+     },
+     {
+      "id": "E9",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2492, avg spread 2.56 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute",
+     "opposite-side execution before the cancel",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "high order-to-trade ratio",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session"
+    ],
+    "indicators_not_matched": [
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E5",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E7",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E7"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E3",
+       "E7"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "modification after partial fill",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "DRAFT_STOR",
+    "confidence": 0.72,
+    "what_would_change_my_mind": "Evidence that the 23688 SELL was a client or parent order with a genuine intent to execute, or that the 1-tick move and reversion were unrelated to it. The round trip is null, so profit is unconfirmed.",
+    "memory_used": [
+     "Desk note from l1.analyst on A-261016-0003 (news reaction within 200 ms of unscheduled news): not applicable here, since there are no market events in the window (E6) and the trader is different."
+    ],
+    "window_used": "Detector window 13:33:50.321-13:34:58.972 on 2026-10-21 with 5s padding on the order events. No longer frame was examined beyond the 5 repetitions counted in the session.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261021-0006",
+   "disposition": "DRAFT_STOR",
+   "case_id": "C-A-261021-0006",
+   "proposed_at": "2026-11-06T09:36:40+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261021-0006"
+    },
+    "ms": 234,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 218,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261021-0006",
+     "trader_id": "T-X1021-04",
+     "instrument": "SYN.A",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1122,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261021-0006",
+     "pad_seconds": 5
+    },
+    "ms": 192,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261021-0006"
+    },
+    "ms": 301,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1021-04",
+     "alert_id": "A-261021-0006"
+    },
+    "ms": 229,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1792589630321658830,
+     "window_end": 1792589698972252672
+    },
+    "ms": 239,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-21",
+     "instrument": "SYN.A"
+    },
+    "ms": 179,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1021-04",
+     "before_date": "2026-10-21"
+    },
+    "ms": 204,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261021-0006",
+     "confidence": 0.72,
+     "disposition": "DRAFT_STOR",
+     "report": "<report>"
+    },
+    "ms": 232,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** DRAFT_STOR, at 0.72 confidence. Level 2 drafts the STOR and decides whether to file it.\n\n**What drove it:**\n1. **Large resting order that never executed.** The trader put a SELL LIMIT of 23,688 at 10007 on SYN.A, 3 ticks from the touch. That is 9.5 times average top-5 depth. It was cancelled in full with 0 same-side fills. The trader is a prop trader with no market-making registration and a typical order size of 500.\n2. **Opposite-side execution just before the cancel.** A BUY MARKET of 1,235 filled at 10002\u201310005 about 1.4 seconds after the sell was placed. The sell was cancelled 474 ms later.\n3. **Favourable move that reverted, and repetition.** The price moved 1 tick in the trader's favour, then reverted 1.5 ticks after the cancel. The same cycle occurred 5 times in the session.\n\n**Legitimate explanations:** I ruled out all eight. There were no market events in the window, no risk events and no parent orders.\n\n**What would change my mind:** Evidence that the 23,688 SELL was a client or parent order with a genuine intent to execute. The round trip is null, so profit is unconfirmed.",
+  "usage": {
+   "input_tokens": 41385,
+   "output_tokens": 3153,
+   "total_tokens": 44538,
+   "model_calls": 4
+  },
+  "duration_s": 28.4,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261021-0006-a04f0445",
+  "error": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261021-0006",
+  "case_id": "C-A-261021-0006",
+  "confidence": "0.72",
+  "date": "2026-10-21",
+  "proposal_count": "2",
+  "proposed_at": "2026-11-06T09:36:40+00:00",
+  "proposed_disposition": "DRAFT_STOR",
+  "report": {
+   "summary": "PROP trader (no MM registration, typical size 500) placed one SELL LIMIT of 23688 (9.5x avg top-5 depth) at 10007, 3 ticks from the touch. 1.4s later a BUY MARKET of 1235 filled at 10002-10005. The SELL was cancelled 474 ms after the fill with zero executions. The touch moved +1 tick for the trader and reverted 1.5 ticks after the cancel. The cycle repeated 5 times in the session. No legitimate explanation is supported. Level 2 should draft the STOR.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "NEW SELL LIMIT O-00022613 qty 23688 at 10007 at 13:34:48.972 with bid 10000 / ask 10004; CANCEL of the full 23688 at 13:34:50.795"
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "BUY MARKET O-00022620 qty 1235 filled at 13:34:50.321 in three parts: 334@10002, 391@10003, 510@10005"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "same_side_fill_qty 0; opposite_side_fill_qty 1235; ms_before_first_cancel 474.2; max_resting_size_vs_depth 9.50; distance_from_touch_ticks 3.0"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks 1.0; post_cancel_move_ticks -1.5; reversion_ticks 1.5; cancel_ratio 1.0; otr 1.0; repetitions_in_session 5; cancel_symmetry 0.0; round_trip_ticks null"
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "role PROP, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, risk_limit_events_in_window empty"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "no market events in the window"
+    },
+    {
+     "id": "E7",
+     "source": "compute_discriminators",
+     "fact": "market_wide_cancels_1s_before_first_cancel 1; no parent_order_ids; order type LIMIT only"
+    },
+    {
+     "id": "E8",
+     "source": "get_trader_alert_history",
+     "fact": "no prior alerts in 90 days"
+    },
+    {
+     "id": "E9",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2492, avg spread 2.56 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "orders with no intention to execute",
+    "opposite-side execution before the cancel",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "high order-to-trade ratio",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session"
+   ],
+   "alert_id": "A-261021-0006",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E5",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E7",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E7"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E3",
+      "E7"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "modification after partial fill",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "Desk note from l1.analyst on A-261016-0003 (news reaction within 200 ms of unscheduled news): not applicable here, since there are no market events in the window (E6) and the trader is different."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 13:33:50.321-13:34:58.972 on 2026-10-21 with 5s padding on the order events. No longer frame was examined beyond the 5 repetitions counted in the session.",
+   "what_would_change_my_mind": "Evidence that the 23688 SELL was a client or parent order with a genuine intent to execute, or that the 1-tick move and reversion were unrelated to it. The round trip is null, so profit is unconfirmed."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1021-04"
+ }
+}

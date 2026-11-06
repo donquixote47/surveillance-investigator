@@ -73,6 +73,21 @@ uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # Memory records; al
 uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
 python3 .kiro/hooks/scripts/docs-sync-check.py             # docs parity (empty output = clean)
 ```
+Phase 5 (evaluation), in the order a run goes through; all run outputs under `evals/runs/<run_id>/` are committed:
+```
+uv run evals/run_dataset.py --sample 6 --tag pilot                     # six alerts through the Runtime as l1.analyst (~$1.2)
+uv run evals/run_dataset.py --tag sonnet-vN --notes "..."              # all 167 alerts, ~57 min, ~$34 in Sonnet tokens
+uv run evals/run_dataset.py --scenario F-ICE-1 S-SPOOF-5 --tag slice   # a slice; --no-memory hides recall_memory; --bundle <name> sends a config bundle
+uv run evals/run_dataset.py --resume evals/runs/<run_id> --retry-errors # finish a cut run, re-run errored alerts
+uv run evals/run_dataset.py --rescore evals/runs/<run_id>              # recompute results.md from the saved responses (free)
+uv run evals/faithfulness.py evals/runs/<run_id>                       # numbers in evidence vs tool-result spans (free)
+uv run evals/evaluate_sessions.py evals/runs/<run_id>                  # Correctness, GoalSuccessRate, Trajectory, rubric (~$25 for 167)
+uv run evals/ingest_overrides.py --dry-run                             # analyst overrides in surv-cases -> labels/overrides.parquet
+uv run evals/evaluators.py list|create|update rationale_rubric         # the custom judge (evals/evaluators/*.json)
+uv run evals/recommend.py start evals/runs/<run_id>; ... get <id>      # Optimization recommendation against the rubric; read the .diff
+uv run evals/bundles.py create <name> [--prompt-file f] [--model m]    # configuration bundle; evals/bundles.json is the local registry
+uv run python -m detector.tune --out evals/runs/tune-seed7.md          # detector threshold grid (local, ~2.5 min)
+```
 
 Useful alert ids: `A-261006-0006` (S-SPOOF-1, true spoof), `A-261005-0002` (background market maker, false positive), `A-261006-0015` (S-SPOOF-5, the hard spoof the threshold baseline misses), `A-261015-0008` (F-NEWS-1, news-storm cancel). Labels: `data/synthetic/seed7/labels/labels.parquet` (never loaded anywhere the agent can reach).
 

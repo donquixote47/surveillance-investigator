@@ -86,14 +86,20 @@ export class AgentCoreStack extends Stack {
     // the bundle referenced in the request's `baggage` header through the control plane
     // (bedrock_agentcore.config_bundle.client -> GetConfigurationBundleVersion). The CLI's generated role does not
     // include it; without it get_config_bundle() raises and the agent falls back to its code defaults.
-    const runtime = this.application.runtime('surv_investigator_l1');
-    runtime.addToRolePolicy(
+    // The Gateway needs the same grant: the agent's MCP client propagates the W3C baggage into every request's
+    // `_meta`, and the Gateway's built-in rule `system_config-bundle_header` then fetches the bundle itself (to
+    // apply tool-description overrides). Without the grant every tools/list under a bundle fails with 400
+    // "Config bundle fetch failed: ... not authorized to perform GetConfigurationBundleVersion" (Gateway log,
+    // 2026-11-06) and the agent cannot start.
+    const bundleRead = (sid: string) =>
       new iam.PolicyStatement({
-        sid: 'ReadConfigurationBundles',
+        sid,
         actions: ['bedrock-agentcore:GetConfigurationBundle', 'bedrock-agentcore:GetConfigurationBundleVersion'],
-        resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:configuration-bundle/surv-*`],
-      }),
-    );
+        resources: [`arn:aws:bedrock-agentcore:${this.region}:${this.account}:configuration-bundle/surv_*`],
+      });
+    const runtime = this.application.runtime('surv_investigator_l1');
+    runtime.addToRolePolicy(bundleRead('ReadConfigurationBundles'));
+    gateway.addToRolePolicy(bundleRead('GatewayReadsConfigurationBundles'));
     new bedrockagentcore.CfnGatewayRateLimit(this, 'PerAnalystRequests', {
       gatewayIdentifier: gateway.gatewayId,
       rateLimitId: 'per-analyst-requests',

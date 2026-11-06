@@ -331,7 +331,11 @@ def rescore(out_dir: Path, labels: list[dict[str, Any]]) -> tuple[list[dict[str,
 def previous_run(out_dir: Path, explicit: Path | None) -> dict[str, Any] | None:
     if explicit:
         return json.loads((explicit / "results.json").read_text())
-    cands = sorted(p for p in RUNS_DIR.glob("*/results.json") if p.parent != out_dir and "pilot" not in p.parent.name)
+    cands = sorted(
+        p
+        for p in RUNS_DIR.glob("*/results.json")
+        if p.parent.resolve() != out_dir.resolve() and "pilot" not in p.parent.name
+    )
     return json.loads(cands[-1].read_text()) if cands else None
 
 
@@ -400,6 +404,7 @@ def main() -> int:
 
     labels_all = load_labels(args.dataset)
     if args.rescore:
+        args.rescore = args.rescore.resolve()
         rows, run = rescore(args.rescore, labels_all)
         run = finish(args.rescore, run, rows, labels_all, args.dataset, args.compare)
         print((args.rescore / "results.md").read_text())
@@ -417,7 +422,7 @@ def main() -> int:
         return 0
 
     if args.resume:
-        out_dir = args.resume
+        out_dir = args.resume.resolve()
         run = json.loads((out_dir / "run.json").read_text())
         run_id = run["run_id"]
         done = set()

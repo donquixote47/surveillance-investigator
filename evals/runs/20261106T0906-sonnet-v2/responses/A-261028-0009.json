@@ -1,0 +1,420 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261028-0009-4172671e",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-06T09:51:41+00:00",
+  "wall_s": 38.5
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261028-0009",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.7,
+   "report": {
+    "alert_id": "A-261028-0009",
+    "scenario": "LAYERING",
+    "summary": "Prop trader T-X1028-08 placed five BUY limit orders of 4654 each (23270 total, 4 price levels, 9993 to 9990) within about 60 ms. About 2.5 s later the trader sold 1163 at market, filling at 9995 down to 9993. The first BUY cancel came 133 ms after the sale, and all five were cancelled within about 0.9 s with zero fills. The orders were large against depth and about 9x the trader's typical size. The trader is not a registered market maker, has no parent orders, and had no risk event or public news. The sale was at a price that moved 0.5 tick in the trader's favour and reverted 0.5 tick after the cancel. There is no repetition in the session, no prior alerts, and no round-trip P&L, so a STOR draft is not supported. No legitimate explanation is supported, so I propose ESCALATE to Level 2.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "Five BUY LIMIT orders of 4654 each at 9993, 9992, 9992, 9991 and 9990 were placed 15:12:28.999 to 15:12:29.059. A SELL MARKET of 1163 filled at 15:12:31.552. All five BUYs were cancelled from 15:12:31.686 to 15:12:32.410 with no fills."
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 9.56, distance_from_touch_ticks 3.0, distinct_price_levels 4, cancel_ratio 1.0, same_side_fill_qty 0, opposite_side_fill_qty 1163, first fill 133.26 ms before first cancel."
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks 0.5, reversion_ticks 0.5, post_cancel_move_ticks -0.5, round_trip_ticks null, repetitions_in_session 0, otr 2.75, cancel_symmetry 0.0, parent_order_ids empty, order type LIMIT only."
+     },
+     {
+      "id": "E4",
+      "source": "get_trader_profile",
+      "fact": "PROP role, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, risk_limit_events_in_window empty."
+     },
+     {
+      "id": "E5",
+      "source": "get_market_events",
+      "fact": "No market events in the window."
+     },
+     {
+      "id": "E6",
+      "source": "compute_discriminators",
+      "fact": "market_wide_cancels_1s_before_first_cancel is 2, which is a handful at most."
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts for the trader in 90 days."
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2433.5 and avg_spread_ticks 2.34 on SYN.A on 2026-10-28."
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute",
+     "opposite-side execution before the cancel",
+     "size large relative to visible depth",
+     "several price levels on one side (layering)",
+     "price moved in the trader's favour before the execution and reverted after the cancel"
+    ],
+    "indicators_not_matched": [
+     "repetition of the cycle within the session",
+     "high order-to-trade ratio (OTR 2.75 is below the typical 4.0)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E4",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E2",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E5",
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "undetermined"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.7,
+    "what_would_change_my_mind": "Evidence that the BUY orders were a genuine working order, such as a parent order or an earlier same-side fill. A longer-frame view showing the sale was a hedge placed before the layered orders would also change it. Evidence that the 0.5 tick move was not caused by the resting orders would weaken the benefit feature. Repetition across sessions would move this towards DRAFT_STOR.",
+    "memory_used": [
+     "Desk note from A-261016-0003 (T-X1016-03, SYN.A): news-reaction cancel after a hedge sale placed before the news is CLOSE_FP. It does not apply here: there is no news event in the window (E5) and no prior hedge."
+    ],
+    "window_used": "Detector window 15:11:31.552 to 15:12:36.552 on 2026-10-28, plus 5 s padding on the order events. I did not look beyond that.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261028-0009",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261028-0009",
+   "proposed_at": "2026-11-06T09:52:16+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261028-0009"
+    },
+    "ms": 240,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 177,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261028-0009",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1028-08",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1129,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261028-0009",
+     "pad_seconds": 5
+    },
+    "ms": 186,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261028-0009"
+    },
+    "ms": 311,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1028-08",
+     "alert_id": "A-261028-0009"
+    },
+    "ms": 193,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1793200291552770571,
+     "window_end": 1793200356552770571
+    },
+    "ms": 196,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-28",
+     "instrument": "SYN.A"
+    },
+    "ms": 161,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1028-08",
+     "before_date": "2026-10-28"
+    },
+    "ms": 181,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261028-0009",
+     "confidence": 0.7,
+     "disposition": "ESCALATE",
+     "report": "<report>"
+    },
+    "ms": 240,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** ESCALATE, with confidence 0.7. The proposal is on file as case C-A-261028-0009, awaiting a human decision.\n\n**What drove it:**\n1. **Layered orders that never executed.** The trader placed five BUY limit orders of 4,654 each (23,270 in total) across 4 price levels, 9993 to 9990. The largest was about 9.6x average depth and about 9x the trader's typical size of 500. All five were cancelled with no fills.\n2. **Opposite-side sale just before the cancels.** A SELL market order for 1,163 filled at 15:12:31.552, about 2.5 s after the layering. The first cancel came 133 ms later.\n3. **Price move and reversion, with no explanation.** The price moved 0.5 tick in the trader's favour and reverted 0.5 tick after the cancel. The trader is not a registered market maker. There was no risk event, no public news and no parent order.\n\n**What would change my mind:** evidence that the BUY orders were a genuine working order, such as a parent order or an earlier same-side fill, or that the sale was a hedge placed before the layering. I did not propose a STOR draft because the cycle did not repeat in the session and the trader has no prior alerts.",
+  "usage": {
+   "input_tokens": 53769,
+   "output_tokens": 3259,
+   "total_tokens": 57028,
+   "model_calls": 5
+  },
+  "duration_s": 31.4,
+  "session_id": "surv-eval-20261106T0906-sonnet-v2-A-261028-0009-4172671e",
+  "error": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261028-0009",
+  "case_id": "C-A-261028-0009",
+  "confidence": "0.7",
+  "date": "2026-10-28",
+  "proposal_count": "2",
+  "proposed_at": "2026-11-06T09:52:16+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "Prop trader T-X1028-08 placed five BUY limit orders of 4654 each (23270 total, 4 price levels, 9993 to 9990) within about 60 ms. About 2.5 s later the trader sold 1163 at market, filling at 9995 down to 9993. The first BUY cancel came 133 ms after the sale, and all five were cancelled within about 0.9 s with zero fills. The orders were large against depth and about 9x the trader's typical size. The trader is not a registered market maker, has no parent orders, and had no risk event or public news. The sale was at a price that moved 0.5 tick in the trader's favour and reverted 0.5 tick after the cancel. There is no repetition in the session, no prior alerts, and no round-trip P&L, so a STOR draft is not supported. No legitimate explanation is supported, so I propose ESCALATE to Level 2.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "Five BUY LIMIT orders of 4654 each at 9993, 9992, 9992, 9991 and 9990 were placed 15:12:28.999 to 15:12:29.059. A SELL MARKET of 1163 filled at 15:12:31.552. All five BUYs were cancelled from 15:12:31.686 to 15:12:32.410 with no fills."
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 9.56, distance_from_touch_ticks 3.0, distinct_price_levels 4, cancel_ratio 1.0, same_side_fill_qty 0, opposite_side_fill_qty 1163, first fill 133.26 ms before first cancel."
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks 0.5, reversion_ticks 0.5, post_cancel_move_ticks -0.5, round_trip_ticks null, repetitions_in_session 0, otr 2.75, cancel_symmetry 0.0, parent_order_ids empty, order type LIMIT only."
+    },
+    {
+     "id": "E4",
+     "source": "get_trader_profile",
+     "fact": "PROP role, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, risk_limit_events_in_window empty."
+    },
+    {
+     "id": "E5",
+     "source": "get_market_events",
+     "fact": "No market events in the window."
+    },
+    {
+     "id": "E6",
+     "source": "compute_discriminators",
+     "fact": "market_wide_cancels_1s_before_first_cancel is 2, which is a handful at most."
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts for the trader in 90 days."
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2433.5 and avg_spread_ticks 2.34 on SYN.A on 2026-10-28."
+    }
+   ],
+   "indicators_not_matched": [
+    "repetition of the cycle within the session",
+    "high order-to-trade ratio (OTR 2.75 is below the typical 4.0)"
+   ],
+   "scenario": "LAYERING",
+   "indicators_matched": [
+    "orders with no intention to execute",
+    "opposite-side execution before the cancel",
+    "size large relative to visible depth",
+    "several price levels on one side (layering)",
+    "price moved in the trader's favour before the execution and reverted after the cancel"
+   ],
+   "alert_id": "A-261028-0009",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E4",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E2",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E5",
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "undetermined"
+    }
+   ],
+   "memory_used": [
+    "Desk note from A-261016-0003 (T-X1016-03, SYN.A): news-reaction cancel after a hedge sale placed before the news is CLOSE_FP. It does not apply here: there is no news event in the window (E5) and no prior hedge."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 15:11:31.552 to 15:12:36.552 on 2026-10-28, plus 5 s padding on the order events. I did not look beyond that.",
+   "what_would_change_my_mind": "Evidence that the BUY orders were a genuine working order, such as a parent order or an earlier same-side fill. A longer-frame view showing the sale was a hedge placed before the layered orders would also change it. Evidence that the 0.5 tick move was not caused by the resting orders would weaken the benefit feature. Repetition across sessions would move this towards DRAFT_STOR."
+  },
+  "scenario": "LAYERING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1028-08"
+ }
+}
