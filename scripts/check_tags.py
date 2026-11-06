@@ -7,7 +7,8 @@
 Two sources, because AgentCore resources are not all visible through the Resource Groups Tagging API:
   1. Resource Groups Tagging API: everything tagged Project=<project> in eu-west-2 (the CDK stack's resources).
   2. AgentCore control plane: list-* for runtimes, gateways, memories, policy engines, code interpreters,
-     evaluators, workload identities and OAuth2 credential providers, then list-tags-for-resource for each.
+     evaluators, workload identities, OAuth2 credential providers, configuration bundles and recommendations, then
+    list-tags-for-resource for each.
      Untagged AgentCore resources are reported too, since one of them without a Project tag is still ours
      if its name starts with `surv`.
 """
@@ -59,6 +60,11 @@ def agentcore_resources(region: str) -> list[tuple[str, str, str]]:
         out.append(("workload-identity", w["name"], w["workloadIdentityArn"]))
     for cp in _paginate(c.list_oauth2_credential_providers, "credentialProviders"):
         out.append(("oauth2-provider", cp["name"], cp["credentialProviderArn"]))
+    for b in _paginate(c.list_configuration_bundles, "bundles"):
+        out.append(("config-bundle", b["bundleName"], b["bundleArn"]))
+    dp = boto3.client("bedrock-agentcore", region_name=region)  # recommendations live on the data plane
+    for r in _paginate(dp.list_recommendations, "recommendationSummaries"):
+        out.append(("recommendation", r["name"], r["recommendationArn"]))
     return out
 
 
