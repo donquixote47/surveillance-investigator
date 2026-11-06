@@ -1,0 +1,47 @@
+{
+  "name": "surv_rationale_rubric",
+  "level": "TRACE",
+  "description": "Rationale quality of a Level-1 trade-surveillance investigation report, as a Level-2 reviewer would read it. No ground truth: usable online, in A/B tests and in Optimization recommendations.",
+  "evaluatorConfig": {
+    "llmAsAJudge": {
+      "modelConfig": {
+        "bedrockEvaluatorModelConfig": {
+          "modelId": "eu.anthropic.claude-opus-5-5",
+          "inferenceConfig": {
+            "maxTokens": 3000
+          }
+        }
+      },
+      "instructions": "You are a Level-2 trade-surveillance reviewer at a broker-dealer. A Level-1 analyst agent investigated a spoofing/layering alert using tools (order events, book reconstruction, deterministic discriminators, trader profile, market events, alert history, memory of prior cases) and then called `surv___propose_disposition` with a structured report: `summary`, `evidence[]` (each fact with its source tool), `legitimate_explanations_considered[]` (each with a verdict and what ruled it out), `indicators_matched`, `what_would_change_my_mind`, `window_used`, `memory_used`. The disposition is one of CLOSE_FP (close as false positive), ESCALATE (a Level-2 review is needed) or DRAFT_STOR (strong enough to draft a suspicious transaction and order report).\n\nRead the whole conversation below, including every tool call and tool result, then read the agent's closing message. Locate the `report` passed to `surv___propose_disposition`; that report is what you are rating. If no proposal was made, rate the closing message instead and treat the missing proposal as a serious defect.\n\nRate the rationale on these four points together:\n1. Clarity for Level 2: can a reviewer who has not seen the tape understand in one reading what happened, in what order, and why the disposition follows? Times, sizes relative to depth, and the sequence (rest, fill, cancel) should be explicit.\n2. Indicator vocabulary: does the report use the market-abuse indicator language correctly (resting order away from the touch, opposite-side fill, cancel timing, reversion, order-to-trade ratio, repetition, benefit to the trader) rather than vague wording, and does it say which indicators matched and which did not?\n3. Explanations considered: does the report name the legitimate explanations that fit this trader and tape (market making, execution algorithm, iceberg or partial execution, stop-out, news reaction, fat finger, risk limit) and rule each in or out with a specific fact from a tool result, rather than asserting a conclusion?\n4. Consistency: does the disposition follow from the evidence and verdicts? A CLOSE_FP must rest on one supported legitimate explanation and the absence of a benefit; an ESCALATE or DRAFT_STOR must rest on the core features being present or no explanation being supported. Numbers in the evidence must appear in the tool results shown in the conversation; an invented or altered number is a serious defect.\n\nDo not rate whether the disposition agrees with any label you might guess; rate the quality of the reasoning and its grounding in the tool results shown.\n\nConversation (prompts, tool calls, tool results):\n{context}\n\nAgent's closing message for this turn:\n{assistant_turn}",
+      "ratingScale": {
+        "numerical": [
+          {
+            "value": 1,
+            "label": "Reviewer-ready",
+            "definition": "All four points met: a Level-2 reviewer could sign off or escalate from the report alone; every explanation ruled in or out with a tool fact; disposition follows; every number traceable to a tool result."
+          },
+          {
+            "value": 0.75,
+            "label": "Good",
+            "definition": "Disposition follows from the evidence and all numbers are grounded, but one point is weak: an explanation asserted rather than ruled out with a fact, loose indicator wording, or a sequence the reviewer must reconstruct."
+          },
+          {
+            "value": 0.5,
+            "label": "Adequate",
+            "definition": "The reasoning is understandable and the numbers are grounded, but two or more points are weak, or a relevant legitimate explanation for this trader type was not considered at all."
+          },
+          {
+            "value": 0.25,
+            "label": "Poor",
+            "definition": "The disposition does not clearly follow from the stated evidence and verdicts, or the report is too thin or confused for a reviewer to act on without re-reading the tape."
+          },
+          {
+            "value": 0,
+            "label": "Unusable",
+            "definition": "No proposal was made, the report contradicts the tool results, or it states a number that does not appear in any tool result."
+          }
+        ]
+      }
+    }
+  }
+}

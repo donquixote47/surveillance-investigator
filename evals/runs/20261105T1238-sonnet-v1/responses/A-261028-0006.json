@@ -1,0 +1,418 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261105T1238-sonnet-v1-A-261028-0006-592c0219",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-05T13:25:21+00:00",
+  "wall_s": 47.5
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261028-0006",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.75,
+   "report": {
+    "alert_id": "A-261028-0006",
+    "scenario": "SPOOFING",
+    "summary": "ALGO-EXEC trader running two PEGGED parent orders (buy P-T-X1028-05-B, sell P-T-X1028-05-S) that re-peg in lock-step with the touch. All 70 orders are PEGGED children of those two parents, size 2196 equals the trader's typical order size, orders sit at the touch (0 ticks), and cancels are almost perfectly symmetric (0.997). The price did not move in the trader's favour (-0.5 ticks) and there was no reversion. The opposite-side executions were partial fills on the algo's own resting pegged orders, not a trade made after a price push. Core features (a) and (b) are not supported. The detector fired on gross submitted size vs depth, which is the churn of re-pegging. Round trip is slightly positive (+0.65 ticks), noted as a residual point for Level 2.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "compute_discriminators",
+      "fact": "order_types PEGGED: 70; parent_order_ids P-T-X1028-05-B and P-T-X1028-05-S"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "cancel_symmetry 0.9967; distance_from_touch_ticks 0.0; max_resting_size_vs_depth 0.90"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks -0.5 (not favourable); reversion_ticks 0.0; post_cancel_move_ticks 1.5; round_trip_ticks 0.645; repetitions_in_session 0"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "same_side_fill_qty 1153; opposite_side_fill_qty 1632 (657 at 12:53:44.243, 975 at 12:54:54.243); otr 34.5; cancel_ratio 0.953"
+     },
+     {
+      "id": "E5",
+      "source": "get_order_events",
+      "fact": "Each cancel is followed within ~10 ms by a replacement NEW on the same side with the same parent at the new touch-pegged price; fills (657, 1098, 975, 55) were PARTIAL_FILLs on the pegged orders themselves"
+     },
+     {
+      "id": "E6",
+      "source": "get_trader_profile",
+      "fact": "role ALGO, desk ALGO-EXEC, typical_order_size 2196, typical_daily_otr 25.0, no risk events in window, registered_mm_instruments empty"
+     },
+     {
+      "id": "E7",
+      "source": "get_market_events",
+      "fact": "no market events in window; discriminators show 1 market-wide cancel in the second before first cancel"
+     },
+     {
+      "id": "E8",
+      "source": "get_trader_alert_history",
+      "fact": "no prior alerts for this trader in 90 days"
+     },
+     {
+      "id": "E9",
+      "source": "get_instrument_stats",
+      "fact": "SYN.A avg_depth_top5 2433.5; avg spread 2.34 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "high order-to-trade ratio (Annex II 4(f))"
+    ],
+    "indicators_not_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "opposite-side execution before the cancel (as a benefit)",
+     "size large relative to visible depth (size is typical for the desk)",
+     "orders away from the touch",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "algorithmic re-pricing (pegged children of a parent, symmetric cancels)",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E7"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [],
+      "verdict": "undetermined"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.75,
+    "what_would_change_my_mind": "Evidence that the parent orders P-T-X1028-05-B/S are not genuine client or execution parents, or that the small positive round trip (+0.65 ticks) resulted from a price push rather than spread capture, for example a favourable move with reversion on a longer frame.",
+    "memory_used": [
+     "Desk ALGO-EXEC notes on T-X1027-04 (e.g. H-T-X1027-04-01): 'pegged execution algo on this name; cancels symmetric; parent order explains children', recorded CLOSE_FP. That is a different trader. I relied on today's tape (E1-E3), not on those closures."
+    ],
+    "window_used": "Detector window 12:52:44.243 to 12:55:01.864 (137.6 s), with 5 s padding on the order events. No longer frame was examined.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261028-0006",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-261028-0006",
+   "proposed_at": "2026-11-05T13:26:04+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261028-0006"
+    },
+    "ms": 216,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 196,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261028-0006",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1028-05",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1100,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261028-0006",
+     "pad_seconds": 5
+    },
+    "ms": 224,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261028-0006"
+    },
+    "ms": 321,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1028-05",
+     "alert_id": "A-261028-0006"
+    },
+    "ms": 217,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1793191964243683840,
+     "window_end": 1793192101864617461
+    },
+    "ms": 211,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-28",
+     "instrument": "SYN.A"
+    },
+    "ms": 245,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1028-05",
+     "before_date": "2026-10-28"
+    },
+    "ms": 159,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261028-0006",
+     "confidence": 0.75,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 188,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** CLOSE_FP, confidence 0.75. This is only a proposal. A human analyst makes the decision.\n\n**What drove it:**\n1. All 70 orders are PEGGED children of two parents, P-T-X1028-05-B and P-T-X1028-05-S. They sit at the touch (0 ticks) at 2196 each, which is the trader's typical order size. Cancels are almost perfectly symmetric across sides (0.997), and each cancel is followed within about 10 ms by a replacement at the new touch.\n2. The price did not move in the trader's favour (-0.5 ticks) and did not revert (0.0). The \"opposite-side\" fills were partial fills on the algo's own resting pegged orders, and the cycle was not repeated (`repetitions_in_session` is 0). The order-to-trade ratio is high (34.5, against a typical 25).\n3. The trader has no risk event in the window, no registered market-making on SYN.A and no prior alerts. Those rule out the other explanations. The prior CLOSE_FP records on desk ALGO-EXEC are for a different trader, so I relied on today's tape rather than on them.\n\n**What would change my mind:** evidence that the two parent orders are not genuine execution parents. The same applies if the small positive round trip (+0.65 ticks) came from a price push rather than spread capture, for example a favourable move with reversion on a longer time frame. I only looked at the detector window.",
+  "usage": {
+   "input_tokens": 89723,
+   "output_tokens": 3568,
+   "total_tokens": 93291,
+   "model_calls": 5
+  },
+  "duration_s": 41.8,
+  "session_id": "surv-eval-20261105T1238-sonnet-v1-A-261028-0006-592c0219",
+  "error": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261028-0006",
+  "case_id": "C-A-261028-0006",
+  "confidence": "0.75",
+  "date": "2026-10-28",
+  "proposal_count": "1",
+  "proposed_at": "2026-11-05T13:26:04+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "ALGO-EXEC trader running two PEGGED parent orders (buy P-T-X1028-05-B, sell P-T-X1028-05-S) that re-peg in lock-step with the touch. All 70 orders are PEGGED children of those two parents, size 2196 equals the trader's typical order size, orders sit at the touch (0 ticks), and cancels are almost perfectly symmetric (0.997). The price did not move in the trader's favour (-0.5 ticks) and there was no reversion. The opposite-side executions were partial fills on the algo's own resting pegged orders, not a trade made after a price push. Core features (a) and (b) are not supported. The detector fired on gross submitted size vs depth, which is the churn of re-pegging. Round trip is slightly positive (+0.65 ticks), noted as a residual point for Level 2.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "compute_discriminators",
+     "fact": "order_types PEGGED: 70; parent_order_ids P-T-X1028-05-B and P-T-X1028-05-S"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "cancel_symmetry 0.9967; distance_from_touch_ticks 0.0; max_resting_size_vs_depth 0.90"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks -0.5 (not favourable); reversion_ticks 0.0; post_cancel_move_ticks 1.5; round_trip_ticks 0.645; repetitions_in_session 0"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "same_side_fill_qty 1153; opposite_side_fill_qty 1632 (657 at 12:53:44.243, 975 at 12:54:54.243); otr 34.5; cancel_ratio 0.953"
+    },
+    {
+     "id": "E5",
+     "source": "get_order_events",
+     "fact": "Each cancel is followed within ~10 ms by a replacement NEW on the same side with the same parent at the new touch-pegged price; fills (657, 1098, 975, 55) were PARTIAL_FILLs on the pegged orders themselves"
+    },
+    {
+     "id": "E6",
+     "source": "get_trader_profile",
+     "fact": "role ALGO, desk ALGO-EXEC, typical_order_size 2196, typical_daily_otr 25.0, no risk events in window, registered_mm_instruments empty"
+    },
+    {
+     "id": "E7",
+     "source": "get_market_events",
+     "fact": "no market events in window; discriminators show 1 market-wide cancel in the second before first cancel"
+    },
+    {
+     "id": "E8",
+     "source": "get_trader_alert_history",
+     "fact": "no prior alerts for this trader in 90 days"
+    },
+    {
+     "id": "E9",
+     "source": "get_instrument_stats",
+     "fact": "SYN.A avg_depth_top5 2433.5; avg spread 2.34 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "opposite-side execution before the cancel (as a benefit)",
+    "size large relative to visible depth (size is typical for the desk)",
+    "orders away from the touch",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "high order-to-trade ratio (Annex II 4(f))"
+   ],
+   "alert_id": "A-261028-0006",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "algorithmic re-pricing (pegged children of a parent, symmetric cancels)",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E7"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [],
+     "verdict": "undetermined"
+    }
+   ],
+   "memory_used": [
+    "Desk ALGO-EXEC notes on T-X1027-04 (e.g. H-T-X1027-04-01): 'pegged execution algo on this name; cancels symmetric; parent order explains children', recorded CLOSE_FP. That is a different trader. I relied on today's tape (E1-E3), not on those closures."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 12:52:44.243 to 12:55:01.864 (137.6 s), with 5 s padding on the order events. No longer frame was examined.",
+   "what_would_change_my_mind": "Evidence that the parent orders P-T-X1028-05-B/S are not genuine client or execution parents, or that the small positive round trip (+0.65 ticks) resulted from a price push rather than spread capture, for example a favourable move with reversion on a longer frame."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1028-05"
+ }
+}

@@ -1,0 +1,418 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261105T1238-sonnet-v1-A-261006-0016-520022ab",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-05T12:48:02+00:00",
+  "wall_s": 42.1
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261006-0016",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.72,
+   "report": {
+    "alert_id": "A-261006-0016",
+    "scenario": "SPOOFING",
+    "summary": "Registered market maker T-MM-02 on SYN.A refreshing a two-sided 366-lot quote roughly every 1-3s. The detector fired on gross BUY submitted vs depth and on SELL fills against the BUY quote. The tape shows symmetric re-quotes (cancel_symmetry 0.974), small size (0.149 of depth, no large orders), placement at the touch, 1460 lots executed on the BUY quotes themselves, and the SELL fills landed on the trader's own resting SELL quote. No event, no repetition of a spoof cycle. The positive round trip (2.69 ticks) and favourable 3-tick move are consistent with spread capture and are uninformative given heavy same-side fills. Feature (a) absent, feature (b) not established. Mild residual uncertainty on the positive round trip.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_trader_profile",
+      "fact": "T-MM-02 is MARKET_MAKER on ETF-MM desk with registered_mm_instruments [SYN.A]; typical_order_size 327; no risk events in window"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "cancel_symmetry 0.974; order_types LIMIT only, no parent_order_ids; 1460 executed on dominant-side orders themselves (same_side_fill_qty 1460)"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 0.149; large_order_ids empty; distance_from_touch_ticks -0.44; repetitions_in_session 0"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "opposite_side_fill_qty 746; price_move_ticks 3.0; reversion_ticks 1.5; round_trip_ticks 2.69; market_wide_cancels_1s_before_first_cancel 1"
+     },
+     {
+      "id": "E5",
+      "source": "get_order_events",
+      "fact": "Each cycle cancels and re-posts BUY and SELL 366-lot LIMIT orders together, e.g. 16:26:35.000 cancels of O-00037019/O-00037020 then 16:26:35.009 new O-00037023 BUY 10002 and O-00037024 SELL 10006; SELL partial fills of 50/147/120 hit O-00037024 itself"
+     },
+     {
+      "id": "E6",
+      "source": "get_order_events",
+      "fact": "BUY O-00037023 at 10002 stayed at the bid (best_bid 10002) and was cancelled at 16:26:38.000 as part of a regular re-quote; the same order-pair cadence runs throughout the window"
+     },
+     {
+      "id": "E7",
+      "source": "get_market_events",
+      "fact": "No public market events in or around the window"
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "SYN.A avg_depth_top5 2450.3; avg_spread_ticks 2.60"
+     },
+     {
+      "id": "E9",
+      "source": "get_trader_alert_history",
+      "fact": "Two prior SPOOFING alerts on T-MM-02 (H-T-MM-02-01, H-T-MM-02-02) closed CLOSE_FP, no override; context only"
+     }
+    ],
+    "indicators_matched": [
+     "high order-to-trade ratio (Annex II 4(f))"
+    ],
+    "indicators_not_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "opposite-side execution before the cancel as a benefit from a decoy order",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E7",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.72,
+    "what_would_change_my_mind": "Evidence that the BUY quotes were pulled specifically after the SELL fills with the touch moving against other participants beyond normal re-quoting, a repeated pattern across sessions, or a book reconstruction showing BUY depth well away from fair value that no other quote cadence explains.",
+    "memory_used": [
+     "A-261006 prior: H-T-MM-02-01 (2026-09-23) and H-T-MM-02-02 (2026-09-13) recorded CLOSE_FP by L1-analyst-01: 'registered market maker; two-sided quotes re-priced on fair value moves; no opposite-side benefit'. Same explanation checked against today's tape (E2, E3, E5), not relied on alone; no agent overrides on file."
+    ],
+    "window_used": "Detector window 16:25:35.221 to 16:26:41.097 (alert window), plus 5s padding of order events (events from 16:25:31); no longer frame beyond that, only alert history across sessions.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261006-0016",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-261006-0016",
+   "proposed_at": "2026-11-05T12:48:41+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261006-0016"
+    },
+    "ms": 231,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 187,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261006-0016",
+     "instrument": "SYN.A",
+     "trader_id": "T-MM-02",
+     "query": "prior dispositions and analyst notes on this trader"
+    },
+    "ms": 1117,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261006-0016",
+     "pad_seconds": 5
+    },
+    "ms": 205,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261006-0016"
+    },
+    "ms": 4918,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-MM-02",
+     "alert_id": "A-261006-0016"
+    },
+    "ms": 180,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1791303935221589030,
+     "window_end": 1791304001097298225
+    },
+    "ms": 227,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-06",
+     "instrument": "SYN.A"
+    },
+    "ms": 203,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-MM-02",
+     "before_date": "2026-10-06"
+    },
+    "ms": 219,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261006-0016",
+     "confidence": 0.72,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 202,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** CLOSE_FP, confidence 0.72. The proposal is filed and awaits a human decision.\n\n**Facts that drove it:**\n1. T-MM-02 is a registered market maker on SYN.A. It re-quotes a symmetric two-sided 366-lot quote every 1\u20133 seconds. Cancel symmetry is 0.974, the orders are LIMIT only, and the typical order size is 327.\n2. The resting orders were not decoys. The largest was 0.149 of depth, none were flagged large, and they sat at the touch (distance \u22120.44 ticks). There was no repetition, no market event, and no risk event. 1460 lots executed on the BUY quotes themselves. The SELL fills landed on the trader's own resting SELL quote.\n3. The favourable 3-tick move and the positive 2.69-tick round trip fit spread capture. The price move is uninformative given the heavy same-side fills.\n\n**What would change my mind:** evidence that the BUY quotes were pulled specifically after the SELL fills, beyond normal re-quoting, or a repeat of the pattern across sessions. I didn't reconstruct the book, so I haven't seen that directly.",
+  "usage": {
+   "input_tokens": 80107,
+   "output_tokens": 3760,
+   "total_tokens": 83867,
+   "model_calls": 5
+  },
+  "duration_s": 36.0,
+  "session_id": "surv-eval-20261105T1238-sonnet-v1-A-261006-0016-520022ab",
+  "error": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261006-0016",
+  "case_id": "C-A-261006-0016",
+  "confidence": "0.72",
+  "date": "2026-10-06",
+  "proposal_count": "1",
+  "proposed_at": "2026-11-05T12:48:41+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "Registered market maker T-MM-02 on SYN.A refreshing a two-sided 366-lot quote roughly every 1-3s. The detector fired on gross BUY submitted vs depth and on SELL fills against the BUY quote. The tape shows symmetric re-quotes (cancel_symmetry 0.974), small size (0.149 of depth, no large orders), placement at the touch, 1460 lots executed on the BUY quotes themselves, and the SELL fills landed on the trader's own resting SELL quote. No event, no repetition of a spoof cycle. The positive round trip (2.69 ticks) and favourable 3-tick move are consistent with spread capture and are uninformative given heavy same-side fills. Feature (a) absent, feature (b) not established. Mild residual uncertainty on the positive round trip.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_trader_profile",
+     "fact": "T-MM-02 is MARKET_MAKER on ETF-MM desk with registered_mm_instruments [SYN.A]; typical_order_size 327; no risk events in window"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "cancel_symmetry 0.974; order_types LIMIT only, no parent_order_ids; 1460 executed on dominant-side orders themselves (same_side_fill_qty 1460)"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 0.149; large_order_ids empty; distance_from_touch_ticks -0.44; repetitions_in_session 0"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "opposite_side_fill_qty 746; price_move_ticks 3.0; reversion_ticks 1.5; round_trip_ticks 2.69; market_wide_cancels_1s_before_first_cancel 1"
+    },
+    {
+     "id": "E5",
+     "source": "get_order_events",
+     "fact": "Each cycle cancels and re-posts BUY and SELL 366-lot LIMIT orders together, e.g. 16:26:35.000 cancels of O-00037019/O-00037020 then 16:26:35.009 new O-00037023 BUY 10002 and O-00037024 SELL 10006; SELL partial fills of 50/147/120 hit O-00037024 itself"
+    },
+    {
+     "id": "E6",
+     "source": "get_order_events",
+     "fact": "BUY O-00037023 at 10002 stayed at the bid (best_bid 10002) and was cancelled at 16:26:38.000 as part of a regular re-quote; the same order-pair cadence runs throughout the window"
+    },
+    {
+     "id": "E7",
+     "source": "get_market_events",
+     "fact": "No public market events in or around the window"
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "SYN.A avg_depth_top5 2450.3; avg_spread_ticks 2.60"
+    },
+    {
+     "id": "E9",
+     "source": "get_trader_alert_history",
+     "fact": "Two prior SPOOFING alerts on T-MM-02 (H-T-MM-02-01, H-T-MM-02-02) closed CLOSE_FP, no override; context only"
+    }
+   ],
+   "indicators_not_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "opposite-side execution before the cancel as a benefit from a decoy order",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "high order-to-trade ratio (Annex II 4(f))"
+   ],
+   "alert_id": "A-261006-0016",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E7",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "A-261006 prior: H-T-MM-02-01 (2026-09-23) and H-T-MM-02-02 (2026-09-13) recorded CLOSE_FP by L1-analyst-01: 'registered market maker; two-sided quotes re-priced on fair value moves; no opposite-side benefit'. Same explanation checked against today's tape (E2, E3, E5), not relied on alone; no agent overrides on file."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 16:25:35.221 to 16:26:41.097 (alert window), plus 5s padding of order events (events from 16:25:31); no longer frame beyond that, only alert history across sessions.",
+   "what_would_change_my_mind": "Evidence that the BUY quotes were pulled specifically after the SELL fills with the touch moving against other participants beyond normal re-quoting, a repeated pattern across sessions, or a book reconstruction showing BUY depth well away from fair value that no other quote cadence explains."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-MM-02"
+ }
+}
