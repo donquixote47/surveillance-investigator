@@ -1,0 +1,465 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261020-0003-8c568386",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-07T21:33:51+00:00",
+  "wall_s": 913.5
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261020-0003",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-opus-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.85,
+   "report": {
+    "alert_id": "A-261020-0003",
+    "scenario": "SPOOFING",
+    "summary": "AGENCY trader T-X1020-03 placed one BUY ICEBERG order O-00032756 (24368, parent C-T-X1020-03-A) at 10003, which improved the bid by one tick. It filled 7761 in partial fills before the single SELL execution of 609 (O-00032811, parent C-T-X1020-03-B) at 15:34:53.400. That is 7761 against 609, and 34.5% of the order executed overall. The remaining 15963 was cancelled at 15:34:55.400. Under the closure standard, a hidden order cannot move prices by displayed size, and an order that executed this much before the opposite trade was a working order, so feature (a) is absent. The SELL belongs to a different client parent, so the two orders are not one round trip. The +0.5 tick move and 2-tick round trip do not show feature (b). Proposed CLOSE_FP: a genuine iceberg agency order with an unrelated client sell.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_alert",
+      "fact": "Detector spoof-naive-v1: gross BUY 24368 in 60s >= 3.25 x avg top-5 depth (2665); SELL execution of 609 at 15:34:53.400; 15963 cancelled on BUY within 5s"
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "O-00032756 NEW BUY 24368 ICEBERG at 10003 at 15:34:28.400 (best bid 10002), parent C-T-X1020-03-A; many PARTIAL_FILLs (e.g. 913 lots repeatedly) from 15:34:29.265 to 15:34:55.161; CANCEL of 15963 at 15:34:55.400"
+     },
+     {
+      "id": "E3",
+      "source": "get_order_events",
+      "fact": "O-00032811 NEW SELL 609 LIMIT at 10005 at 15:34:51.400, parent C-T-X1020-03-B, FILL 609 at 15:34:53.400"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "same_side_fill_qty_before_opposite_trade 7761, same_side_fill_qty 8405, same_side_fill_share 0.3449, opposite_side_fill_qty 609"
+     },
+     {
+      "id": "E5",
+      "source": "compute_discriminators",
+      "fact": "order_types ICEBERG 1, LIMIT 1; parent_order_ids C-T-X1020-03-A and C-T-X1020-03-B; distance_from_touch_ticks -1.0; distinct_price_levels 1"
+     },
+     {
+      "id": "E6",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 9.15, price_move_ticks 0.5, reversion_ticks 1.5, round_trip_ticks 2.0, cancel_symmetry 0.0, repetitions_in_session 1, otr 0.15, cancel_ratio 0.64, market_wide_cancels_1s_before_first_cancel 1"
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_profile",
+      "fact": "role AGENCY, desk AGENCY, registered_mm_instruments empty, typical_order_size 800, risk_limit_events_in_window empty"
+     },
+     {
+      "id": "E8",
+      "source": "get_market_events",
+      "fact": "no market events in or around the window"
+     },
+     {
+      "id": "E9",
+      "source": "get_instrument_stats",
+      "fact": "SYN.A avg_depth_top5 2664.5, avg_spread_ticks 2.62, ADV 830801"
+     },
+     {
+      "id": "E10",
+      "source": "get_trader_alert_history",
+      "fact": "0 prior alerts in 90 days before 2026-10-20"
+     }
+    ],
+    "indicators_matched": [
+     "size large relative to visible depth",
+     "opposite-side execution before the cancel"
+    ],
+    "indicators_not_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "orders away from the touch",
+     "high order-to-trade ratio (Annex II 4(f))",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "iceberg or reserve order / genuine execution of the resting order (agency client order)",
+      "ruled_out_by": [
+       "E2",
+       "E4",
+       "E5",
+       "E7"
+      ],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "agency: opposite-side SELL is a different client's order under a different parent id, not a round trip",
+      "ruled_out_by": [
+       "E3",
+       "E5",
+       "E7"
+      ],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E6",
+       "E7"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing (pegged/child orders, symmetric cancels)",
+      "ruled_out_by": [
+       "E5",
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E7"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E8"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E2",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.85,
+    "what_would_change_my_mind": "Evidence that parents C-T-X1020-03-A and C-T-X1020-03-B belong to the same client or the trader's own account, or that the displayed (not hidden) iceberg peak was large relative to depth, or that this cycle repeats on other days.",
+    "memory_used": [],
+    "window_used": "Detector window 15:33:53.400 to 15:34:58.400 (65 s), with order events padded by 5 s. The trader's first event in range is at 15:34:28.400. No longer frame was needed: no prior alerts in 90 days and repetitions_in_session is 1.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261020-0003",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-261020-0003",
+   "proposed_at": "2026-11-07T21:34:36+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261020-0003"
+    },
+    "ms": 1355,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 290,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261020-0003",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1020-03",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1367,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261020-0003",
+     "pad_seconds": 5
+    },
+    "ms": 281,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261020-0003"
+    },
+    "ms": 3180,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1020-03",
+     "alert_id": "A-261020-0003"
+    },
+    "ms": 174,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1792510433400372480,
+     "window_end": 1792510498400372480
+    },
+    "ms": 266,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-20",
+     "instrument": "SYN.A"
+    },
+    "ms": 316,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1020-03",
+     "before_date": "2026-10-20"
+    },
+    "ms": 280,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261020-0003",
+     "confidence": 0.85,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 213,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition: CLOSE_FP (false positive), confidence 0.85.** It's on file as case C-A-261020-0003 and waits for a human analyst's decision.\n\nThree facts drove it:\n1. **The buy order was really trading.** The large BUY order was a hidden-size (\"iceberg\") order for 24,368. It sat at 10003, one tick better than the best bid, and filled 7,761 before the trader's 609 sell executed. That is 34.5% of the order filled overall, so it was a working order, not size shown to move the price.\n2. **The sell was a different client's order.** The trader is on the agency desk, and the 609 SELL came under a different client order (C-T-X1020-03-B, against C-T-X1020-03-A for the buy). By the firm's standard that is not one round trip, so the +0.5-tick move and 2-tick round trip don't count as a benefit.\n3. **No other explanation fits, and nothing repeats.** No market event, no risk-system event, and no registered market making on this instrument. The cycle happened once in the session, and the trader has no prior alerts in 90 days.\n\n**What would change my mind:** evidence that the two client orders belong to the same client or to the trader's own account. That would make it one round trip and call for escalation.",
+  "usage": {
+   "input_tokens": 69065,
+   "output_tokens": 3581,
+   "total_tokens": 72646,
+   "model_calls": 6
+  },
+  "duration_s": 45.2,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261020-0003-8c568386",
+  "error": null,
+  "bundle": "surv_opus-Pm3GdiCh5N:5305b644-4586-41ea-8ad0-0336862c4f5f",
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261020-0003",
+  "case_id": "C-A-261020-0003",
+  "confidence": "0.85",
+  "date": "2026-10-20",
+  "proposal_count": "6",
+  "proposed_at": "2026-11-07T21:34:36+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "AGENCY trader T-X1020-03 placed one BUY ICEBERG order O-00032756 (24368, parent C-T-X1020-03-A) at 10003, which improved the bid by one tick. It filled 7761 in partial fills before the single SELL execution of 609 (O-00032811, parent C-T-X1020-03-B) at 15:34:53.400. That is 7761 against 609, and 34.5% of the order executed overall. The remaining 15963 was cancelled at 15:34:55.400. Under the closure standard, a hidden order cannot move prices by displayed size, and an order that executed this much before the opposite trade was a working order, so feature (a) is absent. The SELL belongs to a different client parent, so the two orders are not one round trip. The +0.5 tick move and 2-tick round trip do not show feature (b). Proposed CLOSE_FP: a genuine iceberg agency order with an unrelated client sell.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_alert",
+     "fact": "Detector spoof-naive-v1: gross BUY 24368 in 60s >= 3.25 x avg top-5 depth (2665); SELL execution of 609 at 15:34:53.400; 15963 cancelled on BUY within 5s"
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "O-00032756 NEW BUY 24368 ICEBERG at 10003 at 15:34:28.400 (best bid 10002), parent C-T-X1020-03-A; many PARTIAL_FILLs (e.g. 913 lots repeatedly) from 15:34:29.265 to 15:34:55.161; CANCEL of 15963 at 15:34:55.400"
+    },
+    {
+     "id": "E3",
+     "source": "get_order_events",
+     "fact": "O-00032811 NEW SELL 609 LIMIT at 10005 at 15:34:51.400, parent C-T-X1020-03-B, FILL 609 at 15:34:53.400"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "same_side_fill_qty_before_opposite_trade 7761, same_side_fill_qty 8405, same_side_fill_share 0.3449, opposite_side_fill_qty 609"
+    },
+    {
+     "id": "E5",
+     "source": "compute_discriminators",
+     "fact": "order_types ICEBERG 1, LIMIT 1; parent_order_ids C-T-X1020-03-A and C-T-X1020-03-B; distance_from_touch_ticks -1.0; distinct_price_levels 1"
+    },
+    {
+     "id": "E6",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 9.15, price_move_ticks 0.5, reversion_ticks 1.5, round_trip_ticks 2.0, cancel_symmetry 0.0, repetitions_in_session 1, otr 0.15, cancel_ratio 0.64, market_wide_cancels_1s_before_first_cancel 1"
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_profile",
+     "fact": "role AGENCY, desk AGENCY, registered_mm_instruments empty, typical_order_size 800, risk_limit_events_in_window empty"
+    },
+    {
+     "id": "E8",
+     "source": "get_market_events",
+     "fact": "no market events in or around the window"
+    },
+    {
+     "id": "E9",
+     "source": "get_instrument_stats",
+     "fact": "SYN.A avg_depth_top5 2664.5, avg_spread_ticks 2.62, ADV 830801"
+    },
+    {
+     "id": "E10",
+     "source": "get_trader_alert_history",
+     "fact": "0 prior alerts in 90 days before 2026-10-20"
+    }
+   ],
+   "indicators_not_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "orders away from the touch",
+    "high order-to-trade ratio (Annex II 4(f))",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "size large relative to visible depth",
+    "opposite-side execution before the cancel"
+   ],
+   "alert_id": "A-261020-0003",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "iceberg or reserve order / genuine execution of the resting order (agency client order)",
+     "ruled_out_by": [
+      "E2",
+      "E4",
+      "E5",
+      "E7"
+     ],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "agency: opposite-side SELL is a different client's order under a different parent id, not a round trip",
+     "ruled_out_by": [
+      "E3",
+      "E5",
+      "E7"
+     ],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E6",
+      "E7"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing (pegged/child orders, symmetric cancels)",
+     "ruled_out_by": [
+      "E5",
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E7"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E8"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E2",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 15:33:53.400 to 15:34:58.400 (65 s), with order events padded by 5 s. The trader's first event in range is at 15:34:28.400. No longer frame was needed: no prior alerts in 90 days and repetitions_in_session is 1.",
+   "what_would_change_my_mind": "Evidence that parents C-T-X1020-03-A and C-T-X1020-03-B belong to the same client or the trader's own account, or that the displayed (not hidden) iceberg peak was large relative to depth, or that this cycle repeats on other days."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1020-03"
+ }
+}

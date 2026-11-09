@@ -279,6 +279,9 @@ def transient(resp: dict[str, Any]) -> bool:
             "timed out",
             "service unavailable",
             "connection to the mcp server was closed",
+            "connection reset",
+            "readerror",
+            "remoteprotocolerror",
         )
     )
 
@@ -328,15 +331,28 @@ def rescore(out_dir: Path, labels: list[dict[str, Any]]) -> tuple[list[dict[str,
     return rows, run
 
 
+ARM_MARKERS = ("pilot", "nomem", "opus", "slice", "bundle")  # runs that are arms or trials, not the promoted line
+
+
 def previous_run(out_dir: Path, explicit: Path | None) -> dict[str, Any] | None:
+    """The run to regress against: `--compare` if given; else the one recorded in this run's results.json (so the
+    judge and faithfulness passes keep the comparison the scorer chose); else the latest mainline run by start
+    time, skipping arms and pilots and this run itself."""
     if explicit:
         return json.loads((explicit / "results.json").read_text())
-    cands = sorted(
-        p
-        for p in RUNS_DIR.glob("*/results.json")
-        if p.parent.resolve() != out_dir.resolve() and "pilot" not in p.parent.name
-    )
-    return json.loads(cands[-1].read_text()) if cands else None
+    own = out_dir / "results.json"
+    if own.exists():
+        prev_id = (json.loads(own.read_text()).get("regression") or {}).get("previous")
+        if prev_id and (RUNS_DIR / prev_id / "results.json").exists():
+            return json.loads((RUNS_DIR / prev_id / "results.json").read_text())
+    cands = []
+    for p in RUNS_DIR.glob("*/results.json"):
+        if p.parent.resolve() == out_dir.resolve() or any(m in p.parent.name for m in ARM_MARKERS):
+            continue
+        d = json.loads(p.read_text())
+        cands.append((d.get("started_at") or "", d))
+    cands.sort(key=lambda t: t[0])
+    return cands[-1][1] if cands else None
 
 
 def finish(
@@ -361,13 +377,27 @@ def finish(
         ),
     }
     prev = previous_run(out_dir, compare)
-    reg = regression(m, prev)
-    run.update(metrics=m, baselines=baselines, regression=reg, finished_at=now_iso())
-    if run.get("started_at"):
+    # keep what the judge and faithfulness passes already wrote for this run
+    existing = json.loads((out_dir / "results.json").read_text()) if (out_dir / "results.json").exists() else {}
+    for k in ("evaluations", "faithfulness", "finished_at", "elapsed_min"):
+        if existing.get(k) is not None and run.get(k) is None:
+            run[k] = existing[k]
+    reg = regression(m, prev, current_faith=run.get("faithfulness"))
+    run.update(metrics=m, baselines=baselines, regression=reg, finished_at=run.get("finished_at") or now_iso())
+    if run.get("started_at") and not run.get("elapsed_min"):
         t0 = datetime.fromisoformat(run["started_at"])
         run["elapsed_min"] = round((datetime.fromisoformat(run["finished_at"]) - t0).total_seconds() / 60, 1)
     (out_dir / "results.json").write_text(json.dumps(run, indent=1, default=str))
-    (out_dir / "results.md").write_text(render_markdown(run, baselines=baselines, reg=reg, rows=rows))
+    (out_dir / "results.md").write_text(
+        render_markdown(
+            run,
+            baselines=baselines,
+            reg=reg,
+            rows=rows,
+            evaluations=run.get("evaluations"),
+            faithfulness=run.get("faithfulness"),
+        )
+    )
     pd.DataFrame(rows).to_csv(out_dir / "per_alert.csv", index=False)
     return run
 

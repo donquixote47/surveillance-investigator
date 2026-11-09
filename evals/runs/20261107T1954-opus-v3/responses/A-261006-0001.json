@@ -1,0 +1,455 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261006-0001-a36de38b",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-07T20:01:05+00:00",
+  "wall_s": 59.7
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261006-0001",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-opus-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.7,
+   "report": {
+    "alert_id": "A-261006-0001",
+    "scenario": "SPOOFING",
+    "summary": "PROP trader T-X1006-01 (PROP-EQ, no MM registration, typical order size 500) placed three one-sided BUY limits of 4614 each (13842 gross, max_resting_size_vs_depth 5.65 vs avg top-5 depth 2450) at 9996/9995, 2 ticks from the touch, between 09:28:32.795 and 09:28:42.795. The best bid rose from 9997 to 9999 while they rested (price_move_ticks +1.0). A 692 SELL at 10000 was placed at 09:28:48.795 and filled at 09:28:52.795, 1000 ms before all three buys were cancelled at 09:28:53.795. None of the buys executed (same_side_fill_qty 0, cancel_symmetry 0.0). An automated kill switch (intraday loss limit) is recorded at exactly 09:28:53.795 and accounts for the cancel timing. It does not explain why one-sided orders 9x the trader's typical size were placed away from the touch, and the opposite-side sale came before the risk cut. Reversion_ticks is 0.0 and there is no round trip, so the benefit is limited. The evidence is mixed, so I escalate to Level 2 under section 6.3. No STOR is proposed at Level 1: repetitions_in_session is 0 and the trader has no prior alerts.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "BUY LIMIT 4614 @9996 (O-00002364) at 09:28:32.795; BUY 4614 @9995 (O-00002377) at 09:28:37.795; BUY 4614 @9995 (O-00002384) at 09:28:42.795; all three CANCEL at 09:28:53.795 with no fills"
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "SELL LIMIT 692 @10000 (O-00002393) NEW at 09:28:48.795 (best bid 9999 / ask 10000), FILL 692 at 09:28:52.795"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 5.649, distance_from_touch_ticks 2.0, distinct_price_levels 2, cancel_ratio 0.952, otr 7.0, cancel_symmetry 0.0"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "same_side_fill_qty 0 (before 0 / after 0), opposite_side_fill_qty 692 at 1000 ms before first cancel, price_move_ticks 1.0, reversion_ticks 0.0, post_cancel_move_ticks 0.5, round_trip_ticks null, repetitions_in_session 0, market_wide_cancels_1s_before_first_cancel 0, order_types LIMIT only, no parent_order_ids, modify_reduction_qty 0"
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "Role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0; risk event at 09:28:53.795: 'intraday loss limit breached; automated kill switch cancelled all resting orders'"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "No public market events for SYN.A in or around the window"
+     },
+     {
+      "id": "E7",
+      "source": "get_instrument_stats",
+      "fact": "SYN.A 2026-10-06: avg_depth_top5 2450.3, avg_spread_ticks 2.60, ADV 851578"
+     },
+     {
+      "id": "E8",
+      "source": "reconstruct_book",
+      "fact": "BBO path: best bid 9997 at 09:28:37.795, 9998 from 09:28:39, 9999 from 09:28:45 while the trader's 13842 rested at 9996/9995 (trader 4614 of 5878 at 9996, 9228 of 9422 at 9995 at 09:28:48.795); ask widened to 10002 after the cancel"
+     },
+     {
+      "id": "E9",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts on T-X1006-01 in the 90 days before 2026-10-06"
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "opposite-side execution before the cancel",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "high order-to-trade ratio (Annex II 4(f))"
+    ],
+    "indicators_not_matched": [
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E5",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E4",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5",
+       "E2",
+       "E4"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E4",
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E4",
+       "E8"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.7,
+    "what_would_change_my_mind": "Evidence that the BUY orders were genuine, such as a desk order or hedge instruction for about 13.8k shares, or proof that the kill-switch breach came first and the sale was a deliberate de-risking that the buys were part of, would support CLOSE_FP. Signs of the same cycle in other sessions would support a STOR draft by Level 2.",
+    "memory_used": [
+     "Desk PROP-EQ feedback on A-261016-0003 (l1.analyst): 'a cancel within 200 ms of an unscheduled news item on the name is a news reaction... Treat as CLOSE_FP unless the sale follows the news.' It does not apply here: there is no news event in the window (E6) and the cancel was a kill switch, not a news reaction."
+    ],
+    "window_used": "Detector window 09:27:52.795-09:28:57.795 (65 s) with 5 s padding on the order events. The book reconstruction looked back 20 minutes, and the alert history covered 90 days (none found). No multi-session frame beyond that.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history",
+     "reconstruct_book"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261006-0001",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261006-0001",
+   "proposed_at": "2026-11-07T20:01:58+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261006-0001"
+    },
+    "ms": 283,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 254,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261006-0001",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1006-01",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1199,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261006-0001",
+     "pad_seconds": 5
+    },
+    "ms": 195,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261006-0001"
+    },
+    "ms": 337,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1006-01",
+     "alert_id": "A-261006-0001"
+    },
+    "ms": 216,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1791278872795648256,
+     "window_end": 1791278937795648256
+    },
+    "ms": 189,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-06",
+     "instrument": "SYN.A"
+    },
+    "ms": 174,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1006-01",
+     "before_date": "2026-10-06"
+    },
+    "ms": 248,
+    "status": "ok"
+   },
+   {
+    "tool": "reconstruct_book",
+    "input": {
+     "alert_id": "A-261006-0001",
+     "at_ts": 1791278928795648256,
+     "levels": 5
+    },
+    "ms": 835,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261006-0001",
+     "confidence": 0.7,
+     "disposition": "ESCALATE",
+     "report": "<report>"
+    },
+    "ms": 245,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** ESCALATE to Level 2. It is filed as a proposal (case C-A-261006-0001) and a human analyst makes the decision.\n\n**Confidence:** 0.70\n\n**The three facts that drove it:**\n1. **Large one-sided buys that never traded.** The trader placed three BUY orders of 4,614 each (13,842 in total). That is 5.65 times the average depth, 2 ticks from the best price, and about 9 times the trader's typical size of 500. The trader is a prop trader with no market-making registration. None of the buys filled, and only the buy side was cancelled.\n2. **A sale filled 1 second before the cancels.** While the buys rested, the best bid rose from 9997 to 9999 (+1 tick in the trader's favour). A 692 SELL at 10000 filled at 09:28:52.795, and all three buys were cancelled 1,000 ms later.\n3. **A kill switch explains the cancels, not the orders.** An automated kill switch fired at 09:28:53.795 after the trader breached an intraday loss limit, at the same instant as the cancels. That explains when the buys were pulled, but not why one-sided orders that size were placed away from the best price. The sale also came before the risk cut. So I left the kill-switch explanation as undetermined rather than supported.\n\nThe case against it: the price did not snap back after the cancels (reversion 0), there is no round-trip profit to measure, the pattern did not repeat in the session, and the trader has no prior alerts. That is why I escalated rather than proposing a STOR draft. If a STOR is needed, Level 2 drafts it.\n\n**What would change my mind:** evidence that the 13.8k buy was a genuine order, such as a desk order or hedge instruction, or that the loss-limit breach came before the sale and the sale was part of cutting risk. Either would support closing it as a false positive.",
+  "usage": {
+   "input_tokens": 115248,
+   "output_tokens": 4618,
+   "total_tokens": 119866,
+   "model_calls": 10
+  },
+  "duration_s": 54.0,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261006-0001-a36de38b",
+  "error": null,
+  "bundle": "surv_opus-Pm3GdiCh5N:5305b644-4586-41ea-8ad0-0336862c4f5f",
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261006-0001",
+  "case_id": "C-A-261006-0001",
+  "confidence": "0.7",
+  "date": "2026-10-06",
+  "proposal_count": "5",
+  "proposed_at": "2026-11-07T20:01:58+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "PROP trader T-X1006-01 (PROP-EQ, no MM registration, typical order size 500) placed three one-sided BUY limits of 4614 each (13842 gross, max_resting_size_vs_depth 5.65 vs avg top-5 depth 2450) at 9996/9995, 2 ticks from the touch, between 09:28:32.795 and 09:28:42.795. The best bid rose from 9997 to 9999 while they rested (price_move_ticks +1.0). A 692 SELL at 10000 was placed at 09:28:48.795 and filled at 09:28:52.795, 1000 ms before all three buys were cancelled at 09:28:53.795. None of the buys executed (same_side_fill_qty 0, cancel_symmetry 0.0). An automated kill switch (intraday loss limit) is recorded at exactly 09:28:53.795 and accounts for the cancel timing. It does not explain why one-sided orders 9x the trader's typical size were placed away from the touch, and the opposite-side sale came before the risk cut. Reversion_ticks is 0.0 and there is no round trip, so the benefit is limited. The evidence is mixed, so I escalate to Level 2 under section 6.3. No STOR is proposed at Level 1: repetitions_in_session is 0 and the trader has no prior alerts.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "BUY LIMIT 4614 @9996 (O-00002364) at 09:28:32.795; BUY 4614 @9995 (O-00002377) at 09:28:37.795; BUY 4614 @9995 (O-00002384) at 09:28:42.795; all three CANCEL at 09:28:53.795 with no fills"
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "SELL LIMIT 692 @10000 (O-00002393) NEW at 09:28:48.795 (best bid 9999 / ask 10000), FILL 692 at 09:28:52.795"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 5.649, distance_from_touch_ticks 2.0, distinct_price_levels 2, cancel_ratio 0.952, otr 7.0, cancel_symmetry 0.0"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "same_side_fill_qty 0 (before 0 / after 0), opposite_side_fill_qty 692 at 1000 ms before first cancel, price_move_ticks 1.0, reversion_ticks 0.0, post_cancel_move_ticks 0.5, round_trip_ticks null, repetitions_in_session 0, market_wide_cancels_1s_before_first_cancel 0, order_types LIMIT only, no parent_order_ids, modify_reduction_qty 0"
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "Role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0; risk event at 09:28:53.795: 'intraday loss limit breached; automated kill switch cancelled all resting orders'"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "No public market events for SYN.A in or around the window"
+    },
+    {
+     "id": "E7",
+     "source": "get_instrument_stats",
+     "fact": "SYN.A 2026-10-06: avg_depth_top5 2450.3, avg_spread_ticks 2.60, ADV 851578"
+    },
+    {
+     "id": "E8",
+     "source": "reconstruct_book",
+     "fact": "BBO path: best bid 9997 at 09:28:37.795, 9998 from 09:28:39, 9999 from 09:28:45 while the trader's 13842 rested at 9996/9995 (trader 4614 of 5878 at 9996, 9228 of 9422 at 9995 at 09:28:48.795); ask widened to 10002 after the cancel"
+    },
+    {
+     "id": "E9",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts on T-X1006-01 in the 90 days before 2026-10-06"
+    }
+   ],
+   "indicators_not_matched": [
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "opposite-side execution before the cancel",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "high order-to-trade ratio (Annex II 4(f))"
+   ],
+   "alert_id": "A-261006-0001",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E5",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E4",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5",
+      "E2",
+      "E4"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E4",
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E4",
+      "E8"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "Desk PROP-EQ feedback on A-261016-0003 (l1.analyst): 'a cancel within 200 ms of an unscheduled news item on the name is a news reaction... Treat as CLOSE_FP unless the sale follows the news.' It does not apply here: there is no news event in the window (E6) and the cancel was a kill switch, not a news reaction."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history",
+    "reconstruct_book"
+   ],
+   "window_used": "Detector window 09:27:52.795-09:28:57.795 (65 s) with 5 s padding on the order events. The book reconstruction looked back 20 minutes, and the alert history covered 90 days (none found). No multi-session frame beyond that.",
+   "what_would_change_my_mind": "Evidence that the BUY orders were genuine, such as a desk order or hedge instruction for about 13.8k shares, or proof that the kill-switch breach came first and the sale was a deliberate de-risking that the buys were part of, would support CLOSE_FP. Signs of the same cycle in other sessions would support a STOR draft by Level 2."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1006-01"
+ }
+}

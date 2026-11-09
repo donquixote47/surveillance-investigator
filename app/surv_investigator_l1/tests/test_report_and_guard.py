@@ -233,3 +233,59 @@ def test_prompt_memory_switch():
     assert f"{TOOL_PREFIX}recall_memory` with the alert id" in on and "memory_used` lists" in on
     assert "Memory is switched off" in off and "`memory_used` is an empty list" in off
     assert "Read it before the evidence" not in off
+
+
+def test_retry_on_429_replays_the_request(monkeypatch):
+    """A throttled Gateway call is retried with back-off instead of closing the MCP connection."""
+    import asyncio
+
+    from investigator import RetryOn429
+    from investigator import _httpx as httpx2
+
+    calls = []
+
+    async def fake_handle(self, request):
+        calls.append(request.content)
+        status = 429 if len(calls) < 3 else 200
+        return httpx2.Response(status, headers={"retry-after": "0"} if status == 429 else {}, content=b"{}")
+
+    slept = []
+
+    async def fake_sleep(d):
+        slept.append(d)
+
+    monkeypatch.setattr(httpx2.AsyncHTTPTransport, "handle_async_request", fake_handle)
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    t = RetryOn429(max_retries=3)
+    req = httpx2.Request("POST", "https://gw.example/mcp", content=b'{"jsonrpc":"2.0"}')
+    resp = asyncio.run(t.handle_async_request(req))
+    assert resp.status_code == 200
+    assert calls == [b'{"jsonrpc":"2.0"}'] * 3  # same body each time
+    assert slept == [0.0, 0.0]  # Retry-After honoured
+
+    calls.clear()
+    t = RetryOn429(max_retries=1)
+    resp = asyncio.run(t.handle_async_request(httpx2.Request("POST", "https://gw.example/mcp", content=b"x")))
+    assert resp.status_code == 429 and len(calls) == 2  # gives up after max_retries and returns the last answer
+
+
+def test_guard_accepts_a_json_encoded_report_and_rejects_garbage():
+    """Opus 5.5 passed `report` as a JSON string in 5 of 167 runs; dict() on a string raised inside the hook and
+    killed the investigation. A string that parses to an object is accepted; anything else is a clean rejection."""
+    from investigator import InvestigationGuard
+
+    class Ev:
+        def __init__(self, inputs):
+            self.tool_use = {"name": PROPOSE, "toolUseId": "t1", "input": inputs}
+            self.cancel_tool = None
+
+    g = InvestigationGuard(alert_id="A-1")
+    ev = Ev({"alert_id": "A-1", "disposition": "ESCALATE", "confidence": 0.7, "report": "not json {"})
+    g.before_tool(ev)
+    assert ev.cancel_tool and "JSON object" in ev.cancel_tool and g.proposal is None
+    ev = Ev({"alert_id": "A-1", "disposition": "ESCALATE", "confidence": 0.7, "report": '["a", "b"]'})
+    g.before_tool(ev)
+    assert ev.cancel_tool and "JSON object" in ev.cancel_tool
+    ev = Ev({"alert_id": "A-1", "disposition": "ESCALATE", "confidence": 0.7, "report": "{}"})
+    g.before_tool(ev)
+    assert ev.cancel_tool and "report rejected" in ev.cancel_tool  # parsed as an object, then fails validation

@@ -11,6 +11,7 @@ keeps the proposal and its result for the caller.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -27,6 +28,14 @@ from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookProvider,
 from strands.models.bedrock import BedrockModel
 from strands.tools.executors import SequentialToolExecutor
 from strands.tools.mcp import MCPClient
+from strands.tools.mcp._compat import MCP_V2
+
+# mcp 2.x (this machine) rides on `httpx2`; mcp 1.x (what the Runtime bundle resolves, 2026-11-07) on `httpx`.
+# The retrying transport subclasses whichever the installed mcp uses, so the same file runs in both places.
+if MCP_V2:
+    import httpx2 as _httpx
+else:
+    import httpx as _httpx
 
 log = logging.getLogger("surv.investigator")
 
@@ -53,6 +62,63 @@ def bundle_config() -> tuple[dict[str, Any], str]:
     except Exception as exc:  # bundle service unavailable, or not running under the Runtime app
         log.warning("config bundle unavailable, using code defaults: %s", exc)
         return {}, "error"
+
+
+class RetryOn429(_httpx.AsyncHTTPTransport):
+    """The Gateway's per-analyst rate limit answers 429 and the MCP client treats that as a dead connection, which
+    ends the investigation with "Connection to the MCP server was closed" (6 of 167 runs on 2026-11-06). A tool
+    call is idempotent at the Gateway (the policy session records the *response*, so a throttled request leaves no
+    trace), so a short back-off and a retry is the right reaction. Honours Retry-After; 2, 4, 8 s otherwise."""
+
+    RETRY_STATUS = (429, 503)
+
+    def __init__(self, *args: Any, max_retries: int = 3, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self.max_retries = max_retries
+
+    async def handle_async_request(self, request: Any) -> Any:
+        await request.aread()  # make the JSON body replayable
+        for attempt in range(self.max_retries + 1):
+            response = await super().handle_async_request(request)
+            if response.status_code not in self.RETRY_STATUS or attempt == self.max_retries:
+                return response
+            await response.aclose()
+            retry_after = response.headers.get("retry-after")
+            delay = float(retry_after) if retry_after and retry_after.isdigit() else 2.0 * (2**attempt)
+            log.warning(
+                "gateway answered %s; retry %d/%d in %.0fs", response.status_code, attempt + 1, self.max_retries, delay
+            )
+            await asyncio.sleep(delay)
+        return response  # unreachable, keeps type checkers quiet
+
+
+def gateway_transport(url: str, headers: dict[str, str]):
+    """Streamable-HTTP MCP transport with the retrying client. mcp 2.x takes a pre-built `httpx2.AsyncClient`;
+    mcp 1.x takes an `httpx_client_factory(headers, timeout, auth)` that returns an `httpx.AsyncClient`."""
+    timeout = _httpx.Timeout(30.0, read=300.0)
+    if MCP_V2:
+        from contextlib import asynccontextmanager
+
+        from mcp.client.streamable_http import streamable_http_client
+
+        @asynccontextmanager
+        async def _transport():
+            async with (
+                _httpx.AsyncClient(headers=headers, timeout=timeout, transport=RetryOn429()) as client,
+                streamable_http_client(url=url, http_client=client) as streams,
+            ):
+                yield streams
+
+        return _transport()
+
+    from mcp.client.streamable_http import streamablehttp_client
+
+    def _factory(headers: dict[str, str] | None = None, timeout: Any = None, auth: Any = None) -> Any:
+        return _httpx.AsyncClient(
+            headers=headers, timeout=timeout or _httpx.Timeout(30.0, read=300.0), auth=auth, transport=RetryOn429()
+        )
+
+    return streamablehttp_client(url=url, headers=headers, httpx_client_factory=_factory)
 
 
 def gateway_mcp_url() -> str:
@@ -100,7 +166,20 @@ class InvestigationGuard(HookProvider):
                 f"this investigation is for alert {self.alert_id}; the proposal names {inputs.get('alert_id')!r}."
             )
             return
-        raw = dict(inputs.get("report") or {})
+        report_in = inputs.get("report") or {}
+        if isinstance(report_in, str):  # Opus 5.5 sometimes passes the object JSON-encoded (5 of 167 runs, 2026-11-07)
+            try:
+                report_in = json.loads(report_in)
+            except json.JSONDecodeError:
+                report_in = None
+        if not isinstance(report_in, dict):
+            msg = (
+                "report rejected before it reached the Gateway: `report` must be a JSON object, not a string or a list"
+            )
+            self.rejections.append(msg)
+            event.cancel_tool = msg
+            return
+        raw = dict(report_in)
         raw.setdefault("alert_id", self.alert_id)
         raw["proposed_disposition"] = inputs.get("disposition")
         raw["confidence"] = inputs.get("confidence")
@@ -230,9 +309,9 @@ def build_agent(
         max_tokens=int(os.environ.get("SURV_MAX_TOKENS", "32000")),
         additional_request_fields={"thinking": {"type": "adaptive"}, "output_config": {"effort": effort}},
     )
+    mcp_headers = {"Authorization": f"Bearer {access_token}", POLICY_SESSION_HEADER: policy_session_id}
     mcp = MCPClient(
-        url=gateway_mcp_url(),
-        headers={"Authorization": f"Bearer {access_token}", POLICY_SESSION_HEADER: policy_session_id},
+        lambda: gateway_transport(gateway_mcp_url(), mcp_headers),
         startup_timeout=60,
         # Memory off (evaluation arm, data doc 4.5.1): the recall tool is not offered to the model at all
         tool_filters=None if memory else {"rejected": [f"{TOOL_PREFIX}recall_memory"]},

@@ -1,0 +1,431 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261006-0009-8aaa3667",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-07T20:04:59+00:00",
+  "wall_s": 44.3
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261006-0009",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-opus-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.85,
+   "report": {
+    "alert_id": "A-261006-0009",
+    "scenario": "SPOOFING",
+    "summary": "PROP trader T-X1006-06 placed one BUY limit of 12210 at the best bid (9999, 0 ticks from the touch), which is 4.98x the average top-5 depth. Before the trader's only opposite-side trade (SELL 366 at 10001, 14:20:29.681), 6744 had already filled on that BUY order. That is 55% of the order and 18x the sell quantity, so the order was genuinely executing. After the sell, the order was cut by 4198 through a MODIFY, not a cancel. Its remaining 976 then filled completely by 14:20:34.971, for 7952 filled on the BUY side in total. There was no favourable move to speak of (price_move 0.5 tick), there are no reversion figures, there are no repetitions, and the order sat at a single price level. Under section 6.2 this is genuine execution of the resting order: a smaller opposite trade while the order was working, then a size reduction, is ordinary order management. Both core features are absent. Proposed CLOSE_FP.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_alert",
+      "fact": "Detector spoof-naive-v1 trigger OPPOSITE_FILL_CANCEL: gross BUY 12210 in 60s >= 3.25 x avg top-5 depth (2450); SELL execution of 366 at 14:20:29.681; 4198 removed on BUY within 5s against 5466 resting"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "same_side_fill_qty_before_opposite_trade 6744, same_side_fill_qty_after_opposite_trade 1208, same_side_fill_qty 7952, same_side_fill_share 0.6513, opposite_side_fill_qty 366"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "modify_reduction_qty 4198; cancel_ratio 0.334; otr 0.103; median_cancel_latency_ms null (no outright cancels)"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 4.98, distance_from_touch_ticks 0.0, distinct_price_levels 1, price_move_ticks 0.5, reversion_ticks null, round_trip_ticks 2.0, repetitions_in_session 0, cancel_symmetry 0.0, market_wide_cancels_1s_before_first_cancel 0, parent_order_ids empty, order types LIMIT only"
+     },
+     {
+      "id": "E5",
+      "source": "get_order_events",
+      "fact": "O-00026693 BUY 12210 LIMIT at 9999 (best bid 9999) at 14:20:14.681; 18 partial fills totalling 6744 before the SELL O-00026728 366 at 10001 filled at 14:20:29.681; MODIFY -4198 at 14:20:31.681 left 976, which filled fully by 14:20:34.971 (FILL 60, remaining 0)"
+     },
+     {
+      "id": "E6",
+      "source": "get_trader_profile",
+      "fact": "Role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, no risk-limit events in window or in total"
+     },
+     {
+      "id": "E7",
+      "source": "get_market_events",
+      "fact": "No market events in or around the window"
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "SYN.A avg_depth_top5 2450.3, avg_spread_ticks 2.60, ADV 851578, tick size 0.01"
+     },
+     {
+      "id": "E9",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts on T-X1006-06 in the 90 days before 2026-10-06"
+     }
+    ],
+    "indicators_matched": [
+     "size large relative to visible depth"
+    ],
+    "indicators_not_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "opposite-side execution before the cancel",
+     "orders away from the touch",
+     "high order-to-trade ratio (Annex II 4(f))",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "Genuine execution of the resting order / order modification after partial fills: 6744 filled before the opposite trade (more than 1/10 of 12210 and more than 366); the reduction was a MODIFY and the remainder filled completely",
+      "ruled_out_by": [
+       "E2",
+       "E3",
+       "E5"
+      ],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "Market making",
+      "ruled_out_by": [
+       "E6",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "Algorithmic re-pricing (pegged/child orders)",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "Risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "Reaction to a public event",
+      "ruled_out_by": [
+       "E7",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "Iceberg or reserve order",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "Fat finger",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "Momentum trader stopped out",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.85,
+    "what_would_change_my_mind": "Tape from a longer frame showing the same pattern repeated (large bid at the touch, small sell above it, reduction after the sell) with fills on the bid arriving only after the sell, or the 0.5-tick move turning out to reverse after the MODIFY, which would point to the displayed size being used to support the sell price.",
+    "memory_used": [],
+    "window_used": "Detector window 14:19:29.681-14:20:34.681 (65 s) on 2026-10-06, order events padded by 5 s. Looking past the window: the trader has no alert history in the prior 90 days and repetitions_in_session is 0. No multi-session tape was reviewed. The only memory record (PROP-EQ desk feedback on news reactions, A-261016-0003) does not apply here: no market event was recorded.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261006-0009",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-261006-0009",
+   "proposed_at": "2026-11-07T20:05:38+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261006-0009"
+    },
+    "ms": 210,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 226,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261006-0009",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1006-06",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1143,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261006-0009",
+     "pad_seconds": 5
+    },
+    "ms": 240,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261006-0009"
+    },
+    "ms": 379,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1006-06",
+     "alert_id": "A-261006-0009"
+    },
+    "ms": 207,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1791296369681250816,
+     "window_end": 1791296434681250816
+    },
+    "ms": 188,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-06",
+     "instrument": "SYN.A"
+    },
+    "ms": 279,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1006-06",
+     "before_date": "2026-10-06"
+    },
+    "ms": 177,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261006-0009",
+     "confidence": 0.85,
+     "disposition": "CLOSE_FP",
+     "report": "<report>"
+    },
+    "ms": 222,
+    "status": "ok"
+   }
+  ],
+  "final_text": "I've proposed **CLOSE_FP** for A-261006-0009, with **confidence 0.85**. It's now waiting for a human analyst's decision.\n\n**The three facts that drove it:**\n1. **The buy order was really trading before the sell.** 6,744 of the 12,210 BUY order filled before the trader's one SELL of 366 at 14:20:29.681. That's 55% of the order and about 18 times the sell quantity.\n2. **The order was reduced, not cancelled, and the rest filled.** The trader cut it by 4,198 with a MODIFY at 14:20:31.681. The remaining 976 then filled completely by 14:20:34.971, so 7,952 filled on the BUY side in total.\n3. **No sign of price pushing.** The order sat at the best bid, 0 ticks from the touch, on a single price level. The price moved only 0.5 tick in the trader's favour before the sell, there were no reversion figures to show a snap-back, and there were no repeated cycles in the session. The trader is a proprietary trader (not a registered market maker) with no alerts in the prior 90 days. The only feature that matched is size: the order was 4.98 times the average visible depth, and size alone isn't a feature under the closure standard.\n\n**What would change my mind:** a longer stretch of tape showing the same cycle repeated with the bid fills coming only after the sell, or the price reversing after the reduction.",
+  "usage": {
+   "input_tokens": 57615,
+   "output_tokens": 3731,
+   "total_tokens": 61346,
+   "model_calls": 5
+  },
+  "duration_s": 38.6,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261006-0009-8aaa3667",
+  "error": null,
+  "bundle": "surv_opus-Pm3GdiCh5N:5305b644-4586-41ea-8ad0-0336862c4f5f",
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261006-0009",
+  "case_id": "C-A-261006-0009",
+  "confidence": "0.85",
+  "date": "2026-10-06",
+  "proposal_count": "6",
+  "proposed_at": "2026-11-07T20:05:38+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "PROP trader T-X1006-06 placed one BUY limit of 12210 at the best bid (9999, 0 ticks from the touch), which is 4.98x the average top-5 depth. Before the trader's only opposite-side trade (SELL 366 at 10001, 14:20:29.681), 6744 had already filled on that BUY order. That is 55% of the order and 18x the sell quantity, so the order was genuinely executing. After the sell, the order was cut by 4198 through a MODIFY, not a cancel. Its remaining 976 then filled completely by 14:20:34.971, for 7952 filled on the BUY side in total. There was no favourable move to speak of (price_move 0.5 tick), there are no reversion figures, there are no repetitions, and the order sat at a single price level. Under section 6.2 this is genuine execution of the resting order: a smaller opposite trade while the order was working, then a size reduction, is ordinary order management. Both core features are absent. Proposed CLOSE_FP.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_alert",
+     "fact": "Detector spoof-naive-v1 trigger OPPOSITE_FILL_CANCEL: gross BUY 12210 in 60s >= 3.25 x avg top-5 depth (2450); SELL execution of 366 at 14:20:29.681; 4198 removed on BUY within 5s against 5466 resting"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "same_side_fill_qty_before_opposite_trade 6744, same_side_fill_qty_after_opposite_trade 1208, same_side_fill_qty 7952, same_side_fill_share 0.6513, opposite_side_fill_qty 366"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "modify_reduction_qty 4198; cancel_ratio 0.334; otr 0.103; median_cancel_latency_ms null (no outright cancels)"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 4.98, distance_from_touch_ticks 0.0, distinct_price_levels 1, price_move_ticks 0.5, reversion_ticks null, round_trip_ticks 2.0, repetitions_in_session 0, cancel_symmetry 0.0, market_wide_cancels_1s_before_first_cancel 0, parent_order_ids empty, order types LIMIT only"
+    },
+    {
+     "id": "E5",
+     "source": "get_order_events",
+     "fact": "O-00026693 BUY 12210 LIMIT at 9999 (best bid 9999) at 14:20:14.681; 18 partial fills totalling 6744 before the SELL O-00026728 366 at 10001 filled at 14:20:29.681; MODIFY -4198 at 14:20:31.681 left 976, which filled fully by 14:20:34.971 (FILL 60, remaining 0)"
+    },
+    {
+     "id": "E6",
+     "source": "get_trader_profile",
+     "fact": "Role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, no risk-limit events in window or in total"
+    },
+    {
+     "id": "E7",
+     "source": "get_market_events",
+     "fact": "No market events in or around the window"
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "SYN.A avg_depth_top5 2450.3, avg_spread_ticks 2.60, ADV 851578, tick size 0.01"
+    },
+    {
+     "id": "E9",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts on T-X1006-06 in the 90 days before 2026-10-06"
+    }
+   ],
+   "indicators_not_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "opposite-side execution before the cancel",
+    "orders away from the touch",
+    "high order-to-trade ratio (Annex II 4(f))",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "size large relative to visible depth"
+   ],
+   "alert_id": "A-261006-0009",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "Genuine execution of the resting order / order modification after partial fills: 6744 filled before the opposite trade (more than 1/10 of 12210 and more than 366); the reduction was a MODIFY and the remainder filled completely",
+     "ruled_out_by": [
+      "E2",
+      "E3",
+      "E5"
+     ],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "Market making",
+     "ruled_out_by": [
+      "E6",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "Algorithmic re-pricing (pegged/child orders)",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "Risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "Reaction to a public event",
+     "ruled_out_by": [
+      "E7",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "Iceberg or reserve order",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "Fat finger",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "Momentum trader stopped out",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 14:19:29.681-14:20:34.681 (65 s) on 2026-10-06, order events padded by 5 s. Looking past the window: the trader has no alert history in the prior 90 days and repetitions_in_session is 0. No multi-session tape was reviewed. The only memory record (PROP-EQ desk feedback on news reactions, A-261016-0003) does not apply here: no market event was recorded.",
+   "what_would_change_my_mind": "Tape from a longer frame showing the same pattern repeated (large bid at the touch, small sell above it, reduction after the sell) with fills on the bid arriving only after the sell, or the 0.5-tick move turning out to reverse after the MODIFY, which would point to the displayed size being used to support the sell price."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1006-06"
+ }
+}

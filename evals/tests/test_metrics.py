@@ -73,6 +73,7 @@ def test_regression_rule():
     prev_rows = [
         _row("f1", "FALSE_POSITIVE", "F-MM-1", CLOSE, CLOSE),
         _row("f2", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, CLOSE),
+        _row("f3", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, CLOSE),
         _row("a1", "TRUE_ABUSE", "S-SPOOF-1", ESCALATE, ESCALATE),
     ]
     prev = {"run_id": "prev", "metrics": compute(prev_rows)}
@@ -80,14 +81,30 @@ def test_regression_rule():
     assert same["verdict"].startswith("PASS")
     worse = [
         _row("f1", "FALSE_POSITIVE", "F-MM-1", CLOSE, CLOSE),
-        _row("f2", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, ESCALATE),  # F-NEWS-1 falls to 0% close
+        _row("f2", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, ESCALATE),  # F-NEWS-1 falls from 2/2 to 0% close
+        _row("f3", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, ESCALATE),
         _row("a1", "TRUE_ABUSE", "S-SPOOF-1", ESCALATE, ESCALATE),
     ]
     r = regression(compute(worse), prev)
     assert r["verdict"] == "FAIL"
-    assert r["deltas"]["raw_safe_close_rate"] == pytest.approx(-0.5)
+    assert r["deltas"]["raw_safe_close_rate"] == pytest.approx(-2 / 3, abs=1e-3)
     assert any("F-NEWS-1" in name and not ok for name, ok in r["checks"])
     assert regression(compute(worse), None)["previous"] is None
+
+
+def test_zero_close_regression_has_a_materiality_floor():
+    """v2 -> v3: F-STOP-1 went 1/6 -> 0/6. One alert in six is inside the noise of a non-deterministic agent, so the
+    rule needs the previous run to have closed >= 2 alerts and >= 25% of the scenario before a fall to 0% counts."""
+    prev_rows = [_row(f"s{i}", "FALSE_POSITIVE", "F-STOP-1", CLOSE, CLOSE if i == 0 else ESCALATE) for i in range(6)]
+    prev = {"run_id": "prev", "metrics": compute(prev_rows)}
+    cur_rows = [_row(f"s{i}", "FALSE_POSITIVE", "F-STOP-1", CLOSE, ESCALATE) for i in range(6)]
+    r = regression(compute(cur_rows), prev)
+    zero_check = next(c for c in r["checks"] if c[0].startswith("no false-positive scenario regressed"))
+    assert zero_check[1] is True and "within noise: F-STOP-1 (1/6 -> 0/6" in zero_check[0]
+    # but 3/6 -> 0/6 is a real regression
+    prev_rows = [_row(f"s{i}", "FALSE_POSITIVE", "F-STOP-1", CLOSE, CLOSE if i < 3 else ESCALATE) for i in range(6)]
+    r = regression(compute(cur_rows), {"run_id": "prev", "metrics": compute(prev_rows)})
+    assert r["verdict"] == "FAIL"
 
 
 @pytest.mark.skipif(not (DATASET / "labels" / "baseline.parquet").exists(), reason="dataset not built")

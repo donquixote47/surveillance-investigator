@@ -1,0 +1,462 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261021-0003-3081316d",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-08T11:07:57+00:00",
+  "wall_s": 62.0
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261021-0003",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-opus-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.75,
+   "report": {
+    "alert_id": "A-261021-0003",
+    "scenario": "SPOOFING",
+    "summary": "PROP trader T-X1021-02 (no market-making registration, typical order size 500) placed a single one-sided SELL limit of 27524 (11.04x avg top-5 depth of 2492) at 10002, 2 ticks from the touch, at 11:10:04.762. Within about 0.5s the mid fell from 9999.0 to 9997.5 (price_move_ticks +1.5, favourable to a buyer). At 11:10:07.546 the trader sent a BUY market order of 1212 that filled 725 at 9998 and swept the thin ask up to 10002. 4755 of the resting sell was then hit at 11:10:07.764, after the buy, and the remaining 22769 was cancelled at 11:10:08.230, 684 ms after the buy. Afterwards the price reverted 1 tick and the round trip was +2.49 ticks. cancel_symmetry is 0, same_side_fill_qty_before_opposite_trade is 0, and there was no market event, no risk event and no market-wide cancelling. This is the pattern the escalation standard calls a 'spoofer caught in the book', and no legitimate explanation is supported. It is a single cycle (repetitions 1) with no prior alerts. Part of the buy was paid up to 10002 by the trader's own sweep. So I propose ESCALATE to Level 2 rather than DRAFT_STOR.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_alert",
+      "fact": "Trigger: gross SELL 27524 submitted in 60s >= 3.25x avg top-5 depth (2492); BUY execution of 334 at 11:10:07.546; 22769 cancelled on SELL; single SELL order of 27524 (11.0x depth) placed at 11:10:04.762."
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "O-00010654 NEW SELL LIMIT 27524 at 10002 at 11:10:04.762 (bid 9998 / ask 10000); O-00010666 BUY MARKET 1212 at 11:10:07.546 filled 334 and 391 at 9998, 51 and 62 at 10001, 374 at 10002; O-00010654 PARTIAL_FILL 4755 at 10002 at 11:10:07.764; CANCEL 22769 at 11:10:08.230."
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 11.04, distance_from_touch_ticks 2.0, distinct_price_levels 1, cancel_symmetry 0.0, gross_submitted_other 0, cancel_ratio 0.827."
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "same_side_fill_qty_before_opposite_trade 0, same_side_fill_qty_after_opposite_trade 4755 (share 0.1728); opposite_side_fill_qty 1212, ms_before_first_cancel 684.4; modify_reduction_qty 0."
+     },
+     {
+      "id": "E5",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks +1.5, reversion_ticks 1.0, post_cancel_move_ticks -1.0, round_trip_ticks +2.49, repetitions_in_session 1, market_wide_cancels_1s_before_first_cancel 0, order_types LIMIT only, parent_order_ids empty."
+     },
+     {
+      "id": "E6",
+      "source": "get_trader_profile",
+      "fact": "Role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, no risk-limit events in window (total 0)."
+     },
+     {
+      "id": "E7",
+      "source": "get_market_events",
+      "fact": "No market events returned for SYN.A in or around the window."
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "SYN.A 2026-10-21: avg_depth_top5 2492, avg_spread 2.56 ticks, ADV 849250."
+     },
+     {
+      "id": "E9",
+      "source": "reconstruct_book",
+      "fact": "At 11:10:07.546 asks: 10002 total 28238 of which the trader's 27524, 10003 49; bids 9997 239. BBO path: 9998/10000 at 11:10:04.762 moves to 9997/9998 by 11:10:05.283; after the cancel the ask is back at 10001 by 11:10:10.000."
+     },
+     {
+      "id": "E10",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts for T-X1021-02 in the 90 days before 2026-10-21."
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "opposite-side execution before the cancel",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "price moved in the trader's favour before the execution and reverted after the cancel"
+    ],
+    "indicators_not_matched": [
+     "high order-to-trade ratio (Annex II 4(f))",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E3",
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E3",
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E6",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E5",
+       "E7"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E2",
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill / genuine execution of resting order",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E2",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.75,
+    "what_would_change_my_mind": "I would reconsider if there were evidence that the 27524 sell was a genuine working order: a client or parent order behind it, a desk instruction to sell that size, or same-side executions before the trader's buy. The desk news-reaction feedback would apply only if a news item on SYN.A had been recorded within 200 ms of the cancel. I would move towards DRAFT_STOR if the same cycle were found elsewhere in the session or on other days.",
+    "memory_used": [
+     "Desk feedback from alert A-261016-0003 (T-X1016-03, SYN.A): 'For this desk a cancel within 200 ms of an unscheduled news item on the name is a news reaction... Treat as CLOSE_FP unless the sale follows the news.' It does not apply today: get_market_events returned no events and market_wide_cancels_1s_before_first_cancel is 0."
+    ],
+    "window_used": "Detector window 11:09:07.546 to 11:10:14.762 (67.2s) on 2026-10-21. Order events were padded by 5s and the book was reconstructed with a 20-minute lookback. Trader alert history was checked over 90 days (no alerts). No longer-frame repetition analysis was done beyond repetitions_in_session.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history",
+     "reconstruct_book"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261021-0003",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261021-0003",
+   "proposed_at": "2026-11-08T11:08:51+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261021-0003"
+    },
+    "ms": 208,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 235,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261021-0003",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1021-02",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1225,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261021-0003",
+     "pad_seconds": 5
+    },
+    "ms": 262,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261021-0003"
+    },
+    "ms": 398,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1021-02",
+     "alert_id": "A-261021-0003"
+    },
+    "ms": 313,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1792580947546273764,
+     "window_end": 1792581014762880512
+    },
+    "ms": 238,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-21",
+     "instrument": "SYN.A"
+    },
+    "ms": 269,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1021-02",
+     "before_date": "2026-10-21"
+    },
+    "ms": 264,
+    "status": "ok"
+   },
+   {
+    "tool": "reconstruct_book",
+    "input": {
+     "alert_id": "A-261021-0003",
+     "at_ts": 1792581007546273764,
+     "levels": 5,
+     "sample_every_ms": 500
+    },
+    "ms": 806,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261021-0003",
+     "confidence": 0.75,
+     "disposition": "ESCALATE",
+     "report": "<report>"
+    },
+    "ms": 222,
+    "status": "ok"
+   }
+  ],
+  "final_text": "I've proposed **ESCALATE** for alert A-261021-0003 (case C-A-261021-0003), with **confidence 0.75**. A human analyst still has to record the decision.\n\n**Three facts that drove it:**\n1. **One large sell, on one side only.** The trader (a prop trader with no market-making registration and a typical order size of 500) placed one sell limit order of 27,524 at 10002. That is 11.04 times the average top-5 depth, 2 ticks from the best price, with no orders on the other side.\n2. **The price moved his way, he bought, then he cancelled.** After the sell went in, the mid price fell 1.5 ticks. He then bought 1,212 at market and cancelled the remaining 22,769 of the sell 684 ms later. The price moved back 1 tick after the cancel, and the buy-then-sell round trip made +2.49 ticks.\n3. **None of the sell filled before his buy.** All 4,755 that filled on the sell came after his own buy. There was no news, no risk-system event and no other participants cancelling in the same second. No legitimate explanation fits; the firm's escalation standard calls this pattern \"a spoofer caught in the book\".\n\nI proposed escalation rather than a STOR draft (only Level 2 drafts a STOR) because this happened once in the session and the trader has no alerts in the last 90 days. Part of the buy also cost him more, because his own market order swept the thin ask side up to his own sell price.\n\n**What would change my mind:** evidence that the 27,524 sell was a real working order, such as a client or parent order behind it, or a desk instruction to sell that size.",
+  "usage": {
+   "input_tokens": 74738,
+   "output_tokens": 5239,
+   "total_tokens": 79977,
+   "model_calls": 6
+  },
+  "duration_s": 56.4,
+  "session_id": "surv-eval-20261107T1954-opus-v3-A-261021-0003-3081316d",
+  "error": null,
+  "bundle": "surv_opus-Pm3GdiCh5N:5305b644-4586-41ea-8ad0-0336862c4f5f",
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261021-0003",
+  "case_id": "C-A-261021-0003",
+  "confidence": "0.75",
+  "date": "2026-10-21",
+  "proposal_count": "6",
+  "proposed_at": "2026-11-08T11:08:51+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "PROP trader T-X1021-02 (no market-making registration, typical order size 500) placed a single one-sided SELL limit of 27524 (11.04x avg top-5 depth of 2492) at 10002, 2 ticks from the touch, at 11:10:04.762. Within about 0.5s the mid fell from 9999.0 to 9997.5 (price_move_ticks +1.5, favourable to a buyer). At 11:10:07.546 the trader sent a BUY market order of 1212 that filled 725 at 9998 and swept the thin ask up to 10002. 4755 of the resting sell was then hit at 11:10:07.764, after the buy, and the remaining 22769 was cancelled at 11:10:08.230, 684 ms after the buy. Afterwards the price reverted 1 tick and the round trip was +2.49 ticks. cancel_symmetry is 0, same_side_fill_qty_before_opposite_trade is 0, and there was no market event, no risk event and no market-wide cancelling. This is the pattern the escalation standard calls a 'spoofer caught in the book', and no legitimate explanation is supported. It is a single cycle (repetitions 1) with no prior alerts. Part of the buy was paid up to 10002 by the trader's own sweep. So I propose ESCALATE to Level 2 rather than DRAFT_STOR.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_alert",
+     "fact": "Trigger: gross SELL 27524 submitted in 60s >= 3.25x avg top-5 depth (2492); BUY execution of 334 at 11:10:07.546; 22769 cancelled on SELL; single SELL order of 27524 (11.0x depth) placed at 11:10:04.762."
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "O-00010654 NEW SELL LIMIT 27524 at 10002 at 11:10:04.762 (bid 9998 / ask 10000); O-00010666 BUY MARKET 1212 at 11:10:07.546 filled 334 and 391 at 9998, 51 and 62 at 10001, 374 at 10002; O-00010654 PARTIAL_FILL 4755 at 10002 at 11:10:07.764; CANCEL 22769 at 11:10:08.230."
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 11.04, distance_from_touch_ticks 2.0, distinct_price_levels 1, cancel_symmetry 0.0, gross_submitted_other 0, cancel_ratio 0.827."
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "same_side_fill_qty_before_opposite_trade 0, same_side_fill_qty_after_opposite_trade 4755 (share 0.1728); opposite_side_fill_qty 1212, ms_before_first_cancel 684.4; modify_reduction_qty 0."
+    },
+    {
+     "id": "E5",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks +1.5, reversion_ticks 1.0, post_cancel_move_ticks -1.0, round_trip_ticks +2.49, repetitions_in_session 1, market_wide_cancels_1s_before_first_cancel 0, order_types LIMIT only, parent_order_ids empty."
+    },
+    {
+     "id": "E6",
+     "source": "get_trader_profile",
+     "fact": "Role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, typical_daily_otr 4.0, no risk-limit events in window (total 0)."
+    },
+    {
+     "id": "E7",
+     "source": "get_market_events",
+     "fact": "No market events returned for SYN.A in or around the window."
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "SYN.A 2026-10-21: avg_depth_top5 2492, avg_spread 2.56 ticks, ADV 849250."
+    },
+    {
+     "id": "E9",
+     "source": "reconstruct_book",
+     "fact": "At 11:10:07.546 asks: 10002 total 28238 of which the trader's 27524, 10003 49; bids 9997 239. BBO path: 9998/10000 at 11:10:04.762 moves to 9997/9998 by 11:10:05.283; after the cancel the ask is back at 10001 by 11:10:10.000."
+    },
+    {
+     "id": "E10",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts for T-X1021-02 in the 90 days before 2026-10-21."
+    }
+   ],
+   "indicators_not_matched": [
+    "high order-to-trade ratio (Annex II 4(f))",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "opposite-side execution before the cancel",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "price moved in the trader's favour before the execution and reverted after the cancel"
+   ],
+   "alert_id": "A-261021-0003",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E3",
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E3",
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E6",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E5",
+      "E7"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E2",
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill / genuine execution of resting order",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E2",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "Desk feedback from alert A-261016-0003 (T-X1016-03, SYN.A): 'For this desk a cancel within 200 ms of an unscheduled news item on the name is a news reaction... Treat as CLOSE_FP unless the sale follows the news.' It does not apply today: get_market_events returned no events and market_wide_cancels_1s_before_first_cancel is 0."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history",
+    "reconstruct_book"
+   ],
+   "window_used": "Detector window 11:09:07.546 to 11:10:14.762 (67.2s) on 2026-10-21. Order events were padded by 5s and the book was reconstructed with a 20-minute lookback. Trader alert history was checked over 90 days (no alerts). No longer-frame repetition analysis was done beyond repetitions_in_session.",
+   "what_would_change_my_mind": "I would reconsider if there were evidence that the 27524 sell was a genuine working order: a client or parent order behind it, a desk instruction to sell that size, or same-side executions before the trader's buy. The desk news-reaction feedback would apply only if a news item on SYN.A had been recorded within 200 ms of the cancel. I would move towards DRAFT_STOR if the same cycle were found elsewhere in the session or on other days."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1021-02"
+ }
+}
