@@ -97,4 +97,6 @@ Open this folder as the workspace root so the steering files and hooks load. The
 - `docs/en/05-build-plan.md` phases with milestones and cost notes
 - `docs/en/06-learning-resources.md` reading path
 - `docs/en/07-resume.md` how to resume work in a new session or on a new machine
+- `docs/en/08-broker-brief.md` the logic for a broker's surveillance team: what the agent does, the standard it applies, what it cannot do, the audit record, the numbers
+- `docs/en/09-product-decisions.md` every product decision with its reason, where AgentCore does the work, cost to run, proof points, limitations, roadmap
 - `docs/en/glossary.md`, `docs/en/decision-log.md`, `docs/en/STATUS.md`
