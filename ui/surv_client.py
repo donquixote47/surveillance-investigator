@@ -6,6 +6,7 @@ No Streamlit here, so these can be tested and reused by a CLI.
 
 Configuration (environment first, then ~/.config/surv-investigator/analyst-credentials.env; passwords are never read
 by the UI, the analyst types them): SURV_USER_POOL_ID, SURV_CLIENT_ID, SURV_API_URL, SURV_RUNTIME_ARN,
+SURV_RUNTIME_ENDPOINT (optional, default DEFAULT; `demo` is pinned to the evaluated version),
 SURV_RUNTIME_LOG_GROUP, SURV_REGION.
 """
 
@@ -14,6 +15,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass
@@ -27,6 +29,14 @@ CONFIG_FILE = Path.home() / ".config" / "surv-investigator" / "analyst-credentia
 NEEDED = ("SURV_USER_POOL_ID", "SURV_CLIENT_ID", "SURV_API_URL", "SURV_RUNTIME_ARN")
 
 
+def _log_group(configured: str | None, endpoint: str) -> str | None:
+    """Runtime logs land in `/aws/bedrock-agentcore/runtimes/<runtime id>-<ENDPOINT>`; the configured value names
+    the DEFAULT endpoint's group, so another endpoint's group is the same name with the suffix swapped."""
+    if not configured or endpoint == "DEFAULT":
+        return configured
+    return re.sub(r"-DEFAULT$", f"-{endpoint}", configured)
+
+
 @dataclass(frozen=True)
 class Config:
     region: str
@@ -35,6 +45,7 @@ class Config:
     api_url: str
     runtime_arn: str
     runtime_log_group: str | None
+    runtime_endpoint: str = "DEFAULT"  # SURV_RUNTIME_ENDPOINT: "demo" is pinned to the evaluated version, DEFAULT moves
 
     @classmethod
     def load(cls) -> Config:
@@ -55,7 +66,10 @@ class Config:
             client_id=values["SURV_CLIENT_ID"],
             api_url=values["SURV_API_URL"].rstrip("/"),
             runtime_arn=values["SURV_RUNTIME_ARN"],
-            runtime_log_group=values.get("SURV_RUNTIME_LOG_GROUP"),
+            runtime_log_group=_log_group(
+                values.get("SURV_RUNTIME_LOG_GROUP"), values.get("SURV_RUNTIME_ENDPOINT", "DEFAULT")
+            ),
+            runtime_endpoint=values.get("SURV_RUNTIME_ENDPOINT", "DEFAULT"),
         )
 
 
@@ -167,7 +181,7 @@ def invoke_runtime(
     }
     t0 = time.time()
     with httpx.Client(timeout=httpx.Timeout(timeout_s, connect=30.0)) as c:
-        r = c.post(url, params={"qualifier": "DEFAULT"}, headers=headers, json=payload)
+        r = c.post(url, params={"qualifier": cfg.runtime_endpoint}, headers=headers, json=payload)
     wall = time.time() - t0
     if r.status_code != 200:
         return {"error": f"Runtime HTTP {r.status_code}: {r.text[:500]}"}, session_id, wall

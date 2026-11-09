@@ -74,6 +74,10 @@ def sidebar() -> Session | None:
                         st.error(f"login failed: {type(exc).__name__}")
             return None
         st.success(f"{sess.username}  ·  level {sess.level}")
+        st.caption(
+            f"Runtime endpoint `{cfg.runtime_endpoint}`"
+            + (" (pinned to the evaluated version)" if cfg.runtime_endpoint == "demo" else "")
+        )
         if st.button("Log out", use_container_width=True):
             for k in ("session", "run", "run_session_id", "alert_id"):
                 ss().pop(k, None)

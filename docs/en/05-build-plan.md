@@ -100,8 +100,8 @@ Cost note: one run of ~150 alerts with 8-12 tool calls each on a Sonnet-class mo
 ## Phase 6 - Presentation
 
 - [ ] Slides from the docs: problem (primer sections 2-3), design (architecture), demo, evaluation, honest limitations, next steps.
-- [ ] Pin a `demo` Runtime endpoint to the evaluated version.
-- [ ] Rehearse the demo script with timings; prepare answers to the anticipated questions.
+- [x] `demo` Runtime endpoint pinned to v12 (2026-11-07; `agentcore add runtime-endpoint --version 12`, own log group `...-demo`); the UI selects it with `SURV_RUNTIME_ENDPOINT=demo`; the demo script (design doc section 12) re-run end to end against it and rewritten with the measured outcomes. **Alpha tagged `v0.1.0-alpha`.**
+- [ ] Rehearse the demo script with timings (steps verified individually 2026-11-07; a full timed run-through with the UI is pending); answers to the anticipated questions in design doc section 13, refreshed with the measured numbers.
 - [ ] Greek and English versions of the deck if the mentor prefers Greek.
 
 ## Stretch (after Phase 6)
