@@ -13,6 +13,7 @@
 5. `docs/en/decision-log.md` - τουλάχιστον οι πέντε τελευταίες καταχωρίσεις.
 6. `.kiro/steering/agentcore-gotchas.md` - επαληθευμένες συμπεριφορές και παγίδες του AgentCore, του Strands, του CLI και του Claude 5.5 στο Bedrock, η καθεμία με την ημερομηνία επαλήθευσης.
 7. Για τη συζήτηση με τον μέντορα: `docs/el/09-product-decisions.md` (το προϊόν και πού το AgentCore κάνει τη δουλειά) και `docs/el/08-broker-brief.md` (η λογική όπως τη διαβάζει μια ομάδα εποπτείας).
+8. Πριν αλλάξεις οτιδήποτε: `docs/el/10-operations.md` (κύκλος release, promotion rule στην πράξη, τι παρακολουθούμε, το backlog με σειρά προτεραιότητας και μετρημένα οφέλη).
 
 Το hook SessionStart (`.kiro/hooks/session-brief.json`) τυπώνει αυτόματα το STATUS, τις τελευταίες αποφάσεις και τα πρόσφατα αλλαγμένα αρχεία.
 

@@ -13,6 +13,7 @@ Clone `https://github.com/donquixote47/surveillance-investigator` (private; `gh 
 5. `docs/en/decision-log.md` - the last five entries at least.
 6. `.kiro/steering/agentcore-gotchas.md` - verified behaviours and traps of AgentCore, Strands, the CLI and Claude 5.5 on Bedrock, each with the date it was verified.
 7. For the mentor conversation: `docs/en/09-product-decisions.md` (the product and where AgentCore does the work) and `docs/en/08-broker-brief.md` (the logic as a surveillance team reads it).
+8. Before changing anything: `docs/en/10-operations.md` (release cycle, promotion rule in practice, what to watch, the ranked backlog with measured gains).
 
 The SessionStart hook (`.kiro/hooks/session-brief.json`) prints STATUS, the last decisions and recently changed files automatically.
 
