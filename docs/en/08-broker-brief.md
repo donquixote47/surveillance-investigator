@@ -152,7 +152,15 @@ The analyst UI links each case to its trace. Metrics per rule and per tool (how 
 
 ## 8. How it learns, and how it is kept from drifting
 
-Nothing in the model changes on its own. Four governed mechanisms, each with a human in control:
+Nothing in the model changes on its own: no fine-tuning, no weights touched. Behaviour can be changed at three levels, and who owns each level is the point:
+
+| Level | What it is | Who owns it | What changed it during evaluation |
+|---|---|---|---|
+| **Tools** | Deterministic code: which numbers `compute_discriminators` produces. | engineering | Three new fields (executions on the resting order before and after the trader's opposite trade, executed share). A number the agent can quote beats an instruction it has to trust. |
+| **The firm's standard** | The closure and escalation texts the agent reads on every alert through `get_procedures`. | compliance | Three sentences: the order-of-events test for genuine execution; a two-sided quoter's spread is ordinary income, not a benefit; the sequencing test does not apply to two-sided quoting. Every analyst, human or agent, reads the same rule. Applies on the next investigation, no redeploy. |
+| **The prompt** | The agent's instructions: tool order, how to weigh evidence, report format. Deliberately thin; it carries no domain rules. | engineering | Nothing. Both improvements (79.9% -> 93.5% safe close) came from the two levels above. The one machine-generated prompt change (section 8, item 3) was tested and rejected. |
+
+Four governed mechanisms carry changes through those levels, each with a human in control:
 
 1. **Case memory.** Every recorded disposition, override and feedback note is stored per trader and per desk and shown to the agent on the next alert, marked as context. The memory is the firm's: every analyst's decisions are visible to every later investigation, with the analyst's name and the override flag, so the same trader is treated the same way whoever has the shift; it never leaves the firm's deployment. Recall is one tool call per alert and costs about a quarter of the model tokens, because the recalled notes are re-read at every step of the reasoning. Measured effect over 167 alerts: +0.7 points safe close rate, override rate 6.6% with memory against 7.8% without; the one trader in the evaluation set with six prior closures who then spoofs was escalated both with and without memory.
 2. **Overrides become test cases.** Every analyst override is exported as a labelled case with the analyst's note, so the evaluation set grows with the alerts the agent got wrong.
