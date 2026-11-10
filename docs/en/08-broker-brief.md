@@ -38,6 +38,27 @@ The agent reads only the firm's own tables. It has no tool that reaches outside 
 
 **One requirement to check with the first customer.** The news-reaction discrimination rests on "cancel 187 ms after the headline". That needs the time the headline reached the market, not the editorial time, with millisecond precision in the same clock as the orders. Market data feeds provide it; not every firm stores it. Without it, news reactions are escalated rather than closed, which is the safe failure.
 
+## 2b. The three outcomes, and who can produce each
+
+Every alert ends in exactly one disposition.
+
+| Disposition | What it says | Who may propose | Who may record |
+|---|---|---|---|
+| **CLOSE_FP** (close as false positive) | The detector was wrong. A legitimate explanation covers what it saw, and the two features of spoofing are absent. The case closes at Level 1 with its note and evidence and is kept for five years. This is where 80-95% of alerts belong, which is why the safe close rate is the number we optimise. | the agent | L1 or L2 |
+| **ESCALATE** | Cannot be closed in good conscience, but not clear-cut abuse either: the features are present with no supported explanation, or the evidence is mixed. A Level-2 analyst takes it further. This is the *safe* outcome: an ESCALATE on a false positive costs analyst time; a CLOSE_FP on a spoofer costs a fine. The gate counts only the second mistake. | the agent | L1 or L2 |
+| **DRAFT_STOR** | Clear enough to report to the regulator. STOR = Suspicious Transaction and Order Report, the filing MAR Art. 16(2) requires when a firm has reasonable suspicion; it has fixed fields (who, what, when, why suspicious, which Annex II indicators). Needs both features, a clear benefit, and repetition or scale that leaves no reasonable alternative. | the agent (Level 1 may propose it) | **L2 only**; only L2 may ask the agent to draft the STOR fields; nothing is filed by the system |
+
+In the evaluation set, 139 alerts have ground truth CLOSE_FP, 25 ESCALATE and 3 DRAFT_STOR (the spoofer who repeats the cycle three to six times in ten minutes). The promoted run proposed 130 / 36 / 1: it under-called two of the three STOR cases as ESCALATE, which is safe (Level 2 sees them) but counts as an override.
+
+**Can the agent close an alert by itself? No.** When the agent "closes", it calls `propose_disposition` with CLOSE_FP, and the case gets `proposed_disposition`, `proposed_at`, `confidence`, `report` and the status *PROPOSED*. The alert is still open. Closing is the analyst pressing "record", writing the mandatory note, and the human path writing `recorded_disposition`, `recorded_by`, `recorded_at` and the status *CLOSED*. Four layers keep the agent on the proposing side:
+
+1. There is no recording tool among the twelve on its gateway.
+2. Rule 02 denies any action outside the twelve; a recording tool added by mistake tomorrow is denied until someone lists it on purpose.
+3. The tools Lambda has no code path that writes `recorded_*`; a unit test asserts it.
+4. The recording API is a different Lambda behind a different gateway, which the tools gateway's role cannot invoke, and the agent's only tools are the gateway's: it has no generic HTTP or code-execution tool. **This is the layer to protect when the agent is extended:** the analyst's token would be accepted by the recording API, so a general-purpose HTTP tool given to the agent "for convenience" would hand it the ability to record. Any new tool goes through the gateway or not at all.
+
+**What can still go wrong, as in any system with a human in the loop.** The agent can propose CLOSE_FP on a real spoofer; nothing forbids a wrong judgement, nor should it. That is what the gate measures (zero such proposals on 167 alerts in every run) and why the analyst reads before recording. If an analyst records without reading, the tool does not prevent the error; it makes it faster. That is a question of the firm's procedure and supervision, the same as for any Level-1 process, and it should be said plainly rather than hidden behind the controls above.
+
 ## 3. The firm's standard is the decision logic
 
 The agent does not carry its own theory of spoofing. On every alert it first reads the firm's three procedure texts through a tool, and the report has to apply them. In the demo these texts are synthetic but written the way a mid-sized firm's manual reads, aligned with Delegated Regulation (EU) 2016/522 Annex II (indicator 5(e) and supplementary indicator 4(f)), Delegated Regulation (EU) 2016/957 (record-keeping) and Delegated Regulation (EU) 2026/788 (time frames). The texts live in one file (`src/tools/procedures.py`) and are also stored in the agent's memory; a firm would replace them with its own.
