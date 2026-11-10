@@ -45,3 +45,5 @@ The Stop hook asks once per identical set of findings, so it cannot loop; it wil
 - Decision-log entries: date, decision, alternatives considered, reason, consequences.
 - `STATUS.md` is short and current; history belongs in the decision log and the build plan.
 - Dates in ISO format. Reference AgentCore docs by URL when stating behaviour.
+
+- Edits to the English and Greek twins and the commit that follows run **sequentially**, never as parallel tool calls: three times on 2026-11-08 the commit ran before the Greek edit landed (or the Greek edit failed on its anchor), leaving a commit with a sync-check `touch` and no content. Pattern: edit en -> edit el -> run docs-sync-check -> commit.

@@ -176,7 +176,16 @@ Namespaces (τμήματα από `[a-zA-Z0-9-_]`, οπότε το `SYN.A` απ�
 
 ## 9. Το Observability ως αρχείο ελέγχου (audit trail)
 
-Το Runtime με αυτόματη ενοργάνωση OTel (σημείο εισόδου `opentelemetry-instrument`) στέλνει traces στο CloudWatch (την υπηρεσία logs και μετρικών της AWS). Τα logs αποφάσεων policy καταγράφουν κάθε permit/deny μαζί με τον κανόνα που ενεργοποιήθηκε. Το UI του αναλυτή δείχνει, ανά υπόθεση, σύνδεσμο προς το trace και τη λίστα των αποφάσεων policy. Η ερώτηση του μέντορα «πώς θα το έλεγχε ένας regulator (εποπτική αρχή);» απαντιέται ανοίγοντας ένα trace.
+Runtime με αυτόματο OTel instrumentation (entry point `opentelemetry-instrument`) στέλνει traces στο CloudWatch. Τα logs αποφάσεων Policy καταγράφουν κάθε permit/deny με τον κανόνα που ενεργοποιήθηκε. Το UI του αναλυτή δείχνει, ανά υπόθεση, σύνδεσμο στο trace και τη λίστα αποφάσεων policy. Η ερώτηση του μέντορα «πώς θα το έλεγχε ένας regulator;» απαντιέται ανοίγοντας ένα trace.
+
+Όπως υλοποιήθηκε (2026-11-08):
+
+- **Spans Runtime** καταλήγουν στο `/aws/bedrock-agentcore/runtimes/<runtime id>-<ENDPOINT>` (ένα group ανά endpoint· `DEFAULT` και `demo`), streams `spans` και `runtime-logs-<session>`. Περίπου 40 spans ανά διερεύνηση: `POST /invocations`, `invoke_agent`, ένα `execute_event_loop_cycle` και ένα `chat <model id>` ανά γύρο μοντέλου (με tokens `gen_ai.usage.*`), και ανά κλήση tool τόσο `execute_tool surv___X` (πλευρά agent: status, call id) όσο και `mcp tools/call surv___X` (πλευρά MCP: `gen_ai.tool.call.arguments`, `gen_ai.tool.call.result` με την **πλήρη** έξοδο, `session.id`). Προσαρμοσμένα `trace_attributes` σε κάθε span του agent: `surv.alert_id`, `surv.mode`, `surv.analyst`, `surv.model_id`, `surv.policy_session_id`, `surv.memory`, `surv.bundle`. Το Transaction Search (ενεργοποιείται από το `agentcore deploy`) αντιγράφει τα spans στο `aws/spans`, που διαβάζουν το Evaluations και τα A/B tests.
+- **Vended logs Gateway** στο `/aws/vendedlogs/bedrock-agentcore/<gateway id>` (διατήρηση 30 ημερών στο demo) μέσω `CfnDeliverySource` + `CfnDeliveryDestination` + `CfnDelivery` στο CDK stack, traces σε X-Ray με τον ίδιο τρόπο· τίποτα δεν παραδίδεται χωρίς αυτά. Κάθε record: το σώμα του αιτήματος (tool, arguments, `_meta` με baggage και το policy session id), `body.policy.{decision, determiningPolicies, clientSuppliedPolicySessionId, temporal_latency_ms}`, και σφάλματα με το ακριβές μήνυμα IAM (έτσι διαγνώστηκαν το 403 των bundles και τα 429).
+- **Metrics** στο `AWS/Bedrock-AgentCore` με dimensions `PolicyEngine`, `Policy`, `ToolName`, `Mode`. Δεν χτίστηκε dashboard.
+- **Καταναλωτές του ίδιου αρχείου:** το trace panel του UI· το `evals/faithfulness.py` (έξοδοι tools από spans έναντι αριθμών στην αναφορά)· το `evals/evaluate_sessions.py` (το `EvaluationClient.run` συλλέγει spans ανά session id)· το `evals/recommend.py` (το Optimization διαβάζει το log group με ARN και όνομα υπηρεσίας σε χρονικό παράθυρο).
+- **Όγκος και κόστος:** περίπου 150 KB ανά διερεύνηση (170 MB για περίπου 1.100 διερευνήσεις)· εισαγωγή CloudWatch σεντ ανά χίλια alerts.
+- **Ανοιχτό για deployment παραγωγής, μη ρυθμισμένο στην alpha:** διατήρηση στην περίοδο τήρησης αρχείων (2016/957: πέντε χρόνια· 1.827 ημέρες στα groups ή εξαγωγή σε S3 με lifecycle Glacier), και έλεγχος πρόσβασης στα log groups ίσος με αυτόν στους πίνακες, αφού τα spans φέρουν πλήρεις εξόδους tools και επομένως δεδομένα traders· PII masking διαθέσιμο αν ζητηθεί.
 
 ## 10. Αξιολόγηση (λεπτομέρειες στο `04-synthetic-data-and-evaluation.md`)
 

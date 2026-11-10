@@ -131,7 +131,24 @@ The agent runs *as the analyst*: the analyst's token is forwarded to every tool 
 
 ## 7. The audit record
 
-For each investigation there is one trace: every tool call with its input and its full output, every rule decision (allowed or denied, by which rule), the model's calls and token counts, the proposal as written to the case, and the analyst's decision with the note. The analyst UI links each case to its trace. The record is in the firm's own AWS account (London region in the demo), with the retention the firm sets. This is the "records of the analysis" that Delegated Regulation (EU) 2016/957 asks for, produced as a by-product of running, not written up afterwards.
+For each investigation there is one trace, produced as a by-product of running and not written up afterwards. It is the "records of the analysis" that Delegated Regulation (EU) 2016/957 asks for, and it lives in the firm's own AWS account and region.
+
+**What is in it, in three layers.**
+
+| Layer | What it records | Independent of |
+|---|---|---|
+| Runtime traces (OpenTelemetry, automatic) | About 40 spans per investigation: the invocation, each model turn with token counts, each tool call with its arguments and its **full** output (a 38 KB page of order events is stored whole), and on every span: alert id, analyst, mode, model, configuration bundle, memory on/off. | the Gateway |
+| Gateway logs | Every request (tool, arguments, the analyst's identity), every rule decision (allowed or denied, which rule, how long the temporal check took), every error with its exact cause. Written even if someone bypasses the agent and calls the gateway with their own client. | the agent's code |
+| The case record | The proposal as written, the analyst's decision, name, time and note, the override flag. | both of the above |
+
+The analyst UI links each case to its trace. Metrics per rule and per tool (how often each rule denied, how many calls per tool) are available for a dashboard; the alpha uses the CloudWatch console.
+
+**What the record is used for besides the regulator.** Every defect found during the build was found here. The evidence-faithfulness check reads the tool outputs from the spans and compares them with the numbers in the report; the quality judges (section 8) read the same spans; the prompt-recommendation service reads the same traces. One record, four consumers.
+
+**Two decisions the firm makes before go-live.**
+
+- *Retention.* The demo keeps Gateway and Lambda logs for 30 days and Runtime traces indefinitely (the default). 2016/957 asks for five years. The options are a five-year retention on the log groups or a scheduled export to S3 with a lifecycle to cold storage, which costs a fraction. Measured size: about 150 KB per investigation; a thousand alerts a month for five years is about 9 GB.
+- *Who may read the traces.* Because the spans hold the full tool outputs, a trader's order history, profile and alert history are in the log store. It is the same account and region as the data itself, and it needs the same access controls (who may read the log groups) and, if the firm wants it, the PII masking CloudWatch offers. In the demo the data is synthetic; in production this is a conversation with the data protection officer before the first real alert.
 
 ## 8. How it learns, and how it is kept from drifting
 
