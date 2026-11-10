@@ -1,0 +1,429 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "session_id": "surv-eval-20261110T1833-sonnet-v4-A-261027-0007-eb960613",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-10T19:15:41+00:00",
+  "wall_s": 33.0
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261027-0007",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.7,
+   "report": {
+    "alert_id": "A-261027-0007",
+    "scenario": "SPOOFING",
+    "summary": "Algo trader T-X1027-04 placed one BUY LIMIT of 24922 (9.9x avg top-5 depth) 2 ticks below the bid, then 2.2s later sold 1418 by MARKET at the bid in a single burst and cancelled the whole BUY 215 ms afterwards. The order was one-sided, unfilled and had no parent or pegged type, and no event, risk cut or MM registration explains it. Price did not move in the trader's favour and did not revert, so a benefit (feature b) is not shown, and there was a single cycle. No accepted explanation is supported, so this is not closable at L1. It is escalated as mixed evidence, not drafted as a STOR. Prior closures for this trader relied on a pegged parent and symmetric cancels, and neither holds today.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "NEW BUY LIMIT O-00021832 qty 24922 at 9998 at 13:24:13.450 with best bid 10000 / ask 10001; CANCEL of the full 24922 at 13:24:15.860 with no fills on it"
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "MARKET SELL O-00021837 of 1418 at 13:24:15.644 filled at 10000 in four fills (202, 213, 885, 118)"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 9.94; distance_from_touch_ticks 2.0; cancel_symmetry 0.0; same_side_fill_qty 0; opposite_side_fill_qty 1418, 215.4 ms before first cancel; cancel_ratio 1.0"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks 0.0, post_cancel_move_ticks 0.0, reversion_ticks 0.0, round_trip_ticks null, repetitions_in_session 1, parent_order_ids empty, order_types LIMIT only, market_wide_cancels_1s_before_first_cancel 2"
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "role ALGO, registered_mm_instruments empty, typical_order_size 250, no risk events in window"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "no market events in or around the window"
+     },
+     {
+      "id": "E7",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2506 on SYN.A; avg spread 2.7 ticks"
+     },
+     {
+      "id": "E8",
+      "source": "get_trader_alert_history",
+      "fact": "6 prior SPOOFING alerts on SYN.A, all CLOSE_FP by L1-analyst-02 with note 'pegged execution algo on this name; cancels symmetric; parent order explains children'"
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "opposite-side execution before the cancel"
+    ],
+    "indicators_not_matched": [
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)",
+     "high order-to-trade ratio"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E3",
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing (pegged/child of a parent)",
+      "ruled_out_by": [
+       "E3",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E4",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1",
+       "E2"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "undetermined"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.7,
+    "what_would_change_my_mind": "A parent order or client instruction showing the 24922 BUY was a genuine working order, or evidence that the SELL and BUY belong to different clients. More cycles in the session or across sessions on the same pattern, plus a favourable move and reversion, would move this towards DRAFT_STOR.",
+    "memory_used": [
+     "H-T-X1027-04-01 (2026-10-20) and five earlier alerts H-T-X1027-04-02 to -06 on SYN.A, all CLOSE_FP by L1-analyst-02: 'pegged execution algo on this name; cancels symmetric; parent order explains children'. Today's tape has no parent, no PEGGED type and cancel_symmetry 0.0, so that explanation does not hold. I did not rely on the history to close."
+    ],
+    "window_used": "Detector window 13:23:15.644 to 13:24:23.450 (67.8 s) with 5 s padding on the order events; no longer frame was analysed beyond the 90-day alert history.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261027-0007",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261027-0007",
+   "proposed_at": "2026-11-10T19:16:09+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261027-0007"
+    },
+    "ms": 198,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 196,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261027-0007",
+     "trader_id": "T-X1027-04",
+     "instrument": "SYN.A",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 1056,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261027-0007",
+     "pad_seconds": 5
+    },
+    "ms": 216,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261027-0007"
+    },
+    "ms": 306,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1027-04",
+     "alert_id": "A-261027-0007"
+    },
+    "ms": 225,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1793107395644802528,
+     "window_end": 1793107463450761728
+    },
+    "ms": 199,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-27",
+     "instrument": "SYN.A"
+    },
+    "ms": 247,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1027-04",
+     "before_date": "2026-10-27"
+    },
+    "ms": 160,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261027-0007",
+     "confidence": 0.7,
+     "disposition": "ESCALATE",
+     "report": "<report>"
+    },
+    "ms": 227,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** ESCALATE, with confidence 0.70. This is a proposal only. A human analyst records the decision.\n\n**Three facts that drove it**\n1. The trader placed one BUY LIMIT of 24,922 (9.94x average top-5 depth) 2 ticks below the bid. Nothing on that order filled, and all of it was cancelled. `cancel_symmetry` is 0.0, and there is no parent order and no PEGGED type.\n2. A MARKET SELL of 1,418 executed at the bid 215 ms before the cancel. This is an opposite-side execution while the large order was resting.\n3. Price did not move in the trader's favour and did not revert, and there was only one cycle in the session. No accepted explanation is supported: the trader has no registered market-making instruments, there were no risk events and there were no market events.\n\nThe six earlier closures on this trader cited a pegged parent and symmetric cancels. Neither holds on today's tape, so I did not rely on them.\n\nBecause there is no favourable move, I did not find a clear benefit from the sell. That, together with the single cycle, is why this is ESCALATE (mixed evidence) rather than DRAFT_STOR.\n\n**What would change my mind:** A parent order or client instruction showing the 24,922 BUY was a genuine working order would push toward closing. More cycles of this pattern, with a favourable move and reversion, would push toward DRAFT_STOR.",
+  "usage": {
+   "input_tokens": 12,
+   "output_tokens": 3513,
+   "total_tokens": 65604,
+   "cache_read_tokens": 48657,
+   "cache_write_tokens": 13422,
+   "model_calls": 5
+  },
+  "duration_s": 27.3,
+  "session_id": "surv-eval-20261110T1833-sonnet-v4-A-261027-0007-eb960613",
+  "error": null,
+  "bundle": "none",
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261027-0007",
+  "case_id": "C-A-261027-0007",
+  "confidence": "0.7",
+  "date": "2026-10-27",
+  "proposal_count": "6",
+  "proposed_at": "2026-11-10T19:16:09+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "Algo trader T-X1027-04 placed one BUY LIMIT of 24922 (9.9x avg top-5 depth) 2 ticks below the bid, then 2.2s later sold 1418 by MARKET at the bid in a single burst and cancelled the whole BUY 215 ms afterwards. The order was one-sided, unfilled and had no parent or pegged type, and no event, risk cut or MM registration explains it. Price did not move in the trader's favour and did not revert, so a benefit (feature b) is not shown, and there was a single cycle. No accepted explanation is supported, so this is not closable at L1. It is escalated as mixed evidence, not drafted as a STOR. Prior closures for this trader relied on a pegged parent and symmetric cancels, and neither holds today.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "NEW BUY LIMIT O-00021832 qty 24922 at 9998 at 13:24:13.450 with best bid 10000 / ask 10001; CANCEL of the full 24922 at 13:24:15.860 with no fills on it"
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "MARKET SELL O-00021837 of 1418 at 13:24:15.644 filled at 10000 in four fills (202, 213, 885, 118)"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 9.94; distance_from_touch_ticks 2.0; cancel_symmetry 0.0; same_side_fill_qty 0; opposite_side_fill_qty 1418, 215.4 ms before first cancel; cancel_ratio 1.0"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks 0.0, post_cancel_move_ticks 0.0, reversion_ticks 0.0, round_trip_ticks null, repetitions_in_session 1, parent_order_ids empty, order_types LIMIT only, market_wide_cancels_1s_before_first_cancel 2"
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "role ALGO, registered_mm_instruments empty, typical_order_size 250, no risk events in window"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "no market events in or around the window"
+    },
+    {
+     "id": "E7",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2506 on SYN.A; avg spread 2.7 ticks"
+    },
+    {
+     "id": "E8",
+     "source": "get_trader_alert_history",
+     "fact": "6 prior SPOOFING alerts on SYN.A, all CLOSE_FP by L1-analyst-02 with note 'pegged execution algo on this name; cancels symmetric; parent order explains children'"
+    }
+   ],
+   "indicators_not_matched": [
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)",
+    "high order-to-trade ratio"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "orders with no intention to execute",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "opposite-side execution before the cancel"
+   ],
+   "alert_id": "A-261027-0007",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E3",
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing (pegged/child of a parent)",
+     "ruled_out_by": [
+      "E3",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E4",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1",
+      "E2"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "undetermined"
+    }
+   ],
+   "memory_used": [
+    "H-T-X1027-04-01 (2026-10-20) and five earlier alerts H-T-X1027-04-02 to -06 on SYN.A, all CLOSE_FP by L1-analyst-02: 'pegged execution algo on this name; cancels symmetric; parent order explains children'. Today's tape has no parent, no PEGGED type and cancel_symmetry 0.0, so that explanation does not hold. I did not rely on the history to close."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 13:23:15.644 to 13:24:23.450 (67.8 s) with 5 s padding on the order events; no longer frame was analysed beyond the 90-day alert history.",
+   "what_would_change_my_mind": "A parent order or client instruction showing the 24922 BUY was a genuine working order, or evidence that the SELL and BUY belong to different clients. More cycles in the session or across sessions on the same pattern, plus a favourable move and reversion, would move this towards DRAFT_STOR."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1027-04"
+ }
+}

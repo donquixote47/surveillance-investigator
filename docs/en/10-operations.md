@@ -1,6 +1,6 @@
 # 10 - Operating and improving the product
 
-How the investigator is run after the alpha, how a change becomes a release, what to watch, and where the measured room for improvement is. Written 2026-11-08 against the promoted configuration (Runtime v12, run `20261106T1126-sonnet-v3`). The numbers come from `04-synthetic-data-and-evaluation.md` section 4.6 and from the span analysis in section 4 below.
+How the investigator is run after the alpha, how a change becomes a release, what to watch, and where the measured room for improvement is. Written 2026-11-08 against the then promoted configuration (Runtime v12, run `20261106T1126-sonnet-v3`); section 5 updated 2026-11-10 with the measured result of iteration 3 (Runtime v14, run `20261110T1833-sonnet-v4`). The numbers come from `04-synthetic-data-and-evaluation.md` section 4.6 and from the span analysis in section 4 below.
 
 ## 1. From alpha to pilot, in order
 
@@ -82,17 +82,19 @@ Findings:
 
 ## 5. Backlog, grouped and ranked
 
-**Iteration 3 (next): latency and cost, low risk.**
+**Iteration 3 (done 2026-11-10, run `20261110T1833-sonnet-v4`, Runtime v14): latency and cost, low risk.** Estimated against measured:
 
-| Change | Estimated gain | Risk | Measured by |
-|---|---|---|---|
-| Schema alias `ruled_out` -> `ruled_out_by` | -1.2 s mean, -6% tokens, 14% fewer guard rejections | none | harness, rejection count |
-| `cache_config=CacheConfig(strategy="auto")` | -55-65% input cost, -2-4 s | cache hit rate on the cross-region profile | harness; `cacheReadInputTokens` in the spans |
-| `ConcurrentToolExecutor` for the evidence tools | -1 s | temporal policies under concurrent requests | harness, Policy denials |
-| `get_case_context` (alert + procedures + memory in one tool) | -3 s, -8-15% tokens | loses the agent's targeted memory query and the separate memory switch | harness, memory on/off arm |
-| `effort` low as a bundle | perhaps -5 s | report quality | rubric + harness |
+| Change | Estimated | Measured (167 alerts, paired with v3) |
+|---|---|---|
+| Fold `ruled_out` into `ruled_out_by` in the report model | -1.2 s mean, -6% tokens, 14% fewer guard rejections | rejections **24 -> 1** (the one left is a report sent as a string); p95 38.0 -> 35.6 s; output tokens -8%; mean latency unchanged |
+| `CacheConfig` on the Bedrock model (system prompt, tools, last user message) | -55-65% input cost, -2-4 s | **-51% model cost** ($31.26 -> $15.25; $0.187 -> $0.091 per alert); 72.7% of prompt tokens read from cache, 27.3% written, 11 at full price; **0 s** saved |
+| `ConcurrentToolExecutor` for the evidence tools | -1 s | not done; the measured ceiling is ~1 s |
+| `get_case_context` (alert + procedures + memory in one tool) | -3 s, -8-15% tokens | not done; design doc section 7 |
+| `effort` low as a bundle | perhaps -5 s | not done; the only lever left on the 12-second report turn |
 
-Plan: the first two on a branch, a 30-alert slice locally, then a full run v4 under the promotion rule.
+Three lessons from the measurement. The cache saves money, not time: Bedrock still processes the cached prefix, cheaper, and the model's output time is the latency. A field alias on a model with `extra="forbid"` has to handle the model sending **both** names at once (seen on v13 in the first smoke test, which a plain pydantic `AliasChoices` does not cover; a `model_validator(mode="before")` does). And Bedrock reports `inputTokens` without the cached tokens, so a token or cost metric that reads only that field shows a 99.98% fall; `metrics.py` adds `cacheReadInputTokens` and `cacheWriteInputTokens` back as `prompt_total`, and the cost line prices reads at 0.1x and writes at 1.25x of the input price (conservative; the pricing page announced a lower read price for Sonnet 5.5 from 2026-10-07 that is not yet read off the page). Four of 167 dispositions moved (three towards the label, one away), which neither change can cause; that is the run-to-run variance of item 2 in section 1, still unmeasured, and it bounds what a one-point difference between runs can mean.
+
+**Iteration 4 (next): the report turn.** `effort` medium -> low as a configuration bundle, judged pass mandatory because it is the report that changes; the variance run (item 2 in section 1) first, so that the result can be read.
 
 **Decision quality (measured gaps).**
 - F-STOP-1 0/6: a question for the standard first. If "close", a field `loss_making_exit` (adverse move + negative round trip + no reversion, which exist separately) and a sentence; if "escalate", the label changes.

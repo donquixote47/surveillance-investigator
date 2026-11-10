@@ -26,6 +26,7 @@ from report import InvestigationReport
 from strands import Agent
 from strands.hooks import AfterToolCallEvent, BeforeToolCallEvent, HookProvider, HookRegistry
 from strands.models.bedrock import BedrockModel
+from strands.models.model import CacheConfig
 from strands.tools.executors import SequentialToolExecutor
 from strands.tools.mcp import MCPClient
 from strands.tools.mcp._compat import MCP_V2
@@ -303,11 +304,18 @@ def build_agent(
     # A bundle's system_prompt is used verbatim (that is what a bundle is for); the mode/memory variants apply only
     # to the code's own prompt. The harness uses bundles with the default mode and memory on.
     prompt_text = cfg.get("system_prompt") or system_prompt(mode, memory=memory)
+    # Prompt caching (iteration 3): an investigation is ~6 model turns that each re-read the same system prompt, the
+    # 12 tool definitions and every earlier tool result (77k input tokens per alert in v3). Strands places cache
+    # points at the end of the system prompt, on the tool block and on the last user message, so each turn re-reads
+    # the prefix from cache (5-minute TTL, 512-token minimum per checkpoint). `SURV_PROMPT_CACHE=off` is the
+    # evaluation arm without it; `cacheReadInputTokens` in the usage says whether the cross-region profile hits.
+    cache = None if os.environ.get("SURV_PROMPT_CACHE", "on").lower() == "off" else CacheConfig(tools_ttl=True)
     model = BedrockModel(
         model_id=model_id,
         region_name=REGION,
         max_tokens=int(os.environ.get("SURV_MAX_TOKENS", "32000")),
         additional_request_fields={"thinking": {"type": "adaptive"}, "output_config": {"effort": effort}},
+        cache_config=cache,
     )
     mcp_headers = {"Authorization": f"Bearer {access_token}", POLICY_SESSION_HEADER: policy_session_id}
     mcp = MCPClient(
@@ -375,9 +383,13 @@ def investigate(
         try:
             u = result.metrics.accumulated_usage
             usage = {
+                # Bedrock reports cached prefix tokens separately: `input_tokens` is what was read at full price,
+                # the two cache counts are what was read from / written to the cache.
                 "input_tokens": u.get("inputTokens"),
                 "output_tokens": u.get("outputTokens"),
                 "total_tokens": u.get("totalTokens"),
+                "cache_read_tokens": u.get("cacheReadInputTokens", 0),
+                "cache_write_tokens": u.get("cacheWriteInputTokens", 0),
                 "model_calls": len(result.metrics.cycle_durations),
             }
         except Exception:  # metrics shape changed; the run itself is fine

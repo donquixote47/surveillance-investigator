@@ -1,6 +1,6 @@
 # 10 - Λειτουργία και βελτίωση του προϊόντος
 
-Πώς τρέχει ο investigator μετά την alpha, πώς μια αλλαγή γίνεται release, τι παρακολουθούμε και πού βρίσκεται το μετρημένο περιθώριο βελτίωσης. Γράφτηκε 2026-11-08 με βάση το promoted configuration (Runtime v12, run `20261106T1126-sonnet-v3`). Οι αριθμοί προέρχονται από το `04-synthetic-data-and-evaluation.md` ενότητα 4.6 και από την ανάλυση spans στην ενότητα 4 παρακάτω.
+Πώς τρέχει ο investigator μετά την alpha, πώς μια αλλαγή γίνεται release, τι παρακολουθούμε και πού βρίσκεται το μετρημένο περιθώριο βελτίωσης. Γράφτηκε 2026-11-08 με βάση το τότε promoted configuration (Runtime v12, run `20261106T1126-sonnet-v3`)· η ενότητα 5 ενημερώθηκε 2026-11-10 με το μετρημένο αποτέλεσμα του iteration 3 (Runtime v14, run `20261110T1833-sonnet-v4`). Οι αριθμοί προέρχονται από το `04-synthetic-data-and-evaluation.md` ενότητα 4.6 και από την ανάλυση spans στην ενότητα 4 παρακάτω.
 
 ## 1. Από την alpha στο pilot, με τη σειρά
 
@@ -82,17 +82,19 @@
 
 ## 5. Backlog, ομαδοποιημένο και με σειρά προτεραιότητας
 
-**Iteration 3 (επόμενο): latency και κόστος, χαμηλός κίνδυνος.**
+**Iteration 3 (έγινε 2026-11-10, run `20261110T1833-sonnet-v4`, Runtime v14): latency και κόστος, χαμηλός κίνδυνος.** Εκτίμηση έναντι μέτρησης:
 
-| Αλλαγή | Εκτιμώμενο όφελος | Κίνδυνος | Μετριέται με |
-|---|---|---|---|
-| Schema alias `ruled_out` -> `ruled_out_by` | -1.2 s μέσος όρος, -6% tokens, 14% λιγότερα guard rejections | κανένας | harness, πλήθος rejections |
-| `cache_config=CacheConfig(strategy="auto")` | -55-65% input cost, -2-4 s | cache hit rate στο cross-region profile | harness· `cacheReadInputTokens` στα spans |
-| `ConcurrentToolExecutor` για τα evidence tools | -1 s | temporal policies υπό concurrent requests | harness, Policy denials |
-| `get_case_context` (alert + procedures + memory σε ένα tool) | -3 s, -8-15% tokens | χάνεται το στοχευμένο memory query του agent και ο ξεχωριστός διακόπτης memory | harness, memory on/off arm |
-| `effort` low ως bundle | ίσως -5 s | ποιότητα report | rubric + harness |
+| Αλλαγή | Εκτίμηση | Μέτρηση (167 alerts, paired με v3) |
+|---|---|---|
+| Δίπλωμα του `ruled_out` στο `ruled_out_by` στο report model | -1.2 s μέσος όρος, -6% tokens, 14% λιγότερα guard rejections | rejections **24 -> 1** (το ένα που έμεινε είναι report σταλμένο ως string)· p95 38.0 -> 35.6 s· output tokens -8%· μέσος χρόνος αμετάβλητος |
+| `CacheConfig` στο Bedrock model (system prompt, tools, τελευταίο user message) | -55-65% input cost, -2-4 s | **-51% κόστος model** ($31.26 -> $15.25· $0.187 -> $0.091 ανά alert)· 72.7% των prompt tokens από cache, 27.3% γραμμένα, 11 σε πλήρη τιμή· **0 s** εξοικονόμηση |
+| `ConcurrentToolExecutor` για τα evidence tools | -1 s | δεν έγινε· το μετρημένο ταβάνι είναι ~1 s |
+| `get_case_context` (alert + procedures + memory σε ένα tool) | -3 s, -8-15% tokens | δεν έγινε· design doc ενότητα 7 |
+| `effort` low ως bundle | ίσως -5 s | δεν έγινε· ο μόνος μοχλός που έμεινε για το turn των 12 δευτερολέπτων του report |
 
-Πλάνο: τα δύο πρώτα σε branch, slice 30 alerts τοπικά, μετά πλήρες run v4 υπό τον promotion rule.
+Τρία μαθήματα από τη μέτρηση. Η cache εξοικονομεί χρήματα, όχι χρόνο: το Bedrock εξακολουθεί να επεξεργάζεται το cached prefix, φθηνότερα, και ο χρόνος εξόδου του model είναι το latency. Ένα alias πεδίου σε model με `extra="forbid"` πρέπει να χειρίζεται το model να στέλνει **και τα δύο** ονόματα ταυτόχρονα (φάνηκε στο v13 στο πρώτο smoke test, κάτι που ένα απλό pydantic `AliasChoices` δεν καλύπτει· ένας `model_validator(mode="before")` το καλύπτει). Και το Bedrock αναφέρει `inputTokens` χωρίς τα cached tokens, άρα μια μετρική tokens ή κόστους που διαβάζει μόνο αυτό το πεδίο δείχνει πτώση 99.98%· το `metrics.py` προσθέτει πίσω τα `cacheReadInputTokens` και `cacheWriteInputTokens` ως `prompt_total`, και η γραμμή κόστους τιμολογεί τα reads στο 0.1x και τα writes στο 1.25x της τιμής input (συντηρητικά· η σελίδα τιμών ανακοίνωσε χαμηλότερη τιμή read για το Sonnet 5.5 από 2026-10-07 που δεν έχει ακόμη διαβαστεί από τη σελίδα). Τέσσερις από τις 167 dispositions κινήθηκαν (τρεις προς το label, μία μακριά), κάτι που καμία από τις δύο αλλαγές δεν μπορεί να προκαλέσει· αυτό είναι το run-to-run variance του σημείου 2 στην ενότητα 1, ακόμη αμέτρητο, και ορίζει τι μπορεί να σημαίνει διαφορά μίας μονάδας μεταξύ runs.
+
+**Iteration 4 (επόμενο): το turn του report.** `effort` medium -> low ως configuration bundle, judged pass υποχρεωτικό γιατί αυτό που αλλάζει είναι το report· πρώτα το variance run (σημείο 2 στην ενότητα 1), ώστε το αποτέλεσμα να μπορεί να διαβαστεί.
 
 **Ποιότητα αποφάσεων (μετρημένα κενά).**
 - F-STOP-1 0/6: ερώτημα για το standard πρώτα. Αν "close", ένα πεδίο `loss_making_exit` (adverse move + αρνητικό round trip + χωρίς reversion, που υπάρχουν ξεχωριστά) και μια πρόταση· αν "escalate", αλλάζει το label.

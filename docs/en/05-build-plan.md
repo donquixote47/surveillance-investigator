@@ -104,6 +104,12 @@ Cost note: one run of ~150 alerts with 8-12 tool calls each on a Sonnet-class mo
 - [ ] Rehearse the demo script with timings (steps verified individually 2026-11-07; a full timed run-through with the UI is pending); answers to the anticipated questions in design doc section 13, refreshed with the measured numbers.
 - [ ] Greek and English versions of the deck if the mentor prefers Greek.
 
+## Iterations after the alpha (operations doc section 5)
+
+- [x] Iteration 3 (2026-11-10, Runtime v14, run `20261110T1833-sonnet-v4`): Bedrock prompt caching through Strands `CacheConfig` and the `ruled_out` field alias. Promotion rule PASS against v3; model cost per alert $0.187 -> $0.091, guard rejections 24 -> 1, p95 38.0 -> 35.6 s, mean latency and decision quality unchanged. Judged pass run. Release (moving `demo` from v12 to v14) is a separate decision.
+- [ ] Variance run: the same alert five times, twenty alerts (~$5 with caching), so that a one- or two-point difference between runs can be read.
+- [ ] Iteration 4: `effort` medium -> low as a configuration bundle, judged pass mandatory.
+
 ## Stretch (after Phase 6)
 
 - ABIDES background flow with our scenario injection on top.

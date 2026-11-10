@@ -7,7 +7,7 @@ A test in `tests/test_report.py` checks that every property here is also declare
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -51,6 +51,27 @@ class Explanation(BaseModel):
     explanation: str = Field(min_length=3)
     ruled_out_by: list[str] = Field(default_factory=list, description="evidence ids")
     verdict: Verdict
+
+    @model_validator(mode="before")
+    @classmethod
+    def _accept_ruled_out(cls, data: Any) -> Any:
+        """The model wrote `ruled_out` for `ruled_out_by` in 24 of 167 v3 sessions (132 explanations), sometimes
+        alone and sometimes next to an empty `ruled_out_by` (seen on Runtime v13), and each slip cost a full report
+        rewrite (+8.6 s, +32k tokens). The slip is folded into the declared name here; the field is always emitted
+        as `ruled_out_by`, which is what the Gateway schema declares. Every other unknown key is still refused."""
+        if isinstance(data, dict) and "ruled_out" in data:
+            data = dict(data)
+            legacy = data.pop("ruled_out")
+            if not data.get("ruled_out_by"):
+                data["ruled_out_by"] = legacy
+        return data
+
+    @field_validator("ruled_out_by", mode="before")
+    @classmethod
+    def _one_id_is_a_list(cls, v: object) -> object:
+        if v is None:
+            return []
+        return [v] if isinstance(v, str) else v
 
     @model_validator(mode="after")
     def _ruled_out_needs_evidence(self) -> Explanation:

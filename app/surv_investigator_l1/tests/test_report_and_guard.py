@@ -94,6 +94,44 @@ def test_ruled_out_needs_evidence_and_known_ids():
         InvestigationReport.model_validate(bad)
 
 
+def test_ruled_out_is_accepted_as_an_alias_and_emitted_as_ruled_out_by():
+    """The v3 slip (24/167 sessions): the model writes `ruled_out` for `ruled_out_by`. Accepted on input, a lone
+    id is wrapped in a list, and the Gateway payload always carries the declared name."""
+    slip = {
+        **GOOD,
+        "legitimate_explanations_considered": [
+            {"explanation": "market making", "ruled_out": ["E3"], "verdict": "ruled_out"},
+            {"explanation": "fat finger", "ruled_out": "E2", "verdict": "ruled_out"},
+            # both keys at once, as Runtime v13 produced on 2026-11-10: the declared one wins when it is filled
+            {"explanation": "iceberg", "ruled_out": ["E1"], "ruled_out_by": ["E4"], "verdict": "ruled_out"},
+            {"explanation": "algo re-pricing", "ruled_out": [], "ruled_out_by": [], "verdict": "undetermined"},
+            {"explanation": "news", "ruled_out": None, "verdict": "undetermined"},
+        ],
+    }
+    r = InvestigationReport.model_validate(slip)
+    assert [e.ruled_out_by for e in r.legitimate_explanations_considered] == [["E3"], ["E2"], ["E4"], [], []]
+    gw = r.for_gateway()["legitimate_explanations_considered"]
+    assert all("ruled_out_by" in e and "ruled_out" not in e for e in gw)
+    # the alias does not loosen the rest: an unknown id under the alias is still caught
+    bad = {
+        **GOOD,
+        "legitimate_explanations_considered": [
+            {"explanation": "market making", "ruled_out": ["E9"], "verdict": "ruled_out"}
+        ],
+    }
+    with pytest.raises(ValueError, match="unknown evidence ids"):
+        InvestigationReport.model_validate(bad)
+    # and other unknown keys are still refused
+    bad = {
+        **GOOD,
+        "legitimate_explanations_considered": [
+            {"explanation": "market making", "ruled_out_by": ["E3"], "verdict": "ruled_out", "reason": "because"}
+        ],
+    }
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        InvestigationReport.model_validate(bad)
+
+
 def test_evidence_source_must_be_a_tool():
     bad = {
         **GOOD,

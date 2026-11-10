@@ -153,12 +153,13 @@ class LocalBackend:
         sys.path.insert(0, str(ROOT / "app" / "surv_investigator_l1"))
         from investigator import investigate
 
-        self._investigate, self.tokens, self.mode, self.model_id, self.analyst = (
+        self._investigate, self.tokens, self.mode, self.model_id, self.analyst, self.memory = (
             investigate,
             tokens,
             mode,
             model_id,
             analyst,
+            memory,
         )
 
     def investigate(self, alert_id: str, session_id: str) -> dict[str, Any]:
@@ -250,6 +251,8 @@ def row_from(
         "wall_s": meta.get("wall_s"),
         "input_tokens": usage.get("input_tokens"),
         "output_tokens": usage.get("output_tokens"),
+        "cache_read_tokens": usage.get("cache_read_tokens", 0),
+        "cache_write_tokens": usage.get("cache_write_tokens", 0),
         "model_calls": usage.get("model_calls"),
         "n_tool_calls": len(calls),
         "tools": [c.get("tool") for c in calls],

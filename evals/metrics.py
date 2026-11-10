@@ -31,6 +31,11 @@ ASSUMED_PRICES_PER_M = {
     "sonnet": (2.00, 10.00),
     "opus": (4.00, 20.00),
 }
+# Prompt-cache multipliers on the input price (Anthropic on Bedrock, standard terms): a cache write costs 1.25x, a
+# cache read 0.1x. The Bedrock pricing page announced a lower read price for Sonnet 5.5 from 2026-10-07; 0.1 is kept
+# as the conservative (higher-cost) assumption until the exact figure is read off the page.
+CACHE_WRITE_X = 1.25
+CACHE_READ_X = 0.10
 
 
 def price_for(model_id: str | None) -> tuple[float, float] | None:
@@ -120,9 +125,23 @@ def compute(rows: list[dict[str, Any]], *, model_id: str | None = None) -> dict[
     walls = [float(r["wall_s"]) for r in rows if r.get("wall_s") is not None]
     tin = [int(r["input_tokens"]) for r in rows if r.get("input_tokens") is not None]
     tout = [int(r["output_tokens"]) for r in rows if r.get("output_tokens") is not None]
+    cread = sum(int(r.get("cache_read_tokens") or 0) for r in rows)
+    cwrite = sum(int(r.get("cache_write_tokens") or 0) for r in rows)
     calls = [int(r["n_tool_calls"]) for r in rows if r.get("n_tool_calls") is not None]
     price = price_for(model_id)
-    cost = (sum(tin) * price[0] + sum(tout) * price[1]) / 1e6 if price and (tin or tout) else None
+    cost = (
+        (
+            sum(tin) * price[0]
+            + cread * price[0] * CACHE_READ_X
+            + cwrite * price[0] * CACHE_WRITE_X
+            + sum(tout) * price[1]
+        )
+        / 1e6
+        if price and (tin or tout)
+        else None
+    )
+    # all tokens the model read, cached or not: the number to compare across runs with and without caching
+    prompt_total = sum(tin) + cread + cwrite
 
     prior_recorded = sorted(r["alert_id"] for r in rows if r.get("prior_recorded"))
     bundles_seen = sorted({str(r.get("bundle")) for r in rows if r.get("bundle")})
@@ -163,6 +182,10 @@ def compute(rows: list[dict[str, Any]], *, model_id: str | None = None) -> dict[
             "input_mean": round(mean(tin)) if tin else None,
             "output_mean": round(mean(tout)) if tout else None,
             "input_max": max(tin) if tin else None,
+            "cache_read_total": cread,
+            "cache_write_total": cwrite,
+            "prompt_total": prompt_total,
+            "cache_hit_rate": round(cread / prompt_total, 3) if prompt_total else None,
             "tool_calls_mean": round(mean(calls), 1) if calls else None,
             "tool_calls_median": median(calls) if calls else None,
             "assumed_price_per_m": price,
@@ -379,12 +402,24 @@ def render_markdown(
     lines.append(
         f"| tokens per alert, in / out (mean) | {tok['input_mean']} / {tok['output_mean']} (max in {tok['input_max']}) |"
     )
+    if tok.get("cache_read_total") or tok.get("cache_write_total"):
+        n_ = max(m["n"], 1)
+        lines.append(
+            f"| prompt cache, per alert | read {round(tok['cache_read_total'] / n_)} / write "
+            f"{round(tok['cache_write_total'] / n_)} / full price {tok['input_mean']} tokens; "
+            f"hit rate {tok['cache_hit_rate']} of {round(tok['prompt_total'] / n_)} prompt tokens |"
+        )
     lines.append(f"| tool calls per alert (mean / median) | {tok['tool_calls_mean']} / {tok['tool_calls_median']} |")
     if tok["estimated_cost_usd"] is not None:
         pi, po = tok["assumed_price_per_m"]
+        cache_note = (
+            f"; cache read {CACHE_READ_X}x, write {CACHE_WRITE_X}x of input"
+            if tok.get("cache_read_total") or tok.get("cache_write_total")
+            else ""
+        )
         lines.append(
             f"| estimated model cost | ${tok['estimated_cost_usd']} total, ${tok['estimated_cost_per_alert_usd']} per alert "
-            f"(assumed ${pi}/${po} per M tokens in/out; not verified against the pricing page) |"
+            f"(assumed ${pi}/${po} per M tokens in/out{cache_note}; not verified against the pricing page) |"
         )
     lines.append("")
     if baselines:

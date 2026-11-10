@@ -66,25 +66,26 @@ What the customer provides: order events with best bid/ask, trades, trader maste
 
 | Item | Measured | Note |
 |---|---|---|
-| Model tokens per alert, Sonnet 5.5 | 77k in / 3.4k out, about **$0.19** | Opus 5.5: 147k / 4.4k, about $0.68. |
-| Latency per alert | 27 s median, 38 s p95 (Sonnet); 51 s / 64 s (Opus) | Ten tool calls per investigation. |
+| Model tokens per alert, Sonnet 5.5 | 72k read / 3.1k out, about **$0.09** with Bedrock prompt caching (run v4, 2026-11-10): 73% of what the model reads comes from cache at a tenth of the price | $0.19 without caching (v3); Opus 5.5 without caching: 147k / 4.4k, about $0.68. |
+| Latency per alert | 28 s median, 36 s p95 (Sonnet); 51 s / 64 s (Opus) | Ten tool calls per investigation. 85% of the time is the model writing; caching did not change it. |
 | Gateway | about 10 InvokeTool calls per alert at $5 per million | cents per thousand alerts |
 | Policy | about 10 authorizations per alert at $0.000025 | cents per thousand alerts |
 | Runtime | per active session second; one session ends with each investigation | about 30 s per alert |
 | Memory | one retrieval per alert; one or two records per recorded decision | small |
 | Observability | CloudWatch ingestion of about 40 spans per alert | small |
-| Evaluation (acceptance or regression run) | about $31 per 167-alert run on Sonnet without judging; about $60 with the built-in judges and the rubric | run per release, not per alert |
+| Evaluation (acceptance or regression run) | about $15 per 167-alert run on Sonnet without judging (was $31 before caching); about $45 with the built-in judges and the rubric | run per release, not per alert |
 
-A thousand alerts a month on Sonnet is roughly $200 in model tokens plus a few dollars of platform; the analyst time it replaces is the business case. The project itself cost about $345 in model and judge tokens for five full dataset runs, three judged passes, pilots and a recommendation.
+A thousand alerts a month on Sonnet is roughly $90 in model tokens plus a few dollars of platform; the analyst time it replaces is the business case. The project itself cost about $390 in model and judge tokens for six full dataset runs, four judged passes, pilots and a recommendation.
 
 ## 7. What was measured (the proof points)
 
 | Claim | Number | Source |
 |---|---|---|
 | Never closes real abuse on the evaluation set | 0 of 28 true-abuse alerts proposed as closed, in every run; the detector's own rules close 6 | data doc 4.6 |
-| Closes most false positives | 93.5% (130 of 139) | run `20261106T1126-sonnet-v3` |
-| Fewer corrections than the rules | override rate 6.6% vs 7.2% for the threshold rules | same |
-| Numbers in reports are real | 99.9% of 4,132 numbers trace to a tool output | `evals/faithfulness.py` |
+| Closes most false positives | 95.0% (132 of 139) | run `20261110T1833-sonnet-v4`; 93.5% on v3, the difference within run-to-run variance |
+| Fewer corrections than the rules | override rate 5.4% vs 7.2% for the threshold rules | same |
+| Numbers in reports are real | 99.9% of 4,096 numbers trace to a tool output | `evals/faithfulness.py` |
+| Cost halves without touching the decision | $0.187 -> $0.091 per alert, gate and faithfulness unchanged | `compare-v3-v4.md` |
 | Procedure follows the standard every time | 100% trajectory match on 167 sessions | Builtin.TrajectoryInOrderMatch |
 | Improves in governed steps | 79.9% -> 88.5% -> 93.5% safe close across three runs, gate held each time, each step a dated decision | decision log |
 | Memory helps and does not bias | +0.7 points; clean-history spoofer caught with and without | `compare-v3-memory.md` |
