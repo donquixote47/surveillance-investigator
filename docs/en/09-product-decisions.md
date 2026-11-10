@@ -97,6 +97,7 @@ A thousand alerts a month on Sonnet is roughly $200 in model tokens plus a few d
 - **One abuse type, one asset class, one venue.** Spoofing and layering in cash equities. Other scenarios need their own discriminators and standard text; the architecture does not change.
 - **Not deterministic between runs.** The same alert can flip between close and escalate on different days (alert E did). Single-alert demos show behaviour; only the dataset run measures it, and the promotion rule has a materiality floor for that reason.
 - **Stop-outs are escalated.** A trader stopped out at a loss after stacking large one-sided bids looks, in one window, like a failed spoof; attempts are reportable. The product escalates these (safe); whether a firm's standard should close them is the firm's call.
+- **Data the customer must have.** The agent reads only the firm's tables and reaches nothing outside them (no web, no external API), which is the auditability promise. It therefore needs the firm's market-event feed with market-time, millisecond timestamps for the news-reaction explanation to work; without it those alerts are escalated, not closed.
 - **Throughput.** One analyst's investigations run two at a time within the rate limit; the rate limit is a brake by design. A firm with a large queue sizes the limits and the Runtime accordingly.
 - **No regulatory approval is claimed.** The design is meant to be defensible; whether a given NCA accepts agent-written rationales is the compliance officer's question.
 - **Vendors are adding AI investigation features.** The claim is narrower: a governed, auditable layer that works beside any detector, for firms that will not buy a tier-1 platform.
@@ -106,9 +107,10 @@ A thousand alerts a month on Sonnet is roughly $200 in model tokens plus a few d
 1. Pin a `demo` endpoint; Greek and English decks (Phase 6).
 2. Run the harness on a pilot customer's labelled alerts; the firm's own procedures text; acceptance = the gate.
 3. A retrying MCP client is in (v12); next, a Gateway A/B test with an online evaluation config for firms that want live comparison of two bundles.
-4. Second abuse type (wash trades or marking the close) as a new set of discriminators and standard paragraphs.
-5. L2 reviewer agent over A2A that challenges the L1 report; publication in the Agent Registry.
-6. Code Interpreter for the price-path chart in the report.
+4. Overnight pre-investigation of the queue (detector event -> Runtime under a service identity), so reports are ready when the analyst arrives. Needs its own Policy statements for the machine principal and changes the record from "investigated by analyst X" to "pre-investigated by the system, decided by X". Offered as an option, not the default.
+5. Second abuse type (wash trades or marking the close) as a new set of discriminators and standard paragraphs.
+6. L2 reviewer agent over A2A that challenges the L1 report; publication in the Agent Registry.
+7. Code Interpreter for the price-path chart in the report.
 
 ## 10. The one-page story for a sales conversation
 

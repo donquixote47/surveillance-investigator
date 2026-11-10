@@ -11,7 +11,7 @@ Your detector raises spoofing and layering alerts; most are legitimate activity.
 | Step | What happens | Who or what does it |
 |---|---|---|
 | 1 | Detector raises an alert (trader, instrument, window, trigger). | Your detector (a naive two-trigger rule in the demo). |
-| 2 | Analyst opens the queue, picks an alert, presses "Investigate". | Level-1 analyst, logged in with their own credentials. |
+| 2 | Analyst opens the queue, picks an alert, presses "Investigate". Nothing starts an investigation on its own: no scheduler, no trigger from the detector. | Level-1 analyst, logged in with their own credentials. |
 | 3 | The investigator reads the alert, then **the firm's procedures** (definition of spoofing, closure standard, escalation standard) and what analysts recorded before about this trader, desk and instrument. | Agent, through governed tools. |
 | 4 | It pulls the evidence: the trader's raw order events in the window (with the best bid and ask before each), the deterministic discriminators, the trader's profile (role, desk, registered market-making instruments, typical size, risk-limit events), market events in the window, instrument statistics (depth, spread), and the trader's alert history. The order book around the window can be reconstructed if the price picture is unclear. | Agent, through governed tools. Every number comes from code, not from the model. |
 | 5 | It considers every legitimate explanation the firm accepts (section 4), gives each a verdict with the evidence that rules it in or out, and tests the two core features of spoofing against the tape. | Agent, applying the firm's standard. |
@@ -20,6 +20,23 @@ Your detector raises spoofing and layering alerts; most are legitimate activity.
 | 8 | The decision and the note are stored per trader and per desk; the next investigation on that trader or desk sees them as context. The analyst can also leave free-text feedback ("treat a cancel within 200 ms of unscheduled news as a news reaction"). | Human path writes; agent reads next time. |
 
 Time per alert: about 30 seconds on the default model (27 s median, 38 s at the 95th percentile in the last full run). Cost per alert: about $0.19 in model tokens at list prices.
+
+## 2a. Where the data comes from, and when
+
+The agent reads only the firm's own tables. It has no tool that reaches outside them: no internet, no web search, no external API. The closed tool list (section 5) is what makes that a guarantee and not a habit. The reason is auditability: "the agent found on the web that news came out at 14:30" cannot be checked five years later; "the firm's news feed recorded this headline for this ISIN at 14:30:00.187" can.
+
+| Table the agent reads | In the demo | In production, fed by |
+|---|---|---|
+| Order events (with best bid/ask before each) and trades | simulator, 20 days, 1.8 M events | the order-record keeping the firm already does under MiFID II (RTS 25 clock-synchronised timestamps) |
+| Trader master: role, desk, market-making registrations, typical size, risk-limit events | simulator | compliance and risk; the registrations from the venue agreements |
+| Alerts | the demo's naive detector | the firm's surveillance platform |
+| Alert history and recorded decisions | simulator seed + what analysts record in the tool | the tool itself, from day one |
+| Instrument statistics (average depth, spread, tick size) | simulator | computed from the firm's own market data |
+| Market events: open/close, scheduled macro prints, unscheduled issuer news, halts | simulator (92 events in 20 days) | the market data feed and the news feed the firm already pays for (exchange announcements, RNS, Bloomberg/Refinitiv headlines) |
+
+**Timing.** The flow is T+1, the way this kind of surveillance usually runs: the session closes, the day's orders, trades and market events are loaded in the evening, the detector runs over the completed day and fills the queue, and the next morning the analyst investigates. Everything the agent needs for an alert exists before the alert is opened. A firm with intraday surveillance would feed the tables continuously; the agent does not change, since it only asks for what happened in the alert's window. The demo loads all twenty days once and lets the analyst pick a session day.
+
+**One requirement to check with the first customer.** The news-reaction discrimination rests on "cancel 187 ms after the headline". That needs the time the headline reached the market, not the editorial time, with millisecond precision in the same clock as the orders. Market data feeds provide it; not every firm stores it. Without it, news reactions are escalated rather than closed, which is the safe failure.
 
 ## 3. The firm's standard is the decision logic
 
@@ -73,7 +90,7 @@ These are not instructions to the model. They are rules evaluated by the platfor
 | Draft a STOR as Level 1. | Only an identity in the L2 group may call the drafting tool; Level 1 does not even see it in the tool list. |
 | Draft a STOR without a DRAFT_STOR proposal. | The drafting tool is permitted only after such a proposal for the same alert. |
 | Pull the tape without limit. | At most six pages of order events per investigation; the largest alert window in the dataset fits in one. |
-| Flood the back end. | Per-analyst rate limits: 60 tool calls a minute, 3 proposals a minute. |
+| Flood the back end. | Per-analyst rate limits: 60 tool calls a minute, 3 proposals a minute. These count tool calls, not alerts: an investigation is about ten calls in thirty seconds, so an analyst working normally never meets them. They exist for a looping bug, a leaked credential, or a script, and they are a brake (a burst of 15-20 calls passes before the limit bites), not a counter; the counting rules are Policy's. |
 
 Demonstrated live: a scripted client that tries to propose before gathering evidence is refused with the rule's name ("Policy evaluation denied due to p03b..."); the agent itself, told by an analyst to "just close this quickly", ignores the instruction and runs the full procedure.
 
@@ -136,3 +153,7 @@ Still open: six "stop-out" alerts (a trader who buys, stacks large bids below, i
 **What do we have to provide?** Order events with timestamps and best bid/ask, trades, a trader master (role, desk, registrations, typical size), market events, instrument statistics, the alerts, and the firm's written procedures. Section 3 of `03-solution-design.md` has the schemas.
 
 **Which detector does it need?** Any. It investigates the alerts you already have; it does not detect.
+
+**Can it pre-investigate the whole queue overnight, so the reports are ready in the morning?** Not in the alpha, by choice. Today every investigation runs under the analyst who pressed the button, and that is what lets the trace say who did what. An overnight run has no analyst behind it: the agent would run under a service identity, the rules would need their own statements for that identity, and the record would read "pre-investigated by the system, decided by the analyst". Defensible, and a reasonable first customer request; it is on the roadmap with that trade-off stated.
+
+**Does it look at the news?** Only at the market events in your own table (section 2a), with your timestamps. It never reaches outside your data.
