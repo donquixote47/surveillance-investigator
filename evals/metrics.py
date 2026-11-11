@@ -217,6 +217,7 @@ def regression(
     previous: dict[str, Any] | None,
     *,
     current_faith: dict[str, Any] | None = None,
+    current_dataset: str | None = None,
 ) -> dict[str, Any]:
     """Promotion rule, data doc section 4.4: gate holds, safe close rate does not drop by more than 2 points,
     evidence faithfulness stays at 100% (number level, once `evals/faithfulness.py` has run), no scenario
@@ -271,6 +272,16 @@ def regression(
     out["per_scenario"] = scen
     pending = "" if current_faith else ", faithfulness pending"
     out["verdict"] = f"PASS (offline promotion rule{pending})" if all(ok for _, ok in checks) else "FAIL"
+    # the rule is defined on one fixed dataset (data doc 4.4); across datasets the alert mix differs and the
+    # headline rates are not comparable, so the deltas are shown for information and no verdict is given
+    cur_ds, prev_ds = current_dataset, previous.get("dataset")
+    if cur_ds and prev_ds and cur_ds != prev_ds:
+        out["cross_dataset"] = True
+        out["verdict"] = (
+            f"n/a: different datasets ({prev_ds} -> {cur_ds}); the promotion rule applies on one fixed dataset, "
+            "the deltas below are mix-dependent (gate check still meaningful: "
+            f"{'holds' if cm['gate']['holds'] else 'MISSED'})"
+        )
     return out
 
 

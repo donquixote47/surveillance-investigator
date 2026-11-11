@@ -357,7 +357,16 @@ def rescore(out_dir: Path, labels: list[dict[str, Any]]) -> tuple[list[dict[str,
     return rows, run
 
 
-ARM_MARKERS = ("pilot", "nomem", "opus", "slice", "bundle")  # runs that are arms or trials, not the promoted line
+ARM_MARKERS = (
+    "pilot",
+    "nomem",
+    "opus",
+    "slice",
+    "bundle",
+    "variance",
+    "effort",
+    "seed8",
+)  # arms, trials, other datasets: not the promoted line
 
 
 def previous_run(out_dir: Path, explicit: Path | None) -> dict[str, Any] | None:
@@ -410,7 +419,11 @@ def finish(
             run[k] = existing[k]
     variance = compute_variance(rows)
     # a repeat run measures the agent's own spread; it is not a candidate and is not regressed against anything
-    reg = None if variance else regression(m, prev, current_faith=run.get("faithfulness"))
+    reg = (
+        None
+        if variance
+        else regression(m, prev, current_faith=run.get("faithfulness"), current_dataset=run.get("dataset"))
+    )
     run.update(
         metrics=m,
         baselines=baselines,
@@ -473,6 +486,13 @@ def main() -> int:
     ap.add_argument("--dry-run", action="store_true", help="baselines on the selection only, no invocations")
     args = ap.parse_args()
 
+    if args.rescore or args.resume:
+        # a saved run knows its dataset; scoring it against another dataset's labels matches no alert and silently
+        # writes an empty results.json (happened once on 2026-11-11 with a seed8 run and the seed7 default)
+        saved = json.loads(((args.rescore or args.resume) / "run.json").read_text()).get("dataset")
+        if saved and saved != args.dataset.name:
+            print(f"note: run was made on dataset {saved}; using its labels, not {args.dataset.name}")
+            args.dataset = DEFAULT_DATASET.parent / saved
     labels_all = load_labels(args.dataset)
     if args.rescore:
         args.rescore = args.rescore.resolve()

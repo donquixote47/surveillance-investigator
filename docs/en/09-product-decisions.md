@@ -86,6 +86,7 @@ A thousand alerts a month on Sonnet is roughly $90 in model tokens plus a few do
 | Fewer corrections than the rules | override rate 5.4% vs 7.2% for the threshold rules | same |
 | Numbers in reports are real | 99.9% of 4,096 numbers trace to a tool output | `evals/faithfulness.py` |
 | Cost halves without touching the decision | $0.187 -> $0.091 per alert, gate and faithfulness unchanged | `compare-v3-v4.md` |
+| Holds on alerts nothing was tuned against | second dataset (seed 8, K = 4, 100 alerts): gate 0 of 24, the ten defined scenarios 76 of 76, 86.8% safe close on a mix with twice the boundary cases (92.7% on seed7's mix) | run `20261111T1326-seed8-generalisation` |
 | Procedure follows the standard every time | 100% trajectory match on 167 sessions | Builtin.TrajectoryInOrderMatch |
 | Improves in governed steps | 79.9% -> 88.5% -> 93.5% safe close across three runs, gate held each time, each step a dated decision | decision log |
 | Memory helps and does not bias | +0.7 points; clean-history spoofer caught with and without | `compare-v3-memory.md` |
@@ -96,6 +97,7 @@ A thousand alerts a month on Sonnet is roughly $90 in model tokens plus a few do
 
 - **Synthetic data.** The dataset is generated; the numbers above are on it. The harness is built to run on a firm's own labelled alerts, and that run is the acceptance test, not these numbers.
 - **One abuse type, one asset class, one venue.** Spoofing and layering in cash equities. Other scenarios need their own discriminators and standard text; the architecture does not change.
+- **Measured on two datasets from one generator.** The second (`seed8`) was never used for tuning and the gate and every defined scenario held on it, but both come from the same simulator; the first run on a firm's own alerts is the generalisation test that counts (section 9, roadmap item 2).
 - **Not deterministic between runs, and measured.** The same alert can flip between close and escalate on different days (alert E did). Measured 2026-11-11 by investigating 21 alerts five times each: 18 stable, no true-abuse alert ever closed, the three that flipped are the boundary false positives (a fat finger, a news reaction) and the escalation level on one layering case, all at confidence 0.72 or below; on the full set this is about 0.9 points of safe close rate, one standard deviation. Single-alert demos show behaviour; only the dataset run measures it, and a difference under two points between two runs is not read as a change.
 - **Stop-outs are escalated.** A trader stopped out at a loss after stacking large one-sided bids looks, in one window, like a failed spoof; attempts are reportable. The product escalates these (safe); whether a firm's standard should close them is the firm's call.
 - **Data the customer must have.** The agent reads only the firm's tables and reaches nothing outside them (no web, no external API), which is the auditability promise. It therefore needs the firm's market-event feed with market-time, millisecond timestamps for the news-reaction explanation to work; without it those alerts are escalated, not closed.

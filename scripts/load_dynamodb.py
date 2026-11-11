@@ -105,6 +105,12 @@ def main() -> int:
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--region", default=REGION)
     ap.add_argument("--dry-run", action="store_true", help="build items and count them, write nothing")
+    ap.add_argument(
+        "--keep-existing-traders",
+        action="store_true",
+        help="do not overwrite trader rows already in the table (a second dataset beside the first: the background "
+        "traders share ids across datasets and the first dataset's profiles stay as its runs saw them)",
+    )
     args = ap.parse_args()
 
     if (args.dataset / "labels").exists():
@@ -119,6 +125,19 @@ def main() -> int:
         df = pd.read_parquet(path)
         if args.dates and "date" in df.columns:
             df = df[df["date"].isin(args.dates)]
+        if stem == "traders" and args.keep_existing_traders and not args.dry_run:
+            tbl = _table(names[stem], args.region)
+            existing: set[str] = set()
+            scan: dict = {"ProjectionExpression": "trader_id"}
+            while True:
+                page = tbl.scan(**scan)
+                existing.update(it["trader_id"] for it in page.get("Items", []))
+                if "LastEvaluatedKey" not in page:
+                    break
+                scan["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+            before = len(df)
+            df = df[~df["trader_id"].isin(existing)]
+            print(f"  traders: {before - len(df)} already in the table kept as they are, {len(df)} new to load")
         total += load_table(stem, df, names[stem], args.region, args.threads, args.dry_run)
     print(f"total {total:,d} items{' (dry run)' if args.dry_run else ''}")
     return 0

@@ -84,6 +84,7 @@ SURV_PROMPT_CACHE=off uv run evals/run_dataset.py --backend local ...   # το a
 uv run evals/compare_runs.py evals/runs/<A> evals/runs/<B> --out ...   # paired σύγκριση δύο runs στα κοινά τους alerts
 uv run evals/run_dataset.py --repeat 5 --alerts ... --tag variance    # run-to-run variance: σταθερότητα ανά alert, διασπορά pseudo-runs (~8 $ για 21 x 5)
 uv run scripts/span_turns.py --run evals/runs/<run_id> --alerts A-...  # χρόνοι ανά turn ενός session από τα spans του: model turns, tokens, tools
+uv run evals/run_dataset.py --dataset data/synthetic/seed8 --tag seed8-...  # το σύνολο γενίκευσης (100 alerts, ~9 $)· --rescore/--resume διαλέγουν μόνα τους το dataset του run
 uv run evals/run_dataset.py --resume evals/runs/<run_id> --retry-errors # ολοκλήρωση κομμένου run, επανεκτέλεση alerts με σφάλμα
 uv run evals/run_dataset.py --rescore evals/runs/<run_id>              # επανυπολογισμός του results.md από τις αποθηκευμένες απαντήσεις (δωρεάν)
 uv run evals/faithfulness.py evals/runs/<run_id>                       # αριθμοί στα τεκμήρια έναντι spans αποτελεσμάτων tools (δωρεάν)

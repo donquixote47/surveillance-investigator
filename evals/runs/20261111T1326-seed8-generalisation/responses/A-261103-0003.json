@@ -1,0 +1,437 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "repeat": null,
+  "session_id": "surv-eval-20261111T1326-seed8-generalisation-A-261103-0003-fa0c97f2",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-11T13:27:41+00:00",
+  "wall_s": 33.6
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261103-0003",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.6,
+   "report": {
+    "alert_id": "A-261103-0003",
+    "scenario": "LAYERING",
+    "summary": "Prop trader (no MM registration) placed three one-sided BUY limit orders of 4,876 each (14,628 total, ~6x top-5 depth) at 10001/10000/9999, 5-7 ticks below the bid, then sold 863 at market and cancelled all three 600 ms later with no fills on them. Feature (a) (orders not intended to execute) looks present. Feature (b) (benefit) is NOT shown: the touch fell 3 ticks against the sale, no reversion, round trip -6.1 ticks, no repetition. No accepted explanation is supported for the layered bids (stop-out explains the sale, not the bids), so the evidence is mixed and goes to Level 2.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "Three BUY LIMIT orders of 4876 at 10001, 10000, 9999 placed 14:55:45-49 with best bid 10006; all cancelled at 14:56:04.378, no fills on them"
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "SELL MARKET 1354 at 14:56:03.778 filled 863 at 10003/10002 as the bid dropped from 10003 to 10001; earlier BUY MARKET 1354 at 14:55:43 filled 1274 at 10007-10009"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 5.98, distance_from_touch_ticks 6.0, distinct_price_levels 3, cancel_ratio 1.0, cancel_symmetry 0.0, same_side_fill_qty 0"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks -3.0, reversion_ticks 0.0, round_trip_ticks -6.13, repetitions_in_session 0, opposite_side_fill_qty 863, ms_before_first_cancel 600"
+     },
+     {
+      "id": "E5",
+      "source": "compute_discriminators",
+      "fact": "market_wide_cancels_1s_before_first_cancel 1; parent_order_ids empty; order types LIMIT"
+     },
+     {
+      "id": "E6",
+      "source": "get_trader_profile",
+      "fact": "role PROP, registered_mm_instruments empty, typical_order_size 500, no risk events in window"
+     },
+     {
+      "id": "E7",
+      "source": "get_market_events",
+      "fact": "No market events in window"
+     },
+     {
+      "id": "E8",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts in 90 days"
+     },
+     {
+      "id": "E9",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2444.3, avg spread 2.67 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "several price levels on one side (layering)",
+     "opposite-side execution before the cancel"
+    ],
+    "indicators_not_matched": [
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "high order-to-trade ratio (Annex II 4(f))"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E3",
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E5",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E7",
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E1",
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "undetermined"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.6,
+    "what_would_change_my_mind": "Evidence that the three bids were a genuine buying programme interrupted by a stop-out (e.g. client/parent order, or a pattern of the same bids being worked in other sessions) would support closure. Evidence of a favourable price move or reversion would move it toward a STOR draft.",
+    "memory_used": [
+     "Desk PROP-EQ feedback on A-261016-0003 (news cancel within 200 ms = news reaction): not applicable, no market event in this window."
+    ],
+    "window_used": "Detector window 14:55:03.778-14:56:08.778 plus 5 s padding; did not look at a longer frame beyond the 90-day alert history (no prior alerts).",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261103-0003",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261103-0003",
+   "proposed_at": "2026-11-11T13:28:11+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261103-0003"
+    },
+    "ms": 290,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 221,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261103-0003",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1103-03"
+    },
+    "ms": 1164,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261103-0003",
+     "pad_seconds": 5
+    },
+    "ms": 325,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261103-0003"
+    },
+    "ms": 430,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1103-03",
+     "alert_id": "A-261103-0003"
+    },
+    "ms": 266,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "instrument": "SYN.A",
+     "window_start": 1793717703778762496,
+     "window_end": 1793717768778762496
+    },
+    "ms": 187,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-11-03",
+     "instrument": "SYN.A"
+    },
+    "ms": 196,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1103-03",
+     "before_date": "2026-11-03"
+    },
+    "ms": 287,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261103-0003",
+     "confidence": 0.6,
+     "disposition": "ESCALATE",
+     "report": "<report>"
+    },
+    "ms": 190,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** ESCALATE (case C-A-261103-0003, awaiting a human decision). Confidence is 0.6.\n\n**The three facts that drove it:**\n1. The trader placed three one-sided BUY limit orders of 4,876 each (14,628 in total, about 6\u00d7 the top-5 depth). They sat 5\u20137 ticks below the bid and had no fills. The trader then sold 863 at market and cancelled all three orders 600 ms later. This is feature (a), orders not intended to execute.\n2. Feature (b), a benefit, is not shown. The price moved 3 ticks against the sale, with no reversion. The round trip was \u22126.1 ticks, and there was no repetition in the session.\n3. No accepted explanation is supported. The trader is a prop trader with no market-making registration, and the data shows no market event, risk event or parent order. A stop-out would explain the sale but not the layered bids, so the evidence is mixed.\n\n**What would change my mind:** Evidence that the bids were a genuine buying programme interrupted by a stop-out would support closing it. Examples are a client or parent order, or the same bids being worked in other sessions. A favourable price move or reversion would push it toward a STOR draft.",
+  "usage": {
+   "input_tokens": 10,
+   "output_tokens": 3432,
+   "total_tokens": 50068,
+   "cache_read_tokens": 35174,
+   "cache_write_tokens": 11452,
+   "model_calls": 4
+  },
+  "duration_s": 27.5,
+  "session_id": "surv-eval-20261111T1326-seed8-generalisation-A-261103-0003-fa0c97f2",
+  "error": null,
+  "bundle": "none",
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261103-0003",
+  "case_id": "C-A-261103-0003",
+  "confidence": "0.6",
+  "date": "2026-11-03",
+  "proposal_count": "1",
+  "proposed_at": "2026-11-11T13:28:11+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "Prop trader (no MM registration) placed three one-sided BUY limit orders of 4,876 each (14,628 total, ~6x top-5 depth) at 10001/10000/9999, 5-7 ticks below the bid, then sold 863 at market and cancelled all three 600 ms later with no fills on them. Feature (a) (orders not intended to execute) looks present. Feature (b) (benefit) is NOT shown: the touch fell 3 ticks against the sale, no reversion, round trip -6.1 ticks, no repetition. No accepted explanation is supported for the layered bids (stop-out explains the sale, not the bids), so the evidence is mixed and goes to Level 2.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "Three BUY LIMIT orders of 4876 at 10001, 10000, 9999 placed 14:55:45-49 with best bid 10006; all cancelled at 14:56:04.378, no fills on them"
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "SELL MARKET 1354 at 14:56:03.778 filled 863 at 10003/10002 as the bid dropped from 10003 to 10001; earlier BUY MARKET 1354 at 14:55:43 filled 1274 at 10007-10009"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 5.98, distance_from_touch_ticks 6.0, distinct_price_levels 3, cancel_ratio 1.0, cancel_symmetry 0.0, same_side_fill_qty 0"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks -3.0, reversion_ticks 0.0, round_trip_ticks -6.13, repetitions_in_session 0, opposite_side_fill_qty 863, ms_before_first_cancel 600"
+    },
+    {
+     "id": "E5",
+     "source": "compute_discriminators",
+     "fact": "market_wide_cancels_1s_before_first_cancel 1; parent_order_ids empty; order types LIMIT"
+    },
+    {
+     "id": "E6",
+     "source": "get_trader_profile",
+     "fact": "role PROP, registered_mm_instruments empty, typical_order_size 500, no risk events in window"
+    },
+    {
+     "id": "E7",
+     "source": "get_market_events",
+     "fact": "No market events in window"
+    },
+    {
+     "id": "E8",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts in 90 days"
+    },
+    {
+     "id": "E9",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2444.3, avg spread 2.67 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "high order-to-trade ratio (Annex II 4(f))"
+   ],
+   "scenario": "LAYERING",
+   "indicators_matched": [
+    "orders with no intention to execute",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "several price levels on one side (layering)",
+    "opposite-side execution before the cancel"
+   ],
+   "alert_id": "A-261103-0003",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E3",
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E5",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E7",
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E1",
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "undetermined"
+    }
+   ],
+   "memory_used": [
+    "Desk PROP-EQ feedback on A-261016-0003 (news cancel within 200 ms = news reaction): not applicable, no market event in this window."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 14:55:03.778-14:56:08.778 plus 5 s padding; did not look at a longer frame beyond the 90-day alert history (no prior alerts).",
+   "what_would_change_my_mind": "Evidence that the three bids were a genuine buying programme interrupted by a stop-out (e.g. client/parent order, or a pattern of the same bids being worked in other sessions) would support closure. Evidence of a favourable price move or reversion would move it toward a STOR draft."
+  },
+  "scenario": "LAYERING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1103-03"
+ }
+}
