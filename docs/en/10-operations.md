@@ -5,7 +5,7 @@ How the investigator is run after the alpha, how a change becomes a release, wha
 ## 1. From alpha to pilot, in order
 
 1. **Freeze the regression set.** `seed7` (167 alerts) stays as it is; every change is compared with the last promoted run on it. Build a second set (`seed8`, detector K = 4 from the tuning report) that no configuration has been tuned against, to measure generalisation and not only regression.
-2. **Measure run-to-run variance.** The same alert five times, for twenty alerts (two hours, about $10). We know the agent is not deterministic (alert E flipped between days); we do not know by how much. Without that number, a one- or two-point difference between runs cannot be called a change.
+2. **Measure run-to-run variance.** Done 2026-11-11 (`evals/run_dataset.py --repeat 5`, 21 alerts x 5, 34 minutes, $7.94; data doc 4.6): 18 of 21 alerts stable, no true-abuse alert ever closed, the three unstable ones are an F-FAT-1, an F-NEWS-1 and the ESCALATE/DRAFT_STOR level on one S-LAYER-1, all at confidence 0.60-0.72. Scaled to the full set the noise on the safe close rate is about 0.9 points (one standard deviation), so the promotion rule's two-point tolerance is about two standard deviations. Repeat it after any change to the standard or the model, because the noise sits exactly on the alerts the standard leaves open.
 3. **Decide the three open scenarios.** F-STOP-1 (0/6) is a question for the firm's standard, not code: does a one-sided large order pulled after a loss-making exit close at Level 1, given MAR Art. 15 on attempts? F-NEWS-1 (2/4) and S-SPOOF-2 (1/3) are iteration-3 candidates (section 5).
 4. **Pilot on a customer's labelled alerts.** The harness runs on the firm's own data with the firm's own procedure text; the gate is the acceptance criterion. Until then every number is synthetic and is said to be.
 5. **Configure the two production items** left open in the alpha: retention on the log groups (five years, or export to S3 with a cold-storage lifecycle) and access control on the log groups equal to that on the tables (broker brief section 7).
@@ -38,12 +38,14 @@ change: tool field | sentence in the firm's standard | prompt | model | dependen
 | Weekly | `evals/ingest_overrides.py` (overrides become test cases); review Policy denials by rule and the no-proposal count |
 | Monthly | judged pass (rubric trend); dependency check (`agentcore/.cache/<runtime>/staging/*.dist-info` is what the Runtime really gets); cost per alert |
 | Quarterly | `python -m detector.tune` on the accumulated labelled alerts; review of the standard with compliance; new model release evaluated as a configuration bundle (the Opus arm is the template) |
+| After a change to the standard or the model | variance run (`--repeat 5` on the boundary alerts, ~$8): the noise band moves with exactly these two things, and the promotion tolerance is read against it |
 
 ## 3. What to watch
 
 | Signal | Source | What a move means |
 |---|---|---|
-| **Gate** (true abuse proposed CLOSE_FP) | harness, per run | Anything above zero does not ship. There is no online version; it needs a labelled set. |
+| **Gate** (true abuse proposed CLOSE_FP) | harness, per run | Anything above zero does not ship. There is no online version; it needs a labelled set. Held in 6 full runs and in all 35 true-abuse repetitions of the variance run. |
+| **Run-to-run noise** on the safe close rate | `--repeat` run, after a change to the standard or the model | About 0.9 points (one sd) as of 2026-11-11. A difference between two runs under two points is not a finding; a new unstable alert outside F-FAT-1 / F-NEWS-1 / F-STOP-1 / layering level is. |
 | **Override rate**, overall and by scenario / desk / analyst | `surv-cases` (`override` flag), weekly | Rising: the agent got worse or a new pattern appeared. Very uneven by analyst: someone is not reading, or someone applies a different standard; both are findings for compliance. |
 | **Safe close rate** | harness | The headline, reported only with the gate. |
 | **Evidence faithfulness** | `evals/faithfulness.py`, free | Below 99%: the model or the tool outputs changed. |
@@ -92,9 +94,9 @@ Findings:
 | `get_case_context` (alert + procedures + memory in one tool) | -3 s, -8-15% tokens | not done; design doc section 7 |
 | `effort` low as a bundle | perhaps -5 s | not done; the only lever left on the 12-second report turn |
 
-Three lessons from the measurement. The cache saves money, not time: Bedrock still processes the cached prefix, cheaper, and the model's output time is the latency. A field alias on a model with `extra="forbid"` has to handle the model sending **both** names at once (seen on v13 in the first smoke test, which a plain pydantic `AliasChoices` does not cover; a `model_validator(mode="before")` does). And Bedrock reports `inputTokens` without the cached tokens, so a token or cost metric that reads only that field shows a 99.98% fall; `metrics.py` adds `cacheReadInputTokens` and `cacheWriteInputTokens` back as `prompt_total`, and the cost line prices reads at 0.1x and writes at 1.25x of the input price (conservative; the pricing page announced a lower read price for Sonnet 5.5 from 2026-10-07 that is not yet read off the page). Four of 167 dispositions moved (three towards the label, one away), which neither change can cause; that is the run-to-run variance of item 2 in section 1, still unmeasured, and it bounds what a one-point difference between runs can mean.
+Three lessons from the measurement. The cache saves money, not time: Bedrock still processes the cached prefix, cheaper, and the model's output time is the latency. A field alias on a model with `extra="forbid"` has to handle the model sending **both** names at once (seen on v13 in the first smoke test, which a plain pydantic `AliasChoices` does not cover; a `model_validator(mode="before")` does). And Bedrock reports `inputTokens` without the cached tokens, so a token or cost metric that reads only that field shows a 99.98% fall; `metrics.py` adds `cacheReadInputTokens` and `cacheWriteInputTokens` back as `prompt_total`, and the cost line prices reads at 0.1x and writes at 1.25x of the input price (conservative; the pricing page announced a lower read price for Sonnet 5.5 from 2026-10-07 that is not yet read off the page). Four of 167 dispositions moved (three towards the label, one away), which neither change can cause; the variance run the next day (item 2 in section 1) measured that noise at about 0.9 points, and the four flips sit inside it.
 
-**Iteration 4 (next): the report turn.** `effort` medium -> low as a configuration bundle, judged pass mandatory because it is the report that changes; the variance run (item 2 in section 1) first, so that the result can be read.
+**Iteration 4 (next): the report turn.** `effort` medium -> low as a configuration bundle, judged pass mandatory because it is the report that changes. The variance is now known, so the result can be read: a safe close move under two points is noise, a rubric move is the signal to watch.
 
 **Decision quality (measured gaps).**
 - F-STOP-1 0/6: a question for the standard first. If "close", a field `loss_making_exit` (adverse move + negative round trip + no reversion, which exist separately) and a sentence; if "escalate", the label changes.

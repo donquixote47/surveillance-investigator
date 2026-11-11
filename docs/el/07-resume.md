@@ -82,6 +82,7 @@ uv run evals/run_dataset.py --tag sonnet-vN --notes "..."              # όλα 
 uv run evals/run_dataset.py --scenario F-ICE-1 S-SPOOF-5 --tag slice   # μια φέτα· --no-memory κρύβει το recall_memory· --bundle <name> στέλνει config bundle
 SURV_PROMPT_CACHE=off uv run evals/run_dataset.py --backend local ...   # το arm χωρίς caching (μόνο local backend· το Runtime διαβάζει το δικό του env)
 uv run evals/compare_runs.py evals/runs/<A> evals/runs/<B> --out ...   # paired σύγκριση δύο runs στα κοινά τους alerts
+uv run evals/run_dataset.py --repeat 5 --alerts ... --tag variance    # run-to-run variance: σταθερότητα ανά alert, διασπορά pseudo-runs (~8 $ για 21 x 5)
 uv run evals/run_dataset.py --resume evals/runs/<run_id> --retry-errors # ολοκλήρωση κομμένου run, επανεκτέλεση alerts με σφάλμα
 uv run evals/run_dataset.py --rescore evals/runs/<run_id>              # επανυπολογισμός του results.md από τις αποθηκευμένες απαντήσεις (δωρεάν)
 uv run evals/faithfulness.py evals/runs/<run_id>                       # αριθμοί στα τεκμήρια έναντι spans αποτελεσμάτων tools (δωρεάν)

@@ -174,11 +174,13 @@ On a synthetic dataset of 167 alerts over 20 trading days (28 true spoofing or l
 | | threshold rules | investigator (promoted run) |
 |---|---|---|
 | True-abuse alerts proposed as "close" | **6 of 28** (partially executed spoofs) | **0 of 28** |
-| False positives closed | 95.7% | 93.5% |
-| Share of alerts the analyst would have to override | 7.2% | **6.6%** |
-| Share of escalations that are real abuse | 78.6% | 75.7% |
+| False positives closed | 95.7% | 95.0% |
+| Share of alerts the analyst would have to override | 7.2% | **5.4%** |
+| Share of escalations that are real abuse | 78.6% | 80.0% |
 
-Read it this way: the rules close more, but they close six real spoofers, which no compliance function can accept. The investigator closes nearly as many, closes no spoofer, and needs fewer corrections from the analyst. The run before the last two procedure clarifications closed 79.9% with 18.6% overrides; the gain came from the firm's written standard being made precise, which is how a compliance team would want it to come.
+Read it this way: the rules close more, but they close six real spoofers, which no compliance function can accept. The investigator closes nearly as many, closes no spoofer, and needs fewer corrections from the analyst. The run before the last two procedure clarifications closed 79.9% with 18.6% overrides; the gain came from the firm's written standard being made precise, which is how a compliance team would want it to come. The promoted run (2026-11-10) is the one before it with the model's prompt cached and a report-format slip removed: same decisions within the measured noise, half the model cost ($0.09 per alert).
+
+The numbers move a little between two identical runs, because the model is not deterministic. That was measured by investigating 21 alerts five times each: 18 came out the same every time, no real abuse was ever closed, and the three that varied were two boundary false positives (a fat finger, a news reaction, closed 4 and 3 times out of 5) and the escalation level on one layering case. On the full set this is about one point of the "false positives closed" figure; a difference under two points between two runs is not treated as a change.
 
 Still open: six "stop-out" alerts (a trader who buys, stacks large bids below, is stopped out at a loss and pulls the bids) are escalated, not closed. The agent's reasoning is that a failed spoof and a stop-out look the same in one window and attempts are reportable; the label says close. That is a question for the firm's standard, and it is the safe failure.
 

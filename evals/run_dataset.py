@@ -46,6 +46,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 sys.path.insert(0, str(ROOT / "evals"))
 from metrics import CLOSE, ESCALATE, compute, regression, render_markdown, rows_from_labels  # noqa: E402
 from smoke_gateway import CREDS, access_token, gateway_url, load_env  # noqa: E402
+from variance import compute_variance, render_variance  # noqa: E402
 
 REGION = "eu-west-2"
 ACCOUNT = "384308066035"
@@ -259,6 +260,7 @@ def row_from(
         "n_rejections": len(resp.get("rejections") or []),
         "session_id": resp.get("session_id") or meta.get("session_id"),
         "attempt": meta.get("attempt"),
+        "repeat": meta.get("repeat"),
         "model_id": resp.get("model_id"),
         "bundle": resp.get("bundle"),
     }
@@ -289,15 +291,32 @@ def transient(resp: dict[str, Any]) -> bool:
     )
 
 
+def response_name(alert_id: str, repeat: int | None) -> str:
+    """`<alert_id>.json` for a plain run; `<alert_id>~r<k>.json` for repetition k of a `--repeat` run."""
+    return f"{alert_id}~r{repeat}.json" if repeat is not None else f"{alert_id}.json"
+
+
+def split_response_name(stem: str) -> tuple[str, int | None]:
+    alert_id, _, rep = stem.partition("~r")
+    return alert_id, (int(rep) if rep else None)
+
+
 def run_one(
-    lab: dict[str, Any], backend: Any, cases: Cases, run_id: str, out_dir: Path, retries: int
+    lab: dict[str, Any],
+    backend: Any,
+    cases: Cases,
+    run_id: str,
+    out_dir: Path,
+    retries: int,
+    repeat: int | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     alert_id = lab["alert_id"]
     before = cases.get(alert_id)
-    meta: dict[str, Any] = {"prior_recorded": bool(before and before.get("recorded_disposition"))}
+    meta: dict[str, Any] = {"prior_recorded": bool(before and before.get("recorded_disposition")), "repeat": repeat}
     resp: dict[str, Any] = {}
     for attempt in range(1, retries + 2):
-        session_id = f"surv-eval-{run_id}-{alert_id}-{uuid.uuid4().hex[:8]}"
+        rep = f"-r{repeat}" if repeat is not None else ""
+        session_id = f"surv-eval-{run_id}-{alert_id}{rep}-{uuid.uuid4().hex[:8]}"
         meta.update(session_id=session_id, attempt=attempt, invoke_started_at=now_iso())
         t0 = time.time()
         try:
@@ -311,7 +330,7 @@ def run_one(
     after = cases.get(alert_id)
     row = row_from(lab, resp, after, meta)
     (out_dir / "responses").mkdir(parents=True, exist_ok=True)
-    (out_dir / "responses" / f"{alert_id}.json").write_text(
+    (out_dir / "responses" / response_name(alert_id, repeat)).write_text(
         json.dumps(
             {"meta": meta, "label_hidden_from_agent": True, "response": resp, "case_after": after},
             indent=1,
@@ -327,10 +346,14 @@ def rescore(out_dir: Path, labels: list[dict[str, Any]]) -> tuple[list[dict[str,
     rows = []
     for f in sorted((out_dir / "responses").glob("*.json")):
         d = json.loads(f.read_text())
-        lab = by_id.get(f.stem)
+        alert_id, repeat = split_response_name(f.stem)
+        lab = by_id.get(alert_id)
         if lab is None:
             continue
-        rows.append(row_from(lab, d.get("response"), d.get("case_after"), d.get("meta") or {}))
+        meta = d.get("meta") or {}
+        if repeat is not None:
+            meta = {**meta, "repeat": repeat}
+        rows.append(row_from(lab, d.get("response"), d.get("case_after"), meta))
     return rows, run
 
 
@@ -385,22 +408,31 @@ def finish(
     for k in ("evaluations", "faithfulness", "finished_at", "elapsed_min"):
         if existing.get(k) is not None and run.get(k) is None:
             run[k] = existing[k]
-    reg = regression(m, prev, current_faith=run.get("faithfulness"))
-    run.update(metrics=m, baselines=baselines, regression=reg, finished_at=run.get("finished_at") or now_iso())
+    variance = compute_variance(rows)
+    # a repeat run measures the agent's own spread; it is not a candidate and is not regressed against anything
+    reg = None if variance else regression(m, prev, current_faith=run.get("faithfulness"))
+    run.update(
+        metrics=m,
+        baselines=baselines,
+        regression=reg,
+        variance=variance,
+        finished_at=run.get("finished_at") or now_iso(),
+    )
     if run.get("started_at") and not run.get("elapsed_min"):
         t0 = datetime.fromisoformat(run["started_at"])
         run["elapsed_min"] = round((datetime.fromisoformat(run["finished_at"]) - t0).total_seconds() / 60, 1)
     (out_dir / "results.json").write_text(json.dumps(run, indent=1, default=str))
-    (out_dir / "results.md").write_text(
-        render_markdown(
-            run,
-            baselines=baselines,
-            reg=reg,
-            rows=rows,
-            evaluations=run.get("evaluations"),
-            faithfulness=run.get("faithfulness"),
-        )
+    md = render_markdown(
+        run,
+        baselines=baselines,
+        reg=reg,
+        rows=rows,
+        evaluations=run.get("evaluations"),
+        faithfulness=run.get("faithfulness"),
     )
+    if variance:
+        md += "\n" + "\n".join(render_variance(variance))
+    (out_dir / "results.md").write_text(md)
     pd.DataFrame(rows).to_csv(out_dir / "per_alert.csv", index=False)
     return run
 
@@ -424,6 +456,12 @@ def main() -> int:
     ap.add_argument("--scenario", nargs="*", default=None)
     ap.add_argument("--sample", type=int, default=None, help="stratified sample of this many alerts")
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument(
+        "--repeat",
+        type=int,
+        default=None,
+        help="investigate every selected alert this many times (run-to-run variance; no regression verdict)",
+    )
     ap.add_argument("--tag", default="run")
     ap.add_argument("--notes", default="")
     ap.add_argument("--compare", type=Path, default=None, help="previous run dir for the regression report")
@@ -454,17 +492,25 @@ def main() -> int:
         )
         return 0
 
+    # the unit of work is (alert, repetition); repetitions of one alert are spread out (k outer, alerts inner) so
+    # that two investigations of the same alert are never in flight together and never race on its case row
+    repeats: list[int | None] = list(range(args.repeat)) if args.repeat and args.repeat > 1 else [None]
+    work: list[tuple[dict[str, Any], int | None]] = [(lab, k) for k in repeats for lab in selection]
+
     if args.resume:
         out_dir = args.resume.resolve()
         run = json.loads((out_dir / "run.json").read_text())
         run_id = run["run_id"]
+        if run.get("repeat") and not args.repeat:
+            repeats = list(range(run["repeat"]))
+            work = [(lab, k) for k in repeats for lab in selection]
         done = set()
         for p in (out_dir / "responses").glob("*.json"):
             if args.retry_errors and (json.loads(p.read_text()).get("response") or {}).get("error"):
                 continue  # re-run it; the new response overwrites the errored one
             done.add(p.stem)
-        selection = [lab for lab in selection if lab["alert_id"] not in done]
-        print(f"resuming {run_id}: {len(done)} saved, {len(selection)} to go")
+        work = [(lab, k) for lab, k in work if Path(response_name(lab["alert_id"], k)).stem not in done]
+        print(f"resuming {run_id}: {len(done)} saved, {len(work)} to go")
     else:
         run_id = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M')}-{args.tag}"
         out_dir = RUNS_DIR / run_id
@@ -489,6 +535,7 @@ def main() -> int:
             "concurrency": args.concurrency,
             "selection": {"alerts": args.alerts, "scenario": args.scenario, "sample": args.sample, "seed": args.seed},
             "n_selected": len(selection),
+            "repeat": args.repeat,
             "notes": args.notes,
             "started_at": now_iso(),
         }
@@ -513,15 +560,19 @@ def main() -> int:
         backend = LocalBackend(tokens, args.mode, args.model, env[f"SURV_{args.user}_USER"], memory=not args.no_memory)
     cases = Cases()
 
+    rep_note = f" x {len(repeats)} repetitions = {len(work)} investigations" if len(repeats) > 1 else ""
     print(
-        f"run {run_id}: {len(selection)} alerts, backend={args.backend}, user={args.user}, concurrency={args.concurrency}"
+        f"run {run_id}: {len(selection)} alerts{rep_note}, backend={args.backend}, user={args.user}, "
+        f"concurrency={args.concurrency}"
     )
     print(f"outputs: {out_dir}")
     t_run = time.time()
     rows: list[dict[str, Any]] = []
     progress = (out_dir / "progress.jsonl").open("a")
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        futs = {pool.submit(run_one, lab, backend, cases, run_id, out_dir, args.retries): lab for lab in selection}
+        futs = {
+            pool.submit(run_one, lab, backend, cases, run_id, out_dir, args.retries, k): (lab, k) for lab, k in work
+        }
         for i, fut in enumerate(as_completed(futs), 1):
             row, _ = fut.result()
             rows.append(row)
@@ -538,8 +589,9 @@ def main() -> int:
                     else "NONE"
                 )
             )
+            rep_tag = f" r{row['repeat']}" if row.get("repeat") is not None else ""
             print(
-                f"[{i:3d}/{len(selection)}] {row['alert_id']} {row['injected_scenario']:20s} expected {row['expected_disposition']:10s} "
+                f"[{i:3d}/{len(work)}] {row['alert_id']}{rep_tag} {row['injected_scenario']:20s} expected {row['expected_disposition']:10s} "
                 f"-> {row['proposed'] or '-':10s} {row['confidence'] if row['confidence'] is not None else '':<5} {mark} "
                 f"{row['wall_s']:6.1f}s  {(row['input_tokens'] or 0):6d} in  {row['status']}"
                 + (f"  !! {row['error'][:120]}" if row["error"] else ""),
