@@ -26,7 +26,7 @@
   -> FAIL: fix ή revert· το alias δεν μετακινήθηκε ποτέ, οι χρήστες δεν είδαν τίποτα
 ```
 
-**Deploy δεν είναι release.** Κάθε `agentcore deploy` δημιουργεί νέα Runtime version πίσω από το `DEFAULT`. Release είναι το `agentcore add runtime-endpoint --version N` στο alias· rollback είναι η ίδια εντολή με το προηγούμενο N. Χωρίς downtime, χωρίς redeploy.
+**Deploy δεν είναι release.** Κάθε `agentcore deploy` δημιουργεί νέα Runtime version πίσω από το `DEFAULT`. Release είναι η μετακίνηση του alias: ορίζουμε το `endpoints.<alias>.version` στο `agentcore/agentcore.json` και τρέχουμε `agentcore deploy`· rollback είναι η ίδια αλλαγή με το προηγούμενο N. Το `add runtime-endpoint` του CLI δημιουργεί alias και αρνείται υπάρχον όνομα (επαληθεύτηκε 2026-11-10 στη μετακίνηση του `demo` v12 -> v14), και το deploy που μετακινεί alias κόβει επίσης νέα version με αμετάβλητο κώδικα πίσω από το `DEFAULT`, άρα να περιμένεις το `DEFAULT` μία version μπροστά από το released alias. Χωρίς downtime, χωρίς αλλαγή κώδικα στο released alias μέχρι να το μετακινήσεις.
 
 **Το standard της firm χρειάζεται την ίδια πειθαρχία.** Επειδή το `get_procedures` το διαβάζει σε run time, μια αλλαγή εφαρμόζεται στην επόμενη investigation χωρίς deploy. Η αλλαγή γίνεται σε staging table ή Memory namespace, τρέχει το harness, μετά promote· αλλιώς το compliance αλλάζει μια πρόταση την Τρίτη και το override rate κινείται την Τετάρτη χωρίς τίποτα στο log να λέει γιατί.
 

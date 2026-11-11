@@ -26,7 +26,7 @@ change: tool field | sentence in the firm's standard | prompt | model | dependen
   -> FAIL: fix or revert; the alias never moved, users saw nothing
 ```
 
-**Deploy is not release.** Every `agentcore deploy` creates a new Runtime version behind `DEFAULT`. Release is `agentcore add runtime-endpoint --version N` on the alias; rollback is the same command with the previous N. No downtime, no redeploy.
+**Deploy is not release.** Every `agentcore deploy` creates a new Runtime version behind `DEFAULT`. Release is moving the alias: set `endpoints.<alias>.version` in `agentcore/agentcore.json` and run `agentcore deploy`; rollback is the same edit with the previous N. The CLI's `add runtime-endpoint` creates an alias and refuses an existing name (verified 2026-11-10 moving `demo` v12 -> v14), and the deploy that moves an alias also cuts a new version with unchanged code behind `DEFAULT`, so expect `DEFAULT` one ahead of the released alias. No downtime, no code change on the released alias until you move it.
 
 **The firm's standard needs the same discipline.** Because `get_procedures` reads it at run time, an edit applies on the next investigation without a deploy. Edit it in a staging table or Memory namespace, run the harness, then promote; otherwise compliance changes a sentence on Tuesday and the override rate moves on Wednesday with nothing in the log to say why.
 

@@ -106,7 +106,7 @@
 
 ## Iterations μετά την alpha (έγγραφο λειτουργίας ενότητα 5)
 
-- [x] Iteration 3 (2026-11-10, Runtime v14, run `20261110T1833-sonnet-v4`): Bedrock prompt caching μέσω `CacheConfig` του Strands και το alias πεδίου `ruled_out`. Promotion rule PASS έναντι v3· κόστος μοντέλου ανά alert 0,187 $ -> 0,091 $, guard rejections 24 -> 1, p95 38,0 -> 35,6 s, μέσος χρόνος και ποιότητα αποφάσεων αμετάβλητα. Κριθέν πέρασμα έτρεξε. Το release (μετακίνηση του `demo` από v12 σε v14) είναι ξεχωριστή απόφαση.
+- [x] Iteration 3 (2026-11-10, Runtime v14, run `20261110T1833-sonnet-v4`): Bedrock prompt caching μέσω `CacheConfig` του Strands και το alias πεδίου `ruled_out`. Promotion rule PASS έναντι v3· κόστος μοντέλου ανά alert 0,187 $ -> 0,091 $, guard rejections 24 -> 1, p95 38,0 -> 35,6 s, μέσος χρόνος και ποιότητα αποφάσεων αμετάβλητα. Κριθέν πέρασμα έτρεξε (Correctness 0,92 / GoalSuccess 0,95 / rubric 0,60). **Released την ίδια μέρα**: alias `demo` v12 -> v14 με αλλαγή του `endpoints.demo.version` στο `agentcore.json` και `agentcore deploy` (το CLI δεν έχει εντολή update για υπάρχον endpoint)· το deploy έκοψε επίσης v15 με αμετάβλητο κώδικα και μετακίνησε το `DEFAULT` εκεί.
 - [ ] Run variance: το ίδιο alert πέντε φορές, είκοσι alerts (~5 $ με caching), ώστε μια διαφορά μίας ή δύο μονάδων μεταξύ runs να μπορεί να διαβαστεί.
 - [ ] Iteration 4: `effort` medium -> low ως configuration bundle, κριθέν πέρασμα υποχρεωτικό.
 

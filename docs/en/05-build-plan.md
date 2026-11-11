@@ -106,7 +106,7 @@ Cost note: one run of ~150 alerts with 8-12 tool calls each on a Sonnet-class mo
 
 ## Iterations after the alpha (operations doc section 5)
 
-- [x] Iteration 3 (2026-11-10, Runtime v14, run `20261110T1833-sonnet-v4`): Bedrock prompt caching through Strands `CacheConfig` and the `ruled_out` field alias. Promotion rule PASS against v3; model cost per alert $0.187 -> $0.091, guard rejections 24 -> 1, p95 38.0 -> 35.6 s, mean latency and decision quality unchanged. Judged pass run. Release (moving `demo` from v12 to v14) is a separate decision.
+- [x] Iteration 3 (2026-11-10, Runtime v14, run `20261110T1833-sonnet-v4`): Bedrock prompt caching through Strands `CacheConfig` and the `ruled_out` field alias. Promotion rule PASS against v3; model cost per alert $0.187 -> $0.091, guard rejections 24 -> 1, p95 38.0 -> 35.6 s, mean latency and decision quality unchanged. Judged pass run (Correctness 0.92 / GoalSuccess 0.95 / rubric 0.60). **Released the same day**: `demo` alias v12 -> v14 by editing `endpoints.demo.version` in `agentcore.json` and `agentcore deploy` (the CLI has no update command for an existing endpoint); the deploy also cut v15 with unchanged code and moved `DEFAULT` to it.
 - [ ] Variance run: the same alert five times, twenty alerts (~$5 with caching), so that a one- or two-point difference between runs can be read.
 - [ ] Iteration 4: `effort` medium -> low as a configuration bundle, judged pass mandatory.
 
