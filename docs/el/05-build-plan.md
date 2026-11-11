@@ -108,7 +108,7 @@
 
 - [x] Iteration 3 (2026-11-10, Runtime v14, run `20261110T1833-sonnet-v4`): Bedrock prompt caching μέσω `CacheConfig` του Strands και το alias πεδίου `ruled_out`. Promotion rule PASS έναντι v3· κόστος μοντέλου ανά alert 0,187 $ -> 0,091 $, guard rejections 24 -> 1, p95 38,0 -> 35,6 s, μέσος χρόνος και ποιότητα αποφάσεων αμετάβλητα. Κριθέν πέρασμα έτρεξε (Correctness 0,92 / GoalSuccess 0,95 / rubric 0,60). **Released την ίδια μέρα**: alias `demo` v12 -> v14 με αλλαγή του `endpoints.demo.version` στο `agentcore.json` και `agentcore deploy` (το CLI δεν έχει εντολή update για υπάρχον endpoint)· το deploy έκοψε επίσης v15 με αμετάβλητο κώδικα και μετακίνησε το `DEFAULT` εκεί.
 - [x] Run variance (2026-11-11, `20261111T0950-variance-v4`, `--repeat 5`, 21 alerts x 5, 34 λεπτά, 7,94 $): 18 από 21 σταθερά, η πύλη κράτησε σε κάθε επανάληψη, ασταθή = F-FAT-1, F-NEWS-1 και το επίπεδο ESCALATE/DRAFT_STOR σε ένα S-LAYER-1· περίπου 0,9 μονάδες θορύβου safe close στο πλήρες σύνολο, άρα η ανοχή δύο μονάδων είναι περίπου δύο τυπικές αποκλίσεις.
-- [ ] Iteration 4: `effort` medium -> low ως configuration bundle, κριθέν πέρασμα υποχρεωτικό.
+- [x] Iteration 4 (2026-11-11, bundle `surv_effort_low`, φέτα 30 alerts, 3 $): το `effort` low αλλάζει 0 από 30 αποφάσεις, 0 s latency, -10% output tokens· τα spans δείχνουν ότι το turn των 10 δευτερολέπτων του report είναι το μοντέλο που γράφει 3.300-3.800 χαρακτήρες αναφοράς χωρίς reasoning text. Απορρίφθηκε χωρίς το πλήρες run· ο μόνος μοχλός latency που μένει είναι το μέγεθος της αναφοράς (απόφαση compliance). Το `effort` high στο υποσύνολο variance (~12 $) μένει στο backlog ως το ένα τεστ που θα μπορούσε ακόμη να δείξει κάτι.
 
 ## Επεκτάσεις (μετά τη Φάση 6)
 

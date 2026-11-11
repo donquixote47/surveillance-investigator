@@ -108,7 +108,7 @@ Cost note: one run of ~150 alerts with 8-12 tool calls each on a Sonnet-class mo
 
 - [x] Iteration 3 (2026-11-10, Runtime v14, run `20261110T1833-sonnet-v4`): Bedrock prompt caching through Strands `CacheConfig` and the `ruled_out` field alias. Promotion rule PASS against v3; model cost per alert $0.187 -> $0.091, guard rejections 24 -> 1, p95 38.0 -> 35.6 s, mean latency and decision quality unchanged. Judged pass run (Correctness 0.92 / GoalSuccess 0.95 / rubric 0.60). **Released the same day**: `demo` alias v12 -> v14 by editing `endpoints.demo.version` in `agentcore.json` and `agentcore deploy` (the CLI has no update command for an existing endpoint); the deploy also cut v15 with unchanged code and moved `DEFAULT` to it.
 - [x] Variance run (2026-11-11, `20261111T0950-variance-v4`, `--repeat 5`, 21 alerts x 5, 34 min, $7.94): 18 of 21 stable, gate held in every repetition, unstable = F-FAT-1, F-NEWS-1 and the ESCALATE/DRAFT_STOR level on one S-LAYER-1; about 0.9 points of safe close noise on the full set, so the two-point tolerance is about two standard deviations.
-- [ ] Iteration 4: `effort` medium -> low as a configuration bundle, judged pass mandatory.
+- [x] Iteration 4 (2026-11-11, bundle `surv_effort_low`, 30-alert slice, $3): `effort` low changes 0 of 30 decisions, 0 s of latency, -10% output tokens; the spans show the 10-second report turn is the model writing 3,300-3,800 characters of report with no reasoning text. Rejected without the full run; the only latency lever left is the report size (a compliance decision). `effort` high on the variance subset (~$12) stays in the backlog as the one test that could still show something.
 
 ## Stretch (after Phase 6)
 
