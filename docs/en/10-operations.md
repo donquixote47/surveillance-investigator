@@ -106,7 +106,7 @@ Three lessons from the measurement. The cache saves money, not time: Bedrock sti
 
 **Resilience.** 429 retry is in (v12). Next: Bedrock throttling and model timeouts, not yet seen at this volume. The harness runs from a laptop; for a customer it becomes a scheduled job in the account.
 
-**Security.** A unit test that the agent's tools are exactly the one MCP client to the Gateway and nothing else: the warning in broker brief section 2b (a generic HTTP tool would hand the agent the ability to record) as code. Retention and log access (section 1, item 5).
+**Security.** Done 2026-11-11: `tests/test_agent_tools_boundary.py` asserts the agent is built with exactly one tool source (the Gateway MCP client, with the analyst's bearer token and the policy session header), no direct tools, and no tool library or HTTP client imported in the agent package; it fails on a second tool (checked by adding one). That is broker brief section 2b's warning as code. Still open: retention and log access (section 1, item 5).
 
 **Operations.** Online evaluation config and dashboard (section 3). Overnight pre-investigation as an option (product doc roadmap). The UI is a reference; the customer embeds the calls in its case tool.
 
