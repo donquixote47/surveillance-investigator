@@ -122,7 +122,7 @@ def sidebar() -> Session | None:
             with st.form("login"):
                 user = st.text_input("Analyst", value="l1.analyst")
                 pw = st.text_input("Password", type="password")
-                if st.form_submit_button("Log in", use_container_width=True):
+                if st.form_submit_button("Log in", width="stretch"):
                     try:
                         sess = login(cfg, user, pw)
                         sid = secrets.token_urlsafe(16)
@@ -138,7 +138,7 @@ def sidebar() -> Session | None:
             f"Runtime endpoint `{cfg.runtime_endpoint}`"
             + (" (pinned to the evaluated version)" if cfg.runtime_endpoint == "demo" else "")
         )
-        if st.button("Log out", use_container_width=True):
+        if st.button("Log out", width="stretch"):
             session_store().pop(ss().get("sid", ""), None)
             for k in ("session", "sid", "run", "run_session_id", "alert_id", "draft"):
                 ss().pop(k, None)
@@ -201,7 +201,7 @@ def queue_panel(api: HumanPath):
     st.caption(f"{len(ids)} alerts. Click a row to open it; the open one is **{current}**.")
     event = st.dataframe(
         rows,
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
         height=min(60 + 35 * len(rows), 420),
         on_select="rerun",
@@ -420,7 +420,7 @@ def run_view(cfg: Config, run: dict, session_id: str, wall: float):
                 }
                 for i, c in enumerate(calls)
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
             height=min(60 + 35 * len(calls), 400),
         )
@@ -452,7 +452,7 @@ def run_view(cfg: Config, run: dict, session_id: str, wall: float):
                     for s in spans
                     if s.kind or s.tool
                 ],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 height=min(60 + 35 * len(spans), 400),
             )
