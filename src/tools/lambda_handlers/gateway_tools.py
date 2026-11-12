@@ -526,11 +526,22 @@ def draft_stor_narrative(ev: dict) -> dict:
         ),
         "reference": "Delegated Regulation (EU) 2016/957 Annex (STOR template); MAR Art. 16(2)",
     }
+    draft_id = f"STOR-DRAFT-{uuid.uuid4().hex[:8]}"
+    now = datetime.now(UTC).isoformat(timespec="seconds")
+    # The draft is the agent's output, like the proposal, so it lives on the case next to it (2026-11-12; before this
+    # it was returned and kept only in the session trace). SET only stor_draft_*: no code path here touches
+    # recorded_*. Each new draft replaces the previous; the earlier ones remain in their sessions' traces.
+    da.table("CASES_TABLE").update_item(
+        Key={"alert_id": alert["alert_id"]},
+        UpdateExpression="SET stor_draft = :d, stor_draft_id = :i, stor_draft_at = :at",
+        ExpressionAttributeValues={":d": json.dumps(fields), ":i": draft_id, ":at": now},
+    )
     return {
         "alert_id": alert["alert_id"],
         "stor_fields": fields,
         "status": "DRAFT: not filed; Level 2 decides under MAR Art. 16(2)",
-        "draft_id": f"STOR-DRAFT-{uuid.uuid4().hex[:8]}",
+        "draft_id": draft_id,
+        "drafted_at": now,
     }
 
 

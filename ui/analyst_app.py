@@ -428,6 +428,19 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
             "This decision is now in AgentCore Memory under the trader and the desk; "
             "the agent will recall it next time."
         )
+    if case.get("stor_draft"):
+        st.markdown("**STOR narrative draft on file**")
+        st.caption(
+            f"{case.get('stor_draft_id', '')} · drafted {str(case.get('stor_draft_at', ''))[:16].replace('T', ' ')} · "
+            "not filed; Level 2 edits, signs or discards"
+        )
+        draft_on_file = case["stor_draft"]
+        if isinstance(draft_on_file, str):
+            try:
+                draft_on_file = json.loads(draft_on_file)
+            except json.JSONDecodeError:
+                pass
+        st.json(draft_on_file, expanded=False)
     if case.get("feedback"):
         st.markdown("**Feedback on this case**")
         for f in case["feedback"]:

@@ -494,7 +494,8 @@ TOOLS: list[dict] = [
         "description": (
             "Drafts the narrative fields of a Suspicious Transaction and Order Report (MAR Art. 16, template in "
             "Delegated Regulation (EU) 2016/957) from the recorded proposal. Only meaningful after a DRAFT_STOR "
-            "proposal. Nothing is filed anywhere."
+            "proposal. The draft is stored on the case (stor_draft, stor_draft_id, stor_draft_at) for Level 2 to "
+            "edit, sign or discard; nothing is filed anywhere."
         ),
         "inputSchema": _obj({"alert_id": _s("")}, "", ["alert_id"]),
         "outputSchema": _obj(

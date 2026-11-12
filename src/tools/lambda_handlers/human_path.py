@@ -115,11 +115,12 @@ def get_case(alert_id: str) -> dict:
     if alert is None:
         return _resp(404, {"error": f"alert {alert_id!r} not found"})
     case = da.get_case(alert_id) or {}
-    if isinstance(case.get("report"), str):
-        try:
-            case["report"] = json.loads(case["report"])
-        except json.JSONDecodeError:
-            pass
+    for key in ("report", "stor_draft"):  # both are stored as JSON text
+        if isinstance(case.get(key), str):
+            try:
+                case[key] = json.loads(case[key])
+            except json.JSONDecodeError:
+                pass
     return _resp(200, {"alert": alert, "case": case})
 
 
