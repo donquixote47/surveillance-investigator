@@ -186,7 +186,7 @@ def queue_panel(api: HumanPath):
                 "trigger": a["trigger"],
                 "status": a["status"],
                 "proposed": c.get("proposed_disposition") or "",
-                "band": confidence_band(float(c["confidence"]))[0] if c.get("confidence") is not None else "",
+                "certainty": confidence_band(float(c["confidence"]))[0] if c.get("confidence") is not None else "",
                 "recorded": c.get("recorded_disposition") or "",
                 "by": c.get("recorded_by") or "",
                 "override": "yes" if c.get("override") else "",
@@ -198,7 +198,14 @@ def queue_panel(api: HumanPath):
         current = ids[0]
         ss()["alert_id"] = current
     remember_in_url(a=current)
-    st.caption(f"{len(ids)} alerts. Click a row to open it; the open one is **{current}**.")
+    c_cap, c_help = st.columns([6, 1])
+    c_cap.caption(f"{len(ids)} alerts. Click a row to open it; the open one is **{current}**.")
+    with c_help.popover("columns"):
+        st.markdown(
+            "**proposed**: the agent's proposal, if it has run. **certainty**: the agent's own estimate that a "
+            "reviewer would record the same, as high / medium / low (details under the proposal). **recorded / by**: "
+            "the analyst's decision. **override**: the analyst recorded something other than the agent proposed."
+        )
     event = st.dataframe(
         rows,
         width="stretch",
@@ -233,15 +240,31 @@ def confidence_band(c: float) -> tuple[str, str]:
     """The agent's `confidence` is its own estimate that a Level-2 reviewer would record the same disposition. On
     372 evaluated proposals it ranks cases well (escalations under 0.65 were the boundary false positives, those at
     0.70 and above the spoofs; every close was right) but it is not calibrated as a probability, and no real reviewer
-    has scored it yet. So the UI shows a band, the raw figure in small type, and never a percentage."""
+    has scored it yet. So the UI shows "agent certainty" as high / medium / low with its meaning spelled out, the
+    raw figure in small type, and never a percentage."""
     if c >= 0.80:
-        return "clear", "the standard is met plainly on the tape"
+        return "high", "the agent expects a reviewer to record the same; the standard is met plainly on the tape"
     if c >= 0.65:
-        return "standard", "the evidence points one way; read the report before recording"
-    return (
-        "borderline",
-        "the agent could not close this under the standard; a reviewer may; see what would change its mind",
-    )
+        return "medium", "the evidence points one way; read the report before recording"
+    return "low", "the agent could not clear this under the firm's standard; a reviewer may well close it"
+
+
+CERTAINTY_EXPLAINED = """**Agent certainty** is the agent's own estimate of how likely a Level-2 reviewer is to record the
+same disposition after reading the tape. It is shown as a band, not a percentage, because it has not been checked
+against real reviewers.
+
+| band | figure | what it has meant on the evaluation set (372 proposals) |
+|---|---|---|
+| **high** | 0.80 and above | closes of market makers, algos, icebergs: every one agreed with the ground truth |
+| **medium** | 0.65 to 0.79 | the spoofs and layering it escalated (89% agreed), and closes of harder false positives (all agreed) |
+| **low** | below 0.65 | escalations of stop-outs, news reactions, fat fingers: cases the firm's standard has not decided; the ground truth would have closed 82% of them. Nothing the agent closed at low certainty was wrong. |
+
+So **low certainty on an escalation is not weak evidence of abuse**. It means the agent could not clear the alert under
+the standard it was given and is telling you a reviewer may. The sentence *what would change the agent's mind* says
+what would close it.
+
+Treat the figure as a ranking: look at medium and high escalations first. Whether 0.60 means sixty percent is
+something only your reviewers' recorded decisions can establish; the system keeps them for that."""  # noqa: E501
 
 
 def report_view(report: dict, confidence: float | None, disposition: str | None):
@@ -249,16 +272,16 @@ def report_view(report: dict, confidence: float | None, disposition: str | None)
     st.markdown(head)
     if confidence is not None:
         band, meaning = confidence_band(float(confidence))
-        colour = {"clear": "green", "standard": "blue", "borderline": "orange"}[band]
-        note = (
-            f"agent's own estimate {float(confidence):.2f}; ranks cases well on the evaluation set, "
-            "not calibrated against reviewers"
-        )
-        st.markdown(
-            f":{colour}[**{band}**] · {meaning}  <span style='color:grey;font-size:0.85em'>{note}</span>",
+        colour = {"high": "green", "medium": "blue", "low": "orange"}[band]
+        c_text, c_help = st.columns([6, 1])
+        c_text.markdown(
+            f"Agent certainty: :{colour}[**{band}**]. {meaning[0].upper()}{meaning[1:]}.  "
+            f"<span style='color:grey;font-size:0.85em'>(the agent's own figure: {float(confidence):.2f})</span>",
             unsafe_allow_html=True,
         )
-        if band == "borderline" and report and report.get("what_would_change_my_mind"):
+        with c_help.popover("what is this?"):
+            st.markdown(CERTAINTY_EXPLAINED)
+        if band == "low" and report and report.get("what_would_change_my_mind"):
             st.info(f"**What would change the agent's mind:** {report['what_would_change_my_mind']}")
     if not report:
         return
