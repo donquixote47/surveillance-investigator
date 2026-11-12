@@ -93,6 +93,29 @@ A thousand alerts a month on Sonnet is roughly $90 in model tokens plus a few do
 | Larger model buys little | same override rate at 3.6x cost | `compare-v3-opus.md` |
 | Optimization is governed | recommendation rejected by the offline gate; would have produced 0 proposals | `pilot-v2rec` |
 
+## 7a. In model-risk language
+
+A compliance or model-risk function reads a new system through the vocabulary of model risk management (the Fed's SR 11-7 and its successors, the EBA's and PRA's model-risk principles, the FCA's expectation that a firm can explain how an AI reached a conclusion). Everything below exists in this project under its own names; this table says which is which, so the reviewer does not have to translate. Added 2026-11-12 after the market review (Behavox sells its models as governed to the Fed's SR 26-2; buyers ask).
+
+| Model-risk element | What it means here | Where |
+|---|---|---|
+| **Model definition and scope** | A Level-1 investigator for spoofing and layering alerts; proposes, never records; scope and non-goals stated | `00-scope.md`, this doc sections 1 and 8 |
+| **Conceptual soundness** | The decision logic is the firm's written standard, read at run time; the agent's numbers come from deterministic code; the prompt carries no domain rules | principles P2, P3; design doc sections 4-5; `src/tools/procedures.py` |
+| **Data** | Synthetic, versioned, with a manifest per dataset; labels never reach the agent; a frozen regression set and a separate generalisation set | data doc sections 1-2 and 5; `data/synthetic/*/manifest.json` |
+| **Independent validation before use** | A labelled evaluation on 167 alerts with a hard gate (no real abuse proposed closed), evidence faithfulness, a judge pass, a second dataset the configuration never saw | data doc 4.2-4.6; `evals/` |
+| **Outcome analysis** | Agreement with ground truth per scenario, confusion matrix, escalation precision, per-scenario close rates, the confidence calibration table | data doc 4.6; `evals/metrics.py`, `evals/calibration.py` |
+| **Sensitivity and stability** | Run-to-run variance measured (21 alerts x 5), model arm (Opus), memory on/off arm, effort arm | data doc 4.6; `evals/variance.py`, `compare-*.md` |
+| **Ongoing monitoring** | Override rate by scenario/desk/analyst, faithfulness, no-proposal rate, Policy denials, latency and cost, a cadence; online evaluation designed, not configured | operations doc sections 2-3 |
+| **Change control** | Every change through the promotion rule on the frozen set; deploy is not release; the alias moves only after PASS; the firm's standard edited in staging and evaluated like code | operations doc section 2; data doc 4.4 |
+| **Documentation and audit trail** | Decision log with alternatives and reasons for every change; per-session trace with every tool call, input and output; policy decisions with the rule's name; the trace re-executable | `decision-log.md`; design doc section 9; `scripts/replay_trajectory.py` |
+| **Controls outside the model** | Investigation order, one proposal per alert, Level-2-only drafting, data caps, per-analyst rate limits, enforced by the platform on every call regardless of the prompt | principle P5; design doc section 6; `policies/` |
+| **Human oversight** | The agent cannot record; a human records on a separate API the agent cannot reach; overrides are flagged and fed back as test cases | principle P1; broker brief section 2b; `evals/ingest_overrides.py` |
+| **Explainability** | Every number in the report carries an evidence id that resolves to a tool output; every legitimate explanation has a verdict and the evidence behind it; "what would change my mind" | design doc section 5; `evals/faithfulness.py` |
+| **Limitations and open items** | Stated: synthetic data, one abuse type, non-determinism (measured), confidence not calibrated against reviewers, the label-boundary scenarios, retention not yet configured | section 8; operations doc sections 1 and 5 |
+| **Third-party and vendor risk** | Model through Amazon Bedrock in the firm's account and region family; model id is a configuration field; dependency versions pinned and checked at each deploy | principle P9, P10; operations doc section 3 (dependency drift) |
+
+What a model-risk reviewer will still ask for and we do not have: a validation on the firm's own data (the pilot), an independent reviewer who did not build the system, a formal materiality classification of the model, and a documented fall-back if the agent is unavailable (the answer is the status quo: analysts investigate as before; nothing depends on the agent being up).
+
 ## 8. Honest limitations (say these before the buyer finds them)
 
 - **Synthetic data.** The dataset is generated; the numbers above are on it. The harness is built to run on a firm's own labelled alerts, and that run is the acceptance test, not these numbers.
