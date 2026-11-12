@@ -290,7 +290,14 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
             "stored on the case record.",
             key=f"instr-{alert_id}",
         )
-        if st.button("Investigate", type="primary", key=f"run-{alert_id}"):
+        already = case.get("proposed_disposition")
+        if already:
+            st.caption(
+                f"A proposal is on file ({already}, {str(case.get('proposed_at', ''))[:16].replace('T', ' ')}). "
+                "Running again starts a new session, repeats the full procedure and replaces it; the earlier one stays "
+                "in its session's trace."
+            )
+        if st.button("Investigate again" if already else "Investigate", type="primary", key=f"run-{alert_id}"):
             session_id = new_session_id(alert_id)
             with st.spinner("the agent is working (30-60 s)…"):
                 result, session_id, wall = invoke_runtime(
