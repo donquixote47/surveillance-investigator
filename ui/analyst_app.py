@@ -280,7 +280,21 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
 
     # ---- run the agent
     with st.expander("Run the agent", expanded=not case.get("proposed_disposition")):
-        col1, col2 = st.columns([3, 1])
+        # Level 1 has one mode, so no selector. Level 2 can also ask for the STOR narrative to be drafted when the
+        # agent proposes DRAFT_STOR (Policy p07 allows that tool to L2 only, and only after such a proposal).
+        if sess.level == "L2":
+            col1, col2 = st.columns([3, 1])
+            mode = col2.selectbox(
+                "Mode",
+                ["investigate", "stor_drafting"],
+                format_func=lambda m: {"investigate": "Investigate", "stor_drafting": "Investigate + draft STOR"}[m],
+                help="'Investigate + draft STOR': if the agent proposes DRAFT_STOR it also drafts the STOR narrative "
+                "(Level 2 only; the Gateway denies the drafting tool to anyone else).",
+                key=f"mode-{alert_id}",
+            )
+        else:
+            col1 = st.container()
+            mode = "investigate"
         instruction = col1.text_input(
             "Ask the agent to check something specific (optional)",
             placeholder="e.g. the desk says this was a client parent order; look for it",
@@ -288,9 +302,6 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
             "Gateway's rules apply whatever is written here. The text is in the session trace; it is not yet "
             "stored on the case record.",
             key=f"instr-{alert_id}",
-        )
-        mode = col2.selectbox(
-            "Mode", ["investigate", "stor_drafting"] if sess.level == "L2" else ["investigate"], key=f"mode-{alert_id}"
         )
         if st.button("Investigate", type="primary", key=f"run-{alert_id}"):
             session_id = new_session_id(alert_id)
