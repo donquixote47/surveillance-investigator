@@ -114,6 +114,62 @@ def check_fact(fact: str, ground: str, ground_nums: list[float]) -> tuple[int, l
     return len(toks), unmatched
 
 
+# Categorical facts (2026-11-12, the idea from Robinhood's validation agent, done deterministically): the enum values
+# the firm's tables use. A fact that asserts one of these must find it in a tool result, unless the fact negates it
+# ("no PEGGED orders", "not a registered market maker", "registered_mm_instruments empty").
+ENUM_TOKENS = {
+    "MARKET_MAKER", "PROP", "CLIENT", "ALGO", "AGENCY",  # roles
+    "ETF-MM", "MM-OTHER", "PROP-EQ", "ALGO-EXEC", "ASSET-MGR", "INSTITUTIONAL", "RETAIL",  # desks
+    "LIMIT", "MARKET", "PEGGED", "ICEBERG",  # order types
+}  # fmt: skip
+ENUM_RE = re.compile(
+    r"(?<![\w-])(" + "|".join(re.escape(t) for t in sorted(ENUM_TOKENS, key=len, reverse=True)) + r")(?![\w-])"
+)
+NEGATION_RE = re.compile(r"\b(no|not|never|non|without|empty|none|neither|nor|rather than|instead of|only)\b", re.I)
+REG_RE = re.compile(r'"registered_mm_instruments":\s*(\[[^\]]*\])')
+
+
+def categorical_tokens(fact: str) -> list[tuple[str, bool]]:
+    """(token, negated) for every enum value asserted in a fact. A token is negated when a negation word sits in
+    the six words before it ("no PEGGED orders", "not a MARKET_MAKER", "LIMIT only, no ICEBERG")."""
+    out = []
+    for m in ENUM_RE.finditer(fact):
+        before = fact[: m.start()]
+        clause = re.split(r"[.;,:()]", before)[-1]  # a negation does not reach past punctuation
+        window = " ".join(clause.split()[-6:])
+        out.append((m.group(1), bool(NEGATION_RE.search(window))))
+    return out
+
+
+def check_categorical(fact: str, ground: str) -> tuple[int, list[str]]:
+    """Return (categorical claims checked, unmatched claims). Positive assertions must appear in the tool outputs.
+    Registration claims are checked against the profile's `registered_mm_instruments` list: "registered" on a
+    non-empty list, "not registered" / "empty" / "no registration" on an empty one."""
+    checked = 0
+    unmatched = []
+    ground_up = ground.upper()
+    for tok, negated in categorical_tokens(fact):
+        if negated:
+            continue  # a negative claim ("no PEGGED orders") is not a claim that the token appears
+        checked += 1
+        if tok not in ground_up:
+            unmatched.append(tok)
+    reg_match = REG_RE.search(ground)
+    if reg_match and re.search(r"\bregist", fact, re.I):
+        checked += 1
+        registered_list = reg_match.group(1).replace(" ", "")
+        says_registered = not re.search(
+            r"\b(not|no|never|without|un|non)\b[^.;,]{0,24}?regist|registered_mm_instruments\s*(is\s*)?(empty|\[\])|"
+            r"non-?registered|unregistered",
+            fact,
+            re.I,
+        )
+        actually_registered = registered_list != "[]"
+        if says_registered != actually_registered:
+            unmatched.append("registered" if says_registered else "not registered")
+    return checked, unmatched
+
+
 def check_alert(
     alert_id: str, session_id: str, report: dict[str, Any] | None, collector: CloudWatchAgentSpanCollector
 ) -> dict[str, Any]:
@@ -124,12 +180,27 @@ def check_alert(
     facts = []
     n_checked = 0
     n_unmatched = 0
+    c_checked = 0
+    c_unmatched = 0
     for e in (report or {}).get("evidence") or []:
         fact = str(e.get("fact") or "")
         n, un = check_fact(fact, ground, ground_nums)
+        c, cun = check_categorical(fact, ground)
         n_checked += n
         n_unmatched += len(un)
-        facts.append({"id": e.get("id"), "source": e.get("source"), "fact": fact, "numbers": n, "unmatched": un})
+        c_checked += c
+        c_unmatched += len(cun)
+        facts.append(
+            {
+                "id": e.get("id"),
+                "source": e.get("source"),
+                "fact": fact,
+                "numbers": n,
+                "unmatched": un,
+                "categorical": c,
+                "categorical_unmatched": cun,
+            }
+        )
     return {
         "alert_id": alert_id,
         "session_id": session_id,
@@ -138,7 +209,9 @@ def check_alert(
         "has_report": bool(report),
         "numbers_checked": n_checked,
         "numbers_unmatched": n_unmatched,
-        "faithful": bool(report) and n_unmatched == 0 and len(ground) > 0,
+        "categorical_checked": c_checked,
+        "categorical_unmatched": c_unmatched,
+        "faithful": bool(report) and n_unmatched == 0 and c_unmatched == 0 and len(ground) > 0,
         "facts": facts,
     }
 
@@ -147,10 +220,12 @@ def summarize(saved: list[dict[str, Any]], rows_by_alert: dict[str, dict[str, An
     with_report = [s for s in saved if s["has_report"] and s["ground_chars"] > 0]
     n_num = sum(s["numbers_checked"] for s in with_report)
     n_un = sum(s["numbers_unmatched"] for s in with_report)
+    c_num = sum(s.get("categorical_checked", 0) for s in with_report)
+    c_un = sum(s.get("categorical_unmatched", 0) for s in with_report)
     offenders = []
     for s in with_report:
         for f in s["facts"]:
-            if f["unmatched"]:
+            if f["unmatched"] or f.get("categorical_unmatched"):
                 r = rows_by_alert.get(s["alert_id"], {})
                 offenders.append(
                     {
@@ -158,7 +233,8 @@ def summarize(saved: list[dict[str, Any]], rows_by_alert: dict[str, dict[str, An
                         "scenario": r.get("injected_scenario"),
                         "proposed": r.get("proposed"),
                         "source": f["source"],
-                        "unmatched": f["unmatched"],
+                        "unmatched": f["unmatched"]
+                        + [f"[categorical] {c}" for c in f.get("categorical_unmatched", [])],
                         "fact": f["fact"][:220],
                     }
                 )
@@ -173,6 +249,9 @@ def summarize(saved: list[dict[str, Any]], rows_by_alert: dict[str, dict[str, An
         "numbers_checked": n_num,
         "numbers_unmatched": n_un,
         "number_rate": round((n_num - n_un) / n_num, 4) if n_num else None,
+        "categorical_checked": c_num,
+        "categorical_unmatched": c_un,
+        "categorical_rate": round((c_num - c_un) / c_num, 4) if c_num else None,
         "offenders": offenders,
     }
 

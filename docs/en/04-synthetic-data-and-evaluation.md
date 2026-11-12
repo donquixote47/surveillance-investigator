@@ -121,7 +121,7 @@ AgentCore Evaluations scores cases; it does not know our gate. `evals/run_datase
    - **Safe close rate:** `count(truth == FALSE_POSITIVE and proposed == CLOSE_FP) / count(truth == FALSE_POSITIVE)`. Reported only if gate holds; otherwise "n/a (gate failed: k missed)".
    - **Escalation precision:** share of ESCALATE/DRAFT_STOR proposals that are TRUE_ABUSE.
    - **Strong-call precision:** share of DRAFT_STOR proposals that are TRUE_ABUSE.
-   - **Evidence faithfulness:** programmatic check that every number in `report.evidence[].fact` appears in a tool output span for that session.
+   - **Evidence faithfulness:** programmatic check that every number in `report.evidence[].fact` appears in a tool output span for that session. Since 2026-11-12 also every **categorical claim**: a role, desk or order type the fact asserts (PROP, MARKET_MAKER, ETF-MM, PEGGED, ...) must appear in a tool output, negated claims ("no PEGGED orders") are not counted, and a registration claim must agree with the profile's `registered_mm_instruments`. On the promoted run 615 of 615 categorical claims matched, on seed8 384 of 384; the idea is Robinhood's validation agent done deterministically, at no model cost.
    - **Override rate:** share of proposals the recording analyst changed. In the synthetic harness the "analyst" is the label, so override rate = 1 - agreement with the label; in production it is the real analyst's decision from the `cases` table. Tracked across runs as the learning signal (design doc section 11).
    - **Rubric mean** from the custom evaluator; **assertion pass rate** from GoalSuccessRate; **trajectory pass rate**.
    - **Per-scenario breakdown** (which F-scenarios the agent fails to close; which S-scenarios it under-calls).

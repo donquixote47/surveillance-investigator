@@ -88,7 +88,7 @@ Previous run: `20261110T1833-sonnet-v4`. Verdict: **FAIL**.
 
 ## Evidence faithfulness
 
-100 reports checked against their sessions' tool results (`evals/faithfulness.py`): **96.0% of reports** have every number grounded; 2462 of 2466 numbers matched (99.8%).
+100 reports checked against their sessions' tool results (`evals/faithfulness.py`): **96.0% of reports** have every number grounded; 2462 of 2466 numbers matched (99.8%). Categorical claims (roles, desks, order types, registration): 384 of 384 matched (100.0%).
 
 | alert | scenario | proposed | source | unmatched | fact |
 |---|---|---|---|---|---|

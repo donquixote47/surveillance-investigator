@@ -507,6 +507,13 @@ def render_markdown(
             f"{f['n_with_report']} reports checked against their sessions' tool results (`evals/faithfulness.py`): "
             f"**{_pct(f['alert_rate'])} of reports** have every number grounded; {f['numbers_checked'] - f['numbers_unmatched']} of "
             f"{f['numbers_checked']} numbers matched ({_pct(f['number_rate'])})."
+            + (
+                f" Categorical claims (roles, desks, order types, registration): "
+                f"{f['categorical_checked'] - f['categorical_unmatched']} of {f['categorical_checked']} matched "
+                f"({_pct(f['categorical_rate'])})."
+                if f.get("categorical_checked")
+                else ""
+            )
             + (f" {f['n_no_spans']} session(s) had no spans." if f.get("n_no_spans") else "")
         )
         lines.append("")

@@ -86,6 +86,17 @@ Previous run: `20261106T1126-sonnet-v3`. Verdict: **PASS (offline promotion rule
 | F-FAT-1 | +33 pts | +33 pts |
 | F-STOP-1 | +33 pts | +33 pts |
 
+## Evidence faithfulness
+
+167 reports checked against their sessions' tool results (`evals/faithfulness.py`): **97.6% of reports** have every number grounded; 4092 of 4096 numbers matched (99.9%). Categorical claims (roles, desks, order types, registration): 615 of 615 matched (100.0%).
+
+| alert | scenario | proposed | source | unmatched | fact |
+|---|---|---|---|---|---|
+| A-261005-0012 | F-ALGO-1 | CLOSE_FP | get_order_events | 150 | Both sides cancelled and replaced within ~10-150 ms of each other, following best ask changes 9999/10000/9998; fills: SELL 201 @9999 at 17:00:01.160, BUY 74 and BUY 485 @9996 |
+| A-261015-0001 | F-ALGO-1 | CLOSE_FP | get_order_events | 0.1 | All 72 orders are PEGGED, children of parents P-T-X1015-01-B and P-T-X1015-01-S; each BUY cancel/replace is paired within ~0.1s with a SELL cancel/replace of 2213 at the touch. |
+| A-261015-0008 | F-NEWS-1 | ESCALATE | get_market_events | 142 | NEWS at 15:13:22.998: issuer announces unscheduled trading update, ~142 ms before the cancels |
+| A-261027-0003 | BACKGROUND | CLOSE_FP | get_market_events | 40.9 | Only a MACRO_PRINT at 10:30:49, 40.9s before the window start; market_wide_cancels_1s_before_first_cancel is 0 |
+
 ## AgentCore Evaluations
 
 167 sessions scored against ground truth generated from the labels (`evals/ground_truth.py`); 0 evaluator error(s). Pass = score 1.0.

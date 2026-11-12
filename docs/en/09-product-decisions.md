@@ -84,7 +84,7 @@ A thousand alerts a month on Sonnet is roughly $90 in model tokens plus a few do
 | Never closes real abuse on the evaluation set | 0 of 28 true-abuse alerts proposed as closed, in every run; the detector's own rules close 6 | data doc 4.6 |
 | Closes most false positives | 95.0% (132 of 139) | run `20261110T1833-sonnet-v4`; 93.5% on v3, the difference within run-to-run variance |
 | Fewer corrections than the rules | override rate 5.4% vs 7.2% for the threshold rules | same |
-| Numbers in reports are real | 99.9% of 4,096 numbers trace to a tool output | `evals/faithfulness.py` |
+| Numbers and facts in reports are real | 99.9% of 4,096 numbers trace to a tool output; 615 of 615 categorical claims (roles, desks, order types, registration) match the tool outputs | `evals/faithfulness.py` |
 | Cost halves without touching the decision | $0.187 -> $0.091 per alert, gate and faithfulness unchanged | `compare-v3-v4.md` |
 | Holds on alerts nothing was tuned against | second dataset (seed 8, K = 4, 100 alerts): gate 0 of 24, the ten defined scenarios 76 of 76, 86.8% safe close on a mix with twice the boundary cases (92.7% on seed7's mix) | run `20261111T1326-seed8-generalisation` |
 | Procedure follows the standard every time | 100% trajectory match on 167 sessions | Builtin.TrajectoryInOrderMatch |
