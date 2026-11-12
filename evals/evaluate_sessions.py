@@ -53,6 +53,10 @@ DEFAULT_EVALUATORS = [
     "rubric",
 ]
 DEFAULT_DATASET = ROOT / "data" / "synthetic" / "seed7"
+# Measured on the v4 judged pass (167 sessions): built-in judges 2.95 M in / 0.10 M out at $2.40 / $12.00 per M,
+# the rubric 3.83 M in / 0.25 M out on Opus at $4 / $20 (assumed) plus $1.50 per 1,000 evaluations: about $28,
+# $0.17 a session. Used only for the estimate printed before a pass starts.
+JUDGE_COST_PER_SESSION_USD = 0.17
 
 logging.basicConfig(level=logging.WARNING)
 _print_lock = threading.Lock()
@@ -152,11 +156,16 @@ def main() -> int:
     ap.add_argument(
         "--summarize-only", action="store_true", help="no new calls; rebuild the aggregate from saved files"
     )
+    ap.add_argument("--yes", action="store_true", help="start without the cost confirmation (scripted use)")
     args = ap.parse_args()
 
     run_dir: Path = args.run_dir
     results_path = run_dir / "results.json"
     run = json.loads(results_path.read_text())
+    saved_ds = run.get("dataset")
+    if saved_ds and saved_ds != args.dataset.name:  # a run is scored with the labels of the dataset it ran on
+        print(f"note: run was made on dataset {saved_ds}; using its labels, not {args.dataset.name}")
+        args.dataset = DEFAULT_DATASET.parent / saved_ds
     labels_list = pd.read_parquet(args.dataset / "labels" / "labels.parquet").to_dict("records")
     labels = {r["alert_id"]: r for r in labels_list}
     per_alert, _ = rescore(run_dir, labels_list)  # rows rebuilt from the saved responses, as run_dataset scores them
@@ -171,6 +180,16 @@ def main() -> int:
         print(
             f"evaluating {len(rows)} sessions of {run['run_id']} with {evaluator_ids} (concurrency {args.concurrency})"
         )
+        # The judge is the one thing in this project that spends more than the investigation it looks at: about
+        # $0.17 per session (GoalSuccessRate reads the whole session, the rubric runs on Opus) against $0.09 for the
+        # investigation. It never runs on its own; it starts here, after this line, and only after a yes.
+        est = len(rows) * JUDGE_COST_PER_SESSION_USD
+        print(f"estimated judge cost: about ${est:.0f} ({len(rows)} sessions x ~${JUDGE_COST_PER_SESSION_USD:.2f})")
+        if not args.yes:
+            answer = input("start the judged pass? [y/N] ").strip().lower()
+            if answer not in ("y", "yes"):
+                print("not started")
+                return 0
         client = EvaluationClient(region_name=REGION)
         t0 = time.time()
         with ThreadPoolExecutor(max_workers=args.concurrency) as pool:

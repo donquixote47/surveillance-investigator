@@ -69,6 +69,14 @@ def start(run_dir: Path, evaluator_arn: str, name: str | None) -> dict:
     name = name or re.sub(r"[^a-zA-Z0-9_-]", "-", f"surv-{run['run_id']}")[:48]
     if not re.match(r"[a-zA-Z]", name[0]):
         name = "r" + name[1:]
+    # the recommendation runs the rubric judge (Opus) over every session in the window and then an optimiser on top:
+    # the one judged pass cost about $12 in judge tokens for 167 sessions. Nothing here runs without a yes.
+    n = run["metrics"]["n"]
+    print(
+        f"this starts a judged pass over {n} sessions (rubric on Opus, ~$0.07 each, about ${0.07 * n:.0f}) plus the optimiser"
+    )
+    if input("start the recommendation? [y/N] ").strip().lower() not in ("y", "yes"):
+        raise SystemExit("not started")
     r = dp().start_recommendation(
         name=name,
         description=f"System-prompt recommendation against {evaluator_arn.rsplit('/', 1)[1]} from run {run['run_id']} "
