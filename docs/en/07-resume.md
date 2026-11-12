@@ -91,6 +91,7 @@ uv run evals/run_dataset.py --repeat 5 --alerts ... --tag variance    # run-to-r
 uv run scripts/span_turns.py --run evals/runs/<run_id> --alerts A-...  # per-turn timing of a session from its spans: model turns, tokens, tools
 uv run evals/run_dataset.py --dataset data/synthetic/seed8 --tag seed8-...  # the generalisation set (100 alerts, ~$9); --rescore/--resume pick the run's dataset themselves
 uv run evals/calibration.py [run dirs]                                  # agreement with the label by proposed disposition and confidence band (free)
+uv run scripts/replay_trajectory.py <session_id> [--endpoint demo]     # re-run a session's tool calls through the Gateway and diff against the trace (audit)
 uv run evals/run_dataset.py --resume evals/runs/<run_id> --retry-errors # finish a cut run, re-run errored alerts
 uv run evals/run_dataset.py --rescore evals/runs/<run_id>              # recompute results.md from the saved responses (free)
 uv run evals/faithfulness.py evals/runs/<run_id>                       # numbers in evidence vs tool-result spans (free)

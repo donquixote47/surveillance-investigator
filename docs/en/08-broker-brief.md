@@ -152,6 +152,8 @@ The analyst UI links each case to its trace. Metrics per rule and per tool (how 
 - *Retention.* The demo keeps Gateway and Lambda logs for 30 days and Runtime traces indefinitely (the default). 2016/957 asks for five years. The options are a five-year retention on the log groups or a scheduled export to S3 with a lifecycle to cold storage, which costs a fraction. Measured size: about 150 KB per investigation; a thousand alerts a month for five years is about 9 GB.
 - *Who may read the traces.* Because the spans hold the full tool outputs, a trader's order history, profile and alert history are in the log store. It is the same account and region as the data itself, and it needs the same access controls (who may read the log groups) and, if the firm wants it, the PII masking CloudWatch offers. In the demo the data is synthetic; in production this is a conversation with the data protection officer before the first real alert.
 
+**And it can be re-run.** Given a session's trace, a script replays every data call the agent made, through the same gateway under the same analyst role, and compares the answers with what the agent saw. On the sessions tried, every data call came back identical; the only thing that moves is the memory recall, when an analyst has recorded a decision since, and the script says so. The report's numbers are therefore not a model's recollection: they are reproducible outputs of the firm's own data, and a reviewer or a regulator can reproduce them.
+
 ## 8. How it learns, and how it is kept from drifting
 
 Nothing in the model changes on its own: no fine-tuning, no weights touched. Behaviour can be changed at three levels, and who owns each level is the point:

@@ -59,6 +59,7 @@ change: tool field | sentence in the firm's standard | prompt | model | dependen
 | **Rubric mean and distribution** | judged pass, monthly | Quality of reasoning. Falling while agreement holds: the reports weaken before the decisions do. |
 | **Memory size, extraction lag, recall latency** | Memory API, spans | Records growing without bound: a TTL policy is due. |
 | **Dependency drift** | staging dist-info at each deploy | The Runtime bundle resolves different versions from the workstation (mcp 1.30 vs 2.3 broke v11). |
+| **Replay mismatch** | `scripts/replay_trajectory.py` on a sample of sessions, after any data load or tool change | A read-only tool returning something other than what the agent saw means the data or the tool changed under the record: find out which before anything else. |
 
 Two things turn this table from scripts into operations: an **online evaluation config** (the rubric on a 10-20% sample of live sessions, which gives the quality trend without a labelled set and is the prerequisite for a Gateway A/B test), and a **dashboard** with the first five rows. Days of work, not weeks; neither is in the alpha.
 

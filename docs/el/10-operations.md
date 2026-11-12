@@ -59,6 +59,7 @@
 | **Rubric mean και distribution** | judged pass, μηνιαία | Ποιότητα συλλογισμού. Πέφτει ενώ το agreement κρατά: τα reports αδυνατίζουν πριν από τις αποφάσεις. |
 | **Memory size, extraction lag, recall latency** | Memory API, spans | Records που μεγαλώνουν χωρίς όριο: χρειάζεται TTL policy. |
 | **Dependency drift** | staging dist-info σε κάθε deploy | Το Runtime bundle επιλύει διαφορετικές versions από το workstation (mcp 1.30 vs 2.3 έσπασε το v11). |
+| **Αναντιστοιχία επανάληψης** | `scripts/replay_trajectory.py` σε δείγμα sessions, μετά από κάθε φόρτωση δεδομένων ή αλλαγή tool | Tool ανάγνωσης που επιστρέφει κάτι άλλο από αυτό που είδε ο agent σημαίνει ότι τα δεδομένα ή το tool άλλαξαν κάτω από το αρχείο: βρες ποιο πριν από οτιδήποτε άλλο. |
 
 Δύο πράγματα μετατρέπουν αυτόν τον πίνακα από scripts σε operations: ένα **online evaluation config** (το rubric σε δείγμα 10-20% των live sessions, που δίνει την τάση ποιότητας χωρίς labelled set και είναι η προϋπόθεση για Gateway A/B test) και ένα **dashboard** με τις πρώτες πέντε γραμμές. Μέρες δουλειάς, όχι εβδομάδες· κανένα από τα δύο δεν είναι στην alpha.
 
