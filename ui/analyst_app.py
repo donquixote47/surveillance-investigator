@@ -186,7 +186,11 @@ def queue_panel(api: HumanPath):
                 "trigger": a["trigger"],
                 "status": a["status"],
                 "proposed": c.get("proposed_disposition") or "",
-                "certainty": confidence_band(float(c["confidence"]))[0] if c.get("confidence") is not None else "",
+                "certainty": (
+                    f"{confidence_band(float(c['confidence']))[0]} ({float(c['confidence']):.2f})"
+                    if c.get("confidence") is not None
+                    else ""
+                ),
                 "recorded": c.get("recorded_disposition") or "",
                 "by": c.get("recorded_by") or "",
                 "override": "yes" if c.get("override") else "",
@@ -203,7 +207,8 @@ def queue_panel(api: HumanPath):
     with c_help.popover("columns"):
         st.markdown(
             "**proposed**: the agent's proposal, if it has run. **certainty**: the agent's own estimate that a "
-            "reviewer would record the same, as high / medium / low (details under the proposal). **recorded / by**: "
+            "reviewer would record the same, as high / medium / low with its 0-1 figure (details under the proposal). "
+            "**recorded / by**: "
             "the analyst's decision. **override**: the analyst recorded something other than the agent proposed."
         )
     event = st.dataframe(
@@ -275,8 +280,9 @@ def report_view(report: dict, confidence: float | None, disposition: str | None)
         colour = {"high": "green", "medium": "blue", "low": "orange"}[band]
         c_text, c_help = st.columns([6, 1])
         c_text.markdown(
-            f"Agent certainty: :{colour}[**{band}**]. {meaning[0].upper()}{meaning[1:]}.  "
-            f"<span style='color:grey;font-size:0.85em'>(the agent's own figure: {float(confidence):.2f})</span>",
+            f"Agent certainty: :{colour}[**{band} ({float(confidence):.2f})**]. {meaning[0].upper()}{meaning[1:]}.  "
+            "<span style='color:grey;font-size:0.85em'>The figure is the agent's own estimate on a 0-1 scale, "
+            "not a measured probability.</span>",
             unsafe_allow_html=True,
         )
         with c_help.popover("what is this?"):
