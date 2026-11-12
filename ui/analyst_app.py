@@ -10,6 +10,7 @@ forwards the token to the Gateway, so the whole chain acts as this analyst.
 from __future__ import annotations
 
 import json
+import secrets
 import sys
 from datetime import date
 from pathlib import Path
@@ -53,8 +54,43 @@ def config() -> Config:
     return Config.load()
 
 
+@st.cache_resource
+def session_store() -> dict[str, Session]:
+    """Logged-in sessions, server side, for the life of the Streamlit process. `st.session_state` dies with the
+    browser connection, so a page refresh used to mean a new login. The browser keeps only an opaque random id in
+    the URL (`?s=`); the Cognito tokens never leave this process. The UI listens on loopback only."""
+    return {}
+
+
 def ss():
     return st.session_state
+
+
+def restore_from_url() -> None:
+    """On a fresh connection (page refresh, new tab on the same URL) pick up the session, day and alert the URL
+    names. Expired or unknown ids are dropped from the URL."""
+    qp = st.query_params
+    sid = qp.get("s")
+    if sid and "session" not in ss():
+        sess = session_store().get(sid)
+        if sess and not sess.expired:
+            ss()["session"] = sess
+            ss()["sid"] = sid
+        else:
+            session_store().pop(sid, None)
+            qp.pop("s", None)
+    if "date" not in ss() and qp.get("d") in DATASET_DATES:
+        ss()["date"] = qp["d"]
+    if "alert_id" not in ss() and qp.get("a"):
+        ss()["alert_id"] = qp["a"]
+
+
+def remember_in_url(**kv: str | None) -> None:
+    for k, v in kv.items():
+        if v is None:
+            st.query_params.pop(k, None)
+        elif st.query_params.get(k) != v:
+            st.query_params[k] = v
 
 
 # ------------------------------------------------------------------------------------------------ sidebar: login
@@ -62,20 +98,27 @@ def ss():
 
 def sidebar() -> Session | None:
     cfg = config()
+    restore_from_url()
     with st.sidebar:
         st.title("Surveillance investigator")
         st.caption("Synthetic data. The agent proposes; you record.")
         sess: Session | None = ss().get("session")
         if sess and sess.expired:
             sess = None
+            session_store().pop(ss().pop("sid", ""), None)
             ss().pop("session", None)
+            remember_in_url(s=None)
         if sess is None:
             with st.form("login"):
                 user = st.text_input("Analyst", value="l1.analyst")
                 pw = st.text_input("Password", type="password")
                 if st.form_submit_button("Log in", use_container_width=True):
                     try:
-                        ss()["session"] = login(cfg, user, pw)
+                        sess = login(cfg, user, pw)
+                        sid = secrets.token_urlsafe(16)
+                        session_store()[sid] = sess
+                        ss()["session"], ss()["sid"] = sess, sid
+                        remember_in_url(s=sid)
                         st.rerun()
                     except Exception as exc:
                         st.error(f"login failed: {type(exc).__name__}")
@@ -86,8 +129,10 @@ def sidebar() -> Session | None:
             + (" (pinned to the evaluated version)" if cfg.runtime_endpoint == "demo" else "")
         )
         if st.button("Log out", use_container_width=True):
-            for k in ("session", "run", "run_session_id", "alert_id"):
+            session_store().pop(ss().get("sid", ""), None)
+            for k in ("session", "sid", "run", "run_session_id", "alert_id"):
                 ss().pop(k, None)
+            remember_in_url(s=None, a=None)
             st.rerun()
         st.divider()
         saved = ss().get("date", DEFAULT_DATE)
@@ -97,7 +142,9 @@ def sidebar() -> Session | None:
         if new_date != saved:  # a new day: the selected alert and any run belong to the old one
             for k in ("alert_id", "run", "run_session_id"):
                 ss().pop(k, None)
+            remember_in_url(a=None)
         ss()["date"] = new_date
+        remember_in_url(d=new_date)
         st.caption(f"Region {cfg.region}. Runtime `{cfg.runtime_arn.rsplit('/', 1)[-1]}`.")
         return sess
 
@@ -137,6 +184,7 @@ def queue_panel(api: HumanPath):
     if current not in ids:  # first visit to this day: open the first alert in the queue
         current = ids[0]
         ss()["alert_id"] = current
+    remember_in_url(a=current)
     st.caption(f"{len(ids)} alerts. Click a row to open it; the open one is **{current}**.")
     event = st.dataframe(
         rows,
@@ -154,12 +202,14 @@ def queue_panel(api: HumanPath):
         ss().pop("run", None)
         ss().pop("run_session_id", None)
         ss().pop(f"queue-{ss()['date']}", None)
+        remember_in_url(a=ids[picked[0]])
         st.rerun()
     choice = st.selectbox("Open alert", ids, index=ids.index(current), key=f"open-{ss()['date']}-{current}")
     if choice != current:
         ss()["alert_id"] = choice
         ss().pop("run", None)
         ss().pop("run_session_id", None)
+        remember_in_url(a=choice)
         st.rerun()
 
 

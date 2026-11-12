@@ -73,6 +73,9 @@ uv run scripts/policy_demo.py                              # βήματα 5-6 τ
 uv run scripts/validate_policies.py                        # τα ευρήματα του engine για κάθε αρχείο στο policies/
 uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # εγγραφές Memory· επίσης ingest-procedures, seed-history, delete
 uv run --group ui streamlit run ui/analyst_app.py          # UI αναλυτή στο http://127.0.0.1:8501 (μόνο loopback)
+#   SURV_RUNTIME_ENDPOINT=demo ... για το καρφωμένο endpoint. Η σύνδεση επιζεί page refresh όσο ζει η διεργασία Streamlit:
+#   το URL του browser φέρει αδιαφανές session id (?s=), την ημέρα (?d=) και το ανοιχτό alert (?a=)· τα Cognito tokens
+#   μένουν στη διεργασία. Log out ή επανεκκίνηση της διεργασίας τα σβήνει.
 python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία docs (κενή έξοδος = καθαρό)
 ```
 Φάση 5 (αξιολόγηση), με τη σειρά που περνά ένα run· όλα τα αποτελέσματα στο `evals/runs/<run_id>/` γίνονται commit:

@@ -73,6 +73,9 @@ uv run scripts/policy_demo.py                              # demo steps 5-6: the
 uv run scripts/validate_policies.py                        # the engine's findings for every file in policies/
 uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # Memory records; also ingest-procedures, seed-history, delete
 uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
+#   SURV_RUNTIME_ENDPOINT=demo ... for the pinned endpoint. A login survives a page refresh for the life of the Streamlit
+#   process: the browser URL carries an opaque session id (?s=), the day (?d=) and the open alert (?a=); the Cognito
+#   tokens stay in the process. Log out or restart the process to drop them.
 python3 .kiro/hooks/scripts/docs-sync-check.py             # docs parity (empty output = clean)
 ```
 Phase 5 (evaluation), in the order a run goes through; all run outputs under `evals/runs/<run_id>/` are committed:
