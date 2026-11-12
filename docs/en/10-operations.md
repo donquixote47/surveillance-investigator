@@ -106,6 +106,8 @@ Three lessons from the measurement. The cache saves money, not time: Bedrock sti
 - S-SPOOF-2 1/3: the escalation standard says "repeats" without a number; `repetitions_in_session >= 3` explicitly.
 - Report quality (rubric 0.61): the judge's lowest explanations are specific (derived timings wrong, indicators matched loosely). One sentence in the report instructions: times and differences as the tools return them.
 
+**Iteration 5 (candidate): the confidence definition.** `evals/calibration.py` shows the figure ranks cases well but sits at 0.70-0.75 on textbook spoofs because "same disposition" includes the ESCALATE-vs-DRAFT_STOR choice. Redefining it on the direction (close vs not close) is one sentence in the prompt, so it is an iteration with the judged pass mandatory and the calibration table as the acceptance measure (clear spoofs up, boundary cases where they are, closes unchanged). Separately, for a pilot: recompute the table against the firm's recorded Level-2 decisions (`evals/ingest_overrides.py`) and either keep the figure, remap it, or show the band only.
+
 **Resilience.** 429 retry is in (v12). Next: Bedrock throttling and model timeouts, not yet seen at this volume. The harness runs from a laptop; for a customer it becomes a scheduled job in the account.
 
 **Security.** Done 2026-11-11: `tests/test_agent_tools_boundary.py` asserts the agent is built with exactly one tool source (the Gateway MCP client, with the analyst's bearer token and the policy session header), no direct tools, and no tool library or HTTP client imported in the agent package; it fails on a second tool (checked by adding one). That is broker brief section 2b's warning as code. Still open: retention and log access (section 1, item 5).

@@ -89,6 +89,7 @@ uv run evals/compare_runs.py evals/runs/<A> evals/runs/<B> --out ...   # paired 
 uv run evals/run_dataset.py --repeat 5 --alerts ... --tag variance    # run-to-run variance: per-alert stability, pseudo-run spread (~$8 for 21 x 5)
 uv run scripts/span_turns.py --run evals/runs/<run_id> --alerts A-...  # per-turn timing of a session from its spans: model turns, tokens, tools
 uv run evals/run_dataset.py --dataset data/synthetic/seed8 --tag seed8-...  # the generalisation set (100 alerts, ~$9); --rescore/--resume pick the run's dataset themselves
+uv run evals/calibration.py [run dirs]                                  # agreement with the label by proposed disposition and confidence band (free)
 uv run evals/run_dataset.py --resume evals/runs/<run_id> --retry-errors # finish a cut run, re-run errored alerts
 uv run evals/run_dataset.py --rescore evals/runs/<run_id>              # recompute results.md from the saved responses (free)
 uv run evals/faithfulness.py evals/runs/<run_id>                       # numbers in evidence vs tool-result spans (free)

@@ -186,7 +186,7 @@ def queue_panel(api: HumanPath):
                 "trigger": a["trigger"],
                 "status": a["status"],
                 "proposed": c.get("proposed_disposition") or "",
-                "conf": f"{c['confidence']:.2f}" if c.get("confidence") is not None else "",
+                "band": confidence_band(float(c["confidence"]))[0] if c.get("confidence") is not None else "",
                 "recorded": c.get("recorded_disposition") or "",
                 "by": c.get("recorded_by") or "",
                 "override": "yes" if c.get("override") else "",
@@ -229,11 +229,37 @@ def queue_panel(api: HumanPath):
 # ------------------------------------------------------------------------------------------------ case view
 
 
+def confidence_band(c: float) -> tuple[str, str]:
+    """The agent's `confidence` is its own estimate that a Level-2 reviewer would record the same disposition. On
+    372 evaluated proposals it ranks cases well (escalations under 0.65 were the boundary false positives, those at
+    0.70 and above the spoofs; every close was right) but it is not calibrated as a probability, and no real reviewer
+    has scored it yet. So the UI shows a band, the raw figure in small type, and never a percentage."""
+    if c >= 0.80:
+        return "clear", "the standard is met plainly on the tape"
+    if c >= 0.65:
+        return "standard", "the evidence points one way; read the report before recording"
+    return (
+        "borderline",
+        "the agent could not close this under the standard; a reviewer may; see what would change its mind",
+    )
+
+
 def report_view(report: dict, confidence: float | None, disposition: str | None):
     head = f"**Proposed: {disposition}**" if disposition else "**No proposal yet**"
-    if confidence is not None:
-        head += f"  ·  confidence {confidence:.2f}"
     st.markdown(head)
+    if confidence is not None:
+        band, meaning = confidence_band(float(confidence))
+        colour = {"clear": "green", "standard": "blue", "borderline": "orange"}[band]
+        note = (
+            f"agent's own estimate {float(confidence):.2f}; ranks cases well on the evaluation set, "
+            "not calibrated against reviewers"
+        )
+        st.markdown(
+            f":{colour}[**{band}**] · {meaning}  <span style='color:grey;font-size:0.85em'>{note}</span>",
+            unsafe_allow_html=True,
+        )
+        if band == "borderline" and report and report.get("what_would_change_my_mind"):
+            st.info(f"**What would change the agent's mind:** {report['what_would_change_my_mind']}")
     if not report:
         return
     st.markdown(report.get("summary", ""))
