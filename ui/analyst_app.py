@@ -31,12 +31,19 @@ from surv_client import (
 
 st.set_page_config(page_title="Surveillance investigator", page_icon="🔎", layout="wide")
 
+# Session days in the firm's tables, newest first (the way a queue reads): seed8 (November, the generalisation set,
+# loaded 2026-11-11) then seed7 (October, the evaluated set). The demo script's alerts are on the October days.
 DATASET_DATES = [
-    "2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09",
-    "2026-10-12", "2026-10-13", "2026-10-14", "2026-10-15", "2026-10-16",
-    "2026-10-19", "2026-10-20", "2026-10-21", "2026-10-22", "2026-10-23",
-    "2026-10-26", "2026-10-27", "2026-10-28", "2026-10-29", "2026-10-30",
+    "2026-11-27", "2026-11-26", "2026-11-25", "2026-11-24", "2026-11-23",
+    "2026-11-20", "2026-11-19", "2026-11-18", "2026-11-17", "2026-11-16",
+    "2026-11-13", "2026-11-12", "2026-11-11", "2026-11-10", "2026-11-09",
+    "2026-11-06", "2026-11-05", "2026-11-04", "2026-11-03", "2026-11-02",
+    "2026-10-30", "2026-10-29", "2026-10-28", "2026-10-27", "2026-10-26",
+    "2026-10-23", "2026-10-22", "2026-10-21", "2026-10-20", "2026-10-19",
+    "2026-10-16", "2026-10-15", "2026-10-14", "2026-10-13", "2026-10-12",
+    "2026-10-09", "2026-10-08", "2026-10-07", "2026-10-06", "2026-10-05",
 ]  # fmt: skip
+DEFAULT_DATE = DATASET_DATES[0]
 DISPOSITIONS_L1 = ["CLOSE_FP", "ESCALATE"]
 DISPOSITIONS_L2 = ["CLOSE_FP", "ESCALATE", "DRAFT_STOR"]
 
@@ -83,9 +90,14 @@ def sidebar() -> Session | None:
                 ss().pop(k, None)
             st.rerun()
         st.divider()
-        ss()["date"] = st.selectbox(
-            "Session day", DATASET_DATES, index=DATASET_DATES.index(ss().get("date", "2026-10-06"))
+        saved = ss().get("date", DEFAULT_DATE)
+        new_date = st.selectbox(
+            "Session day", DATASET_DATES, index=DATASET_DATES.index(saved if saved in DATASET_DATES else DEFAULT_DATE)
         )
+        if new_date != saved:  # a new day: the selected alert and any run belong to the old one
+            for k in ("alert_id", "run", "run_session_id"):
+                ss().pop(k, None)
+        ss()["date"] = new_date
         st.caption(f"Region {cfg.region}. Runtime `{cfg.runtime_arn.rsplit('/', 1)[-1]}`.")
         return sess
 
@@ -120,11 +132,30 @@ def queue_panel(api: HumanPath):
                 "override": "yes" if c.get("override") else "",
             }
         )
-    st.dataframe(rows, use_container_width=True, hide_index=True, height=min(60 + 35 * len(rows), 420))
     ids = [a["alert_id"] for a in alerts]
     current = ss().get("alert_id")
-    idx = ids.index(current) if current in ids else 0
-    choice = st.selectbox("Open alert", ids, index=idx)
+    if current not in ids:  # first visit to this day: open the first alert in the queue
+        current = ids[0]
+        ss()["alert_id"] = current
+    st.caption(f"{len(ids)} alerts. Click a row to open it; the open one is **{current}**.")
+    event = st.dataframe(
+        rows,
+        use_container_width=True,
+        hide_index=True,
+        height=min(60 + 35 * len(rows), 420),
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"queue-{ss()['date']}",
+    )
+    picked = event.selection.rows if event is not None and hasattr(event, "selection") else []
+    if picked and ids[picked[0]] != current:
+        # a row click opens that alert; the table's selection is then cleared so the dropdown below stays in step
+        ss()["alert_id"] = ids[picked[0]]
+        ss().pop("run", None)
+        ss().pop("run_session_id", None)
+        ss().pop(f"queue-{ss()['date']}", None)
+        st.rerun()
+    choice = st.selectbox("Open alert", ids, index=ids.index(current), key=f"open-{ss()['date']}-{current}")
     if choice != current:
         ss()["alert_id"] = choice
         ss().pop("run", None)
