@@ -202,6 +202,37 @@ def test_guard_rejects_bad_report_fills_tool_calls_and_blocks_second_proposal():
     assert "already called" in second.cancel_tool
 
 
+def test_guard_modes_for_stor_drafting():
+    """Level-1 mode never drafts; `draft_stor` (the L2 second step on the proposing session) drafts once for its own
+    alert and never proposes; `stor_drafting` (the harness arm) may do both in one run."""
+    from investigator import DRAFT_STOR
+
+    l1 = InvestigationGuard(alert_id="A-261006-0006")
+    e = _Event(DRAFT_STOR, {"alert_id": "A-261006-0006"})
+    l1.before_tool(e)
+    assert "Level-2 action" in e.cancel_tool
+
+    d = InvestigationGuard(alert_id="A-261006-0006", mode="draft_stor")
+    p = _Event(PROPOSE, {"alert_id": "A-261006-0006", "disposition": "DRAFT_STOR", "confidence": 0.9, "report": {}})
+    d.before_tool(p)
+    assert "only drafts" in p.cancel_tool and d.proposal is None
+    wrong = _Event(DRAFT_STOR, {"alert_id": "A-000000-0001"})
+    d.before_tool(wrong)
+    assert "this session is for alert" in wrong.cancel_tool
+    ok = _Event(DRAFT_STOR, {"alert_id": "A-261006-0006"})
+    d.before_tool(ok)
+    assert ok.cancel_tool is False
+    d.stor_draft = {"narrative": "..."}  # as after_tool would set it on a good result
+    again = _Event(DRAFT_STOR, {"alert_id": "A-261006-0006"})
+    d.before_tool(again)
+    assert "already called" in again.cancel_tool
+
+    both = InvestigationGuard(alert_id="A-261006-0006", mode="stor_drafting")
+    e2 = _Event(DRAFT_STOR, {"alert_id": "A-261006-0006"})
+    both.before_tool(e2)
+    assert e2.cancel_tool is False
+
+
 def test_guard_blocks_stor_draft_in_l1_mode():
     g = InvestigationGuard(alert_id="A-1", mode="investigate")
     ev = _Event("surv___draft_stor_narrative", {"alert_id": "A-1"})

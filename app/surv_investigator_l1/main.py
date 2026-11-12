@@ -1,7 +1,9 @@
 """AgentCore Runtime entrypoint for the Level-1 investigator (HTTP protocol).
 
-Payload: {"alert_id": "A-261006-0006", "mode": "investigate" | "stor_drafting", "instruction": "optional free text",
+Payload: {"alert_id": "A-261006-0006", "mode": "investigate" | "stor_drafting" | "draft_stor",
+          "instruction": "optional free text",
           "memory": true | false (default true; false hides `recall_memory` for the Memory on/off evaluation arm)}
+`draft_stor` is the Level-2 second step on the session that proposed DRAFT_STOR: it only drafts the narrative.
 Headers: Authorization: Bearer <analyst's Cognito access token>  (allowlisted on the Runtime; forwarded to the Gateway)
 
 Returns the InvestigationResult as JSON: the proposal and its report, the Gateway's answer, the tool trajectory
@@ -21,7 +23,8 @@ from investigator import investigate
 app = BedrockAgentCoreApp()
 log = app.logger if hasattr(app, "logger") else logging.getLogger("surv.main")
 
-MODES = ("investigate", "stor_drafting")
+MODES = ("investigate", "stor_drafting", "draft_stor")
+L2_MODES = ("stor_drafting", "draft_stor")
 
 
 def _bearer(context: RequestContext | None) -> str | None:
@@ -59,8 +62,12 @@ def invoke(payload: dict, context: RequestContext):
         return {"error": "no analyst token: send Authorization: Bearer <Cognito access token>"}
     claims = _claims(token)
     groups = claims.get("cognito:groups") or []
-    if mode == "stor_drafting" and "L2" not in groups:
-        return {"error": "stor_drafting mode needs a Level-2 analyst (cognito:groups must include L2)"}
+    if mode in L2_MODES and "L2" not in groups:
+        return {"error": f"{mode} mode needs a Level-2 analyst (cognito:groups must include L2)"}
+    if mode == "draft_stor" and not getattr(context, "session_id", None):
+        # policy 05 admits the drafting tool only after a DRAFT_STOR proposal in the same policy session, and the
+        # policy session is the Runtime session: the caller has to come back on the session that proposed
+        return {"error": "draft_stor needs the Runtime session id of the investigation that proposed DRAFT_STOR"}
     analyst = claims.get("username") or claims.get("sub")
     log.info(
         "investigate alert=%s mode=%s analyst=%s session=%s",

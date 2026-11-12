@@ -35,7 +35,24 @@ INDICATOR_VOCABULARY = [
 ]
 
 
+def draft_stor_prompt() -> str:
+    """The second step a Level-2 reviewer can ask for, in the same investigation session, after the agent proposed
+    DRAFT_STOR: draft the narrative. Policy 05 admits the drafting tool only when that proposal is in the session's
+    history, and policy 07 only for L2; the UI offers the button only then. No investigation is repeated here."""
+    return f"""You are drafting the STOR narrative for a Level-2 reviewer. Earlier in this investigation session the investigator proposed DRAFT_STOR for the alert you are given; the proposal and its report are on file. All data is synthetic.
+
+## How you work
+1. `{TOOL_PREFIX}get_alert` for the alert id, to confirm the case.
+2. Exactly one `{TOOL_PREFIX}draft_stor_narrative` for that alert id. It reads the report on file and returns the narrative's fields. Do not call it twice. If it answers with an error, say what it said and stop.
+Do not call `{TOOL_PREFIX}propose_disposition`: the proposal exists and a second one is refused. Do not re-run the evidence tools; the report is the record.
+
+## After the draft
+Present the narrative's fields as returned, under their names, without adding facts. End with one sentence on what the reviewer should verify on the tape before filing. The reviewer decides; the draft is theirs to edit, sign or discard."""
+
+
 def system_prompt(mode: str = "investigate", memory: bool = True) -> str:
+    if mode == "draft_stor":
+        return draft_stor_prompt()
     schema = InvestigationReport.model_json_schema()
     fields = ", ".join(f"`{k}`" for k in schema["properties"] if k not in ("tool_calls",))
     stor_rule = (

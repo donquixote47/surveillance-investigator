@@ -45,6 +45,10 @@ REGION = os.environ.get("AWS_REGION", "eu-west-2")
 PROPOSE = f"{TOOL_PREFIX}propose_disposition"
 POLICY_SESSION_HEADER = "x-amzn-bedrock-agentcore-policy-session-id"
 DRAFT_STOR = f"{TOOL_PREFIX}draft_stor_narrative"
+# `stor_drafting`: one run that investigates and, on a DRAFT_STOR proposal, drafts (the harness arm).
+# `draft_stor`: a second run in the same session, after the proposal, that only drafts (the UI's L2 button; the
+# Gateway's policy 05 needs the DRAFT_STOR proposal in the same policy session, so the session id is reused).
+DRAFTING_MODES = ("stor_drafting", "draft_stor")
 
 
 def bundle_config() -> tuple[dict[str, Any], str]:
@@ -150,11 +154,24 @@ class InvestigationGuard(HookProvider):
         inputs = event.tool_use.get("input") or {}
         self.calls.append({"tool": name.removeprefix(TOOL_PREFIX), "input": _compact(inputs), "t": time.time()})
 
-        if name == DRAFT_STOR and self.mode != "stor_drafting":
+        if name == DRAFT_STOR and self.mode not in DRAFTING_MODES:
             event.cancel_tool = "draft_stor_narrative is a Level-2 action; you are in Level-1 mode. Do not call it."
+            return
+        if name == DRAFT_STOR and self.stor_draft is not None:
+            event.cancel_tool = "draft_stor_narrative was already called; present the draft you have."
+            return
+        if name == DRAFT_STOR and inputs.get("alert_id") != self.alert_id:
+            event.cancel_tool = (
+                f"this session is for alert {self.alert_id}; the draft names {inputs.get('alert_id')!r}."
+            )
             return
 
         if name != PROPOSE:
+            return
+        if self.mode == "draft_stor":
+            event.cancel_tool = (
+                "this session only drafts the STOR narrative; the proposal is already on file. Do not propose again."
+            )
             return
         if self.proposal is not None:
             event.cancel_tool = (
@@ -369,9 +386,12 @@ def investigate(
         policy_session_id=session_id,
         memory=memory,
     )
-    prompt = f"Investigate alert {alert_id}."
-    if mode == "stor_drafting":
-        prompt += " If you propose DRAFT_STOR, draft the STOR narrative afterwards."
+    if mode == "draft_stor":
+        prompt = f"Draft the STOR narrative for alert {alert_id}, which was proposed DRAFT_STOR in this session."
+    else:
+        prompt = f"Investigate alert {alert_id}."
+        if mode == "stor_drafting":
+            prompt += " If you propose DRAFT_STOR, draft the STOR narrative afterwards."
     if extra_instruction:
         prompt += f"\n\nAnalyst instruction: {extra_instruction}"
     error: str | None = None

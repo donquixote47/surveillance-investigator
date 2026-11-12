@@ -67,7 +67,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("alert_id")
     ap.add_argument("--user", choices=["L1", "L2"], default="L1")
-    ap.add_argument("--mode", choices=["investigate", "stor_drafting"], default="investigate")
+    ap.add_argument(
+        "--mode",
+        choices=["investigate", "stor_drafting", "draft_stor"],
+        default="investigate",
+        help="draft_stor: the L2 second step; pass --session-id of the run that proposed DRAFT_STOR",
+    )
     ap.add_argument("--instruction", default=None)
     ap.add_argument("--session-id", default=None)
     ap.add_argument("--qualifier", default="DEFAULT")

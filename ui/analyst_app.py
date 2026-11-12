@@ -91,6 +91,8 @@ def restore_from_url() -> None:
         ss()["date"] = qp["d"]
     if "alert_id" not in ss() and qp.get("a"):
         ss()["alert_id"] = qp["a"]
+    if "run_session_id" not in ss() and qp.get("r"):
+        ss()["run_session_id"] = qp["r"]  # the investigation session that may be asked to draft the STOR
 
 
 def remember_in_url(**kv: str | None) -> None:
@@ -138,9 +140,9 @@ def sidebar() -> Session | None:
         )
         if st.button("Log out", use_container_width=True):
             session_store().pop(ss().get("sid", ""), None)
-            for k in ("session", "sid", "run", "run_session_id", "alert_id"):
+            for k in ("session", "sid", "run", "run_session_id", "alert_id", "draft"):
                 ss().pop(k, None)
-            remember_in_url(s=None, a=None)
+            remember_in_url(s=None, a=None, r=None)
             st.rerun()
         st.divider()
         saved = ss().get("date", DEFAULT_DATE)
@@ -151,9 +153,9 @@ def sidebar() -> Session | None:
             format_func=show_date,
         )
         if new_date != saved:  # a new day: the selected alert and any run belong to the old one
-            for k in ("alert_id", "run", "run_session_id"):
+            for k in ("alert_id", "run", "run_session_id", "draft"):
                 ss().pop(k, None)
-            remember_in_url(a=None)
+            remember_in_url(a=None, r=None)
         ss()["date"] = new_date
         remember_in_url(d=new_date)
         st.caption(f"Region {cfg.region}. Runtime `{cfg.runtime_arn.rsplit('/', 1)[-1]}`.")
@@ -210,17 +212,17 @@ def queue_panel(api: HumanPath):
     if picked and ids[picked[0]] != current:
         # a row click opens that alert; the table's selection is then cleared so the dropdown below stays in step
         ss()["alert_id"] = ids[picked[0]]
-        ss().pop("run", None)
-        ss().pop("run_session_id", None)
+        for k in ("run", "run_session_id", "draft"):
+            ss().pop(k, None)
         ss().pop(f"queue-{ss()['date']}", None)
-        remember_in_url(a=ids[picked[0]])
+        remember_in_url(a=ids[picked[0]], r=None)
         st.rerun()
     choice = st.selectbox("Open alert", ids, index=ids.index(current), key=f"open-{ss()['date']}-{current}")
     if choice != current:
         ss()["alert_id"] = choice
-        ss().pop("run", None)
-        ss().pop("run_session_id", None)
-        remember_in_url(a=choice)
+        for k in ("run", "run_session_id", "draft"):
+            ss().pop(k, None)
+        remember_in_url(a=choice, r=None)
         st.rerun()
 
 
@@ -280,22 +282,7 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
 
     # ---- run the agent
     with st.expander("Run the agent", expanded=not case.get("proposed_disposition")):
-        # Level 1 has one mode, so no selector. Level 2 can also ask for the STOR narrative to be drafted when the
-        # agent proposes DRAFT_STOR (Policy p07 allows that tool to L2 only, and only after such a proposal).
-        if sess.level == "L2":
-            col1, col2 = st.columns([3, 1])
-            mode = col2.selectbox(
-                "Mode",
-                ["investigate", "stor_drafting"],
-                format_func=lambda m: {"investigate": "Investigate", "stor_drafting": "Investigate + draft STOR"}[m],
-                help="'Investigate + draft STOR': if the agent proposes DRAFT_STOR it also drafts the STOR narrative "
-                "(Level 2 only; the Gateway denies the drafting tool to anyone else).",
-                key=f"mode-{alert_id}",
-            )
-        else:
-            col1 = st.container()
-            mode = "investigate"
-        instruction = col1.text_input(
+        instruction = st.text_input(
             "Ask the agent to check something specific (optional)",
             placeholder="e.g. the desk says this was a client parent order; look for it",
             help="A briefing, the way you would brief a junior. The agent still runs the full procedure and the "
@@ -307,11 +294,13 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
             session_id = new_session_id(alert_id)
             with st.spinner("the agent is working (30-60 s)…"):
                 result, session_id, wall = invoke_runtime(
-                    cfg, sess, alert_id, mode=mode, instruction=instruction or None, session_id=session_id
+                    cfg, sess, alert_id, mode="investigate", instruction=instruction or None, session_id=session_id
                 )
             ss()["run"] = result
             ss()["run_session_id"] = session_id
             ss()["run_wall"] = wall
+            ss().pop("draft", None)
+            remember_in_url(r=session_id)
             st.rerun()
 
     run = ss().get("run")
@@ -319,6 +308,44 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
         run_view(cfg, run, ss().get("run_session_id", ""), ss().get("run_wall", 0.0))
     elif run and run.get("error"):
         st.error(run["error"])
+
+    # ---- Level 2: draft the STOR narrative, in the session that proposed DRAFT_STOR
+    # The Gateway admits the drafting tool only to L2 (policy 07) and only after a DRAFT_STOR proposal in the same
+    # policy session (policy 05); the policy session is the Runtime session, so the button comes back on it.
+    this_run = run if run and run.get("alert_id") == alert_id else None
+    proposed_now = ((this_run or {}).get("proposal") or {}).get("disposition")
+    # the session that proposed: this connection's run, or the one the URL remembers (`?r=`) after a refresh; the
+    # id carries the alert id, so a session of another alert is never offered
+    run_sid = ss().get("run_session_id") or ""
+    same_alert_session = run_sid if f"-{alert_id}-" in run_sid else ""
+    if sess.level == "L2" and (proposed_now or case.get("proposed_disposition")) == "DRAFT_STOR":
+        st.markdown("### STOR narrative")
+        draft = ss().get("draft")
+        if draft and draft.get("alert_id") == alert_id:
+            if draft.get("stor_draft"):
+                st.json(draft["stor_draft"])
+            if draft.get("final_text"):
+                st.markdown(draft["final_text"])
+            if draft.get("error"):
+                st.error(draft["error"])
+        elif same_alert_session:
+            st.caption(
+                "The agent proposed DRAFT_STOR. As Level 2 you can ask it to draft the narrative from the report on "
+                "file; the draft is yours to edit, sign or discard."
+            )
+            if st.button("Draft the STOR narrative", key=f"draft-{alert_id}"):
+                with st.spinner("drafting (15-30 s)…"):
+                    result, _sid, _wall = invoke_runtime(
+                        cfg, sess, alert_id, mode="draft_stor", instruction=None, session_id=same_alert_session
+                    )
+                ss()["draft"] = result
+                st.rerun()
+        else:
+            st.caption(
+                "A STOR draft is requested in the investigation session that proposed DRAFT_STOR (the Gateway's "
+                "rule 05 checks for that proposal in the session's history). Run the investigation again as Level 2, "
+                "then draft."
+            )
 
     # ---- the case on file
     st.markdown("### On file")
