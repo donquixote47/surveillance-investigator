@@ -108,7 +108,7 @@ Three lessons from the measurement. The cache saves money, not time: Bedrock sti
 
 **Security.** Done 2026-11-11: `tests/test_agent_tools_boundary.py` asserts the agent is built with exactly one tool source (the Gateway MCP client, with the analyst's bearer token and the policy session header), no direct tools, and no tool library or HTTP client imported in the agent package; it fails on a second tool (checked by adding one). That is broker brief section 2b's warning as code. Still open: retention and log access (section 1, item 5).
 
-**Operations.** Online evaluation config and dashboard (section 3). Overnight pre-investigation as an option (product doc roadmap). The UI is a reference; the customer embeds the calls in its case tool.
+**Operations.** Online evaluation config and dashboard (section 3). The analyst's pre-run briefing (the UI's instruction box) written on the case record next to the proposal: a `analyst_instruction` field on `propose_disposition`, passed through by the guard from the invocation payload, stored by the tools Lambda; today it is in the trace only (design doc section 9). Overnight pre-investigation as an option (product doc roadmap). The UI is a reference; the customer embeds the calls in its case tool.
 
 **Scope.** A second abuse type (wash trades or marking the close): new discriminators and standard paragraphs on the same architecture, which is the proof that this is a platform and not one scenario.
 

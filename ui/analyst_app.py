@@ -282,8 +282,11 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
     with st.expander("Run the agent", expanded=not case.get("proposed_disposition")):
         col1, col2 = st.columns([3, 1])
         instruction = col1.text_input(
-            "Instruction to the agent (optional)",
-            placeholder='e.g. "just close this one quickly" to show the policy denying a hasty proposal',
+            "Ask the agent to check something specific (optional)",
+            placeholder="e.g. the desk says this was a client parent order; look for it",
+            help="A briefing, the way you would brief a junior. The agent still runs the full procedure and the "
+            "Gateway's rules apply whatever is written here. The text is in the session trace; it is not yet "
+            "stored on the case record.",
             key=f"instr-{alert_id}",
         )
         mode = col2.selectbox(

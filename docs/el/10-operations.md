@@ -108,7 +108,7 @@
 
 **Security.** Έγινε 2026-11-11: το `tests/test_agent_tools_boundary.py` ελέγχει ότι ο agent χτίζεται με ακριβώς μία πηγή tools (τον Gateway MCP client, με το bearer token του analyst και το policy session header), χωρίς direct tools, και χωρίς import βιβλιοθήκης tools ή HTTP client στο package του agent· αποτυγχάνει σε δεύτερο tool (ελέγχθηκε προσθέτοντας ένα). Είναι η προειδοποίηση του broker brief ενότητα 2b ως κώδικας. Ανοιχτό ακόμη: retention και log access (ενότητα 1, σημείο 5).
 
-**Operations.** Online evaluation config και dashboard (ενότητα 3). Overnight pre-investigation ως επιλογή (product doc roadmap). Το UI είναι reference· ο πελάτης ενσωματώνει τις κλήσεις στο δικό του case tool.
+**Operations.** Online evaluation config και dashboard (ενότητα 3). Η ενημέρωση του analyst πριν το run (το instruction box του UI) γραμμένη στο case record δίπλα στην πρόταση: πεδίο `analyst_instruction` στο `propose_disposition`, που ο guard περνά από το invocation payload και το tools Lambda αποθηκεύει· σήμερα είναι μόνο στο trace (design doc ενότητα 9). Overnight pre-investigation ως επιλογή (product doc roadmap). Το UI είναι reference· ο πελάτης ενσωματώνει τις κλήσεις στο δικό του case tool.
 
 **Scope.** Ένας δεύτερος τύπος abuse (wash trades ή marking the close): νέοι discriminators και παράγραφοι standard πάνω στην ίδια αρχιτεκτονική, που είναι η απόδειξη ότι αυτό είναι platform και όχι ένα scenario.
 

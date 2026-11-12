@@ -129,6 +129,8 @@ Two roles, carried by the firm's identity provider (Cognito in the demo; any OID
 
 The agent runs *as the analyst*: the analyst's token is forwarded to every tool call, so the gateway, the rules and the rate limits see the person, not the machine.
 
+Before a run the analyst can brief the agent in one sentence, the way a senior briefs a junior ("the desk says this was a client parent order; look for it"). The briefing can direct attention; it cannot change what the agent may do: the procedure and the rules of section 5 apply whatever is written, and the demo shows the agent ignoring "just close this one quickly". The briefing is recorded in the investigation's trace with the analyst's name; writing it on the case record itself, next to the proposal, is on the list for a pilot (section 7).
+
 ## 7. The audit record
 
 For each investigation there is one trace, produced as a by-product of running and not written up afterwards. It is the "records of the analysis" that Delegated Regulation (EU) 2016/957 asks for, and it lives in the firm's own AWS account and region.
