@@ -45,6 +45,14 @@ DATASET_DATES = [
     "2026-10-09", "2026-10-08", "2026-10-07", "2026-10-06", "2026-10-05",
 ]  # fmt: skip
 DEFAULT_DATE = DATASET_DATES[0]
+
+
+def show_date(iso: str) -> str:
+    """Dates are stored and queried as ISO (YYYY-MM-DD, the tables' sort key); the UI shows DD-MM-YYYY."""
+    y, m, d = iso.split("-")
+    return f"{d}-{m}-{y}"
+
+
 DISPOSITIONS_L1 = ["CLOSE_FP", "ESCALATE"]
 DISPOSITIONS_L2 = ["CLOSE_FP", "ESCALATE", "DRAFT_STOR"]
 
@@ -137,7 +145,10 @@ def sidebar() -> Session | None:
         st.divider()
         saved = ss().get("date", DEFAULT_DATE)
         new_date = st.selectbox(
-            "Session day", DATASET_DATES, index=DATASET_DATES.index(saved if saved in DATASET_DATES else DEFAULT_DATE)
+            "Session day",
+            DATASET_DATES,
+            index=DATASET_DATES.index(saved if saved in DATASET_DATES else DEFAULT_DATE),
+            format_func=show_date,
         )
         if new_date != saved:  # a new day: the selected alert and any run belong to the old one
             for k in ("alert_id", "run", "run_session_id"):
@@ -153,7 +164,7 @@ def sidebar() -> Session | None:
 
 
 def queue_panel(api: HumanPath):
-    st.subheader(f"Queue · {ss()['date']}")
+    st.subheader(f"Queue · {show_date(ss()['date'])}")
     q = api.queue(ss()["date"])
     if q.get("error"):
         st.error(q["error"])
