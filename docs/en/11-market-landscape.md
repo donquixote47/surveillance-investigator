@@ -1,0 +1,80 @@
+# 11 - Market landscape: who else puts AI on surveillance alerts, and where this sits
+
+Written 2026-11-12 from the vendors' own pages, press releases, the AWS case study and the FCA's TechSprint page (links inline; content paraphrased). Claims in the "claimed" column are the vendors', not measured by us.
+
+## 1. The one everybody asks about: Robinhood
+
+Robinhood's **FinCrimes Agent** ([AWS case study](https://aws.amazon.com/solutions/case-studies/robinhood-case-study/)) is an in-house **anti-money-laundering and fraud investigations** assistant, not trade surveillance. An alert triggers a workflow of small agents (summarisation, classification, validation, synthesis of external data) coordinated through a task queue on Amazon RDS; the models are Claude Haiku and Sonnet and DeepSeek on Amazon Bedrock, picked per task for cost. The output is summaries of structured and unstructured records so investigators collect less and read faster. Governance: each agent is paired with a validation agent and a hallucination check, the workflow does not advance until the verifier accepts, a benchmarking framework compares outputs with resolved cases, and audit logs serve the governance teams. Reported effect: about a 20% cumulative efficiency gain.
+
+Shared with this project: Bedrock in the firm's own account, a human at every stage, a verification layer, a benchmark against resolved cases. Different: the domain (financial crime vs market abuse), the output (a summary vs a proposed disposition against a written standard, with evidence ids), the controls (an LLM verifier vs Cedar rules the Gateway enforces), the platform (custom orchestration vs AgentCore). It is a precedent, not a competitor: a regulated broker built the analogous thing on Bedrock. Robinhood's separate 2026 "agentic trading accounts" are unrelated to compliance.
+
+## 2. Trade-surveillance vendors and what their AI does
+
+| Vendor, product | Shipped | Nature | Claimed |
+|---|---|---|---|
+| **Nasdaq** Market Surveillance | GenAI triage and examination feature ([May 2024](https://www.nasdaq.com/press-release/nasdaq-to-enhance-global-market-surveillance-offering-with-generative-ai-2024-05-15)); AI "at every stage" of an investigation after a pilot with the Saudi CMA ([Oct 2025](https://finance.yahoo.com/news/nasdaq-embeds-innovative-ai-capabilities-070000052.html)); used by 50 exchanges and 20 regulators | triage assistance (news and filings from trusted sources), anomaly detection, predictive analytics | analysts estimated 33% less investigation time; 80% of pump-and-dumps found in a historical sample |
+| **NICE Actimize** SURVEIL-X | GenAI embedded ([Nov 2025](https://www.niceactimize.com/press-releases/nice-actimize-empowers-surveil-x-with-generative-ai-479)); "holistic" trade + communications | detection, false-positive reduction, consolidation of related actions into one alert | marketing figures (85% fewer false alerts, on communications) |
+| **Eventus** Validus | [Frank AI](https://www.eventus.com/cat-article/eventus-unveils-frank-ai-to-bring-conversational-intelligence-to-trade-surveillance/) | conversational querying: the model writes **code** that runs on the client's data, so data never leaves and results are deterministic and repeatable | none |
+| **eflow** TZTS | [PATH AI](https://www.eflowglobal.com/insights/blogs/eflow-global-launches-path-ai) (Nov 2025); AI risk scoring on news with DHI | conversational investigation, every insight traceable to source data, chat history kept for audit | cites $1.8bn of market-abuse fines in 2024 and the FCA's demand that firms explain AI conclusions |
+| **SteelEye** | [Compliance CoPilot on trade alerts](https://www.steel-eye.com/news/expansion-of-steeleyes-compliance-copilot-tool-slashes-alert-review-time-by-90-percent) (Sep 2024) | fine-tuned LLMs pre-review every alert: score, priority, explanation, **recommended categorisation and resolution with rationale** | up to 90% less review time |
+| **Solidus Labs** HALO | [Agentic-Based Compliance](https://www.soliduslabs.com/post/agentic-based-compliance-launch) (May 2025) | a fleet of agents across the lifecycle: enrichment, alert remediation, model testing, OSINT, case management, reporting; born in crypto, all asset classes | 20x faster investigations, 5+ hours a day per analyst |
+| **Behavox** Polaris | AI trade surveillance with communications context; detection models governed to the Fed's SR 26-2 model-risk standard; stake in b-next (Jan 2026) | detection plus one investigation workspace, combined STOR/SAR generation | benchmarked on a million labelled cases (their figure) |
+| **Trading Technologies** TT Score | machine-learning scoring of alerts | prioritisation | |
+
+Adjacent, in AML: the **FIS AML Investigations Agent** with Anthropic, [commercially available Oct 2026](https://www.fisglobal.com/about-us/media-room/press-release/2026/fis-aml-investigations-agent-now-commercially-available): every output a recommendation, no case closed without analyst confirmation, each statement linked to its source record, each bank's risk logic and procedures isolated; a design partner projects Level-1 review time down more than 90% and Level-2 down about 98%. The closest governance philosophy to ours, in another domain.
+
+**AWS's own material** (the mentor will know it): the blog [Market surveillance agent with LangGraph and Strands on AgentCore](https://aws.amazon.com/blogs/machine-learning/market-surveillance-agent-with-langgraph-and-strands-on-agentcore/) (specialist agents answer analyst questions through report tools that validate filters and build parameterised SQL, Memory as checkpointer), the aws-samples FSI Foundry [market_surveillance](https://github.com/aws-samples/sample-agentic-value-accelerator/blob/main/applications/fsi_foundry/use_cases/market_surveillance/README.md) use case (three agents fan out, a CLEAR / INVESTIGATE / ESCALATE / REPORT decision with a 0-100 risk score, two sample cases on S3) and the [fixed-income reference implementation](https://github.com/aws-samples/sample-agentic-value-accelerator/blob/main/applications/reference_implementations/market-surveillance/README.md) (coordinator plus discovery, enrichment and rule-evaluation agents, 29 decision-tree rules from S3, Gateway, Memory, Cognito). These show the platform; none publishes an error rate, enforces investigation order through Policy, or separates proposing from recording.
+
+**Regulators.** The FCA's 2024 [Market Abuse Surveillance TechSprint](https://www.fca.org.uk/publications/techsprints/market-abuse-surveillance) (nine teams, 1 TB of pseudonymised order and transaction data) produced mostly anomaly-detection work; one team used LLMs to contextualise outliers and filter false positives. Vendors quote the FCA's position that a firm must be able to explain how an AI reached a conclusion and that black-box alerting draws scrutiny; the trace, the evidence ids and the policy log are our answer to that.
+
+## 3. Is there a direct competitor
+
+"Direct" means: takes an alert an existing detector raised, runs the firm's investigation procedure, proposes a disposition with evidence, a human records. **No standalone product does that today.** The nearest are features inside incumbent platforms: SteelEye's CoPilot (recommendation with rationale, for SteelEye customers, fine-tuned model rather than the firm's text, no published miss rate), Solidus's remediation agents (inside HALO, crypto and retail venues), and FIS's agent (AML, US banks). The market's AI so far is of two kinds: detection and scoring (Nasdaq, NICE, Behavox, TT, Solidus) and copilot or conversational query (Eventus, eflow, Nasdaq triage), where the analyst still performs the investigation.
+
+The consequence for a sale: the objection is not "I have something better" but **"my surveillance vendor will ship this; why buy it separately?"** The cases where that objection fails are a firm whose detector will not get an investigation agent (in-house rules, an older vendor, a detector inside the OMS), or one that wants the investigation layer in its own account, under its own written standard, with a published miss rate. A firm already on SteelEye is not the conversation to have.
+
+## 4. What this project has that nobody above publishes
+
+1. A **gate**: real abuse proposed as closed, 0 of 28 on the evaluated set and 0 of 24 on a set nothing was tuned against, in every run. Vendors publish time saved (33%, 90%, 20x), not error rates.
+2. **Investigation rules enforced by the platform, outside the model**: evidence before proposal, history before close, one proposal per alert, STOR drafting for Level 2 only, with the rule's name in the refusal and in the log.
+3. **The firm's written standard as the decision logic**, read at run time, with behaviour improved through that text and the tools (79.9% to 95.0%) while the prompt stayed unchanged.
+4. **Proposal and recording on different APIs**, the agent unable to reach the second; a unit test pins it.
+5. A **cost per investigation** ($0.09), a **measured noise band** (about 0.9 points), a **second dataset**, and the whole evaluation reproducible from the repository.
+
+And what it lacks that they have: detection (by design: it sits after any detector), communications surveillance, more than one abuse type, multi-asset coverage, case management, real data, scale, and any measure of analyst time saved.
+
+## 5. Who the customer is, and the claims to check first
+
+The phrase "mid-sized broker" means: a person professionally arranging or executing transactions under MAR Art. 16, obliged to detect and report suspicious orders and transactions, with **two to ten surveillance analysts** and **hundreds to a few thousand alerts a day** from a detector it owns or licenses. Shapes: a UK or EU MiFID investment firm or regional broker, a proprietary trading firm (own-account trading is in scope), a market maker, and since MiCA's market-abuse provisions a crypto-asset service provider or venue (Solidus's home ground). Not a tier-1 bank, which runs NICE or Nasdaq at seven-figure annual cost with its own data scientists.
+
+**The checklist for a first conversation with a prospect.** Each line can sink the deal, so ask before pitching. "Good" means we can start a pilot; "stop" means we are not the right conversation, and saying so early is worth more than a demo.
+
+| Ask | Why it matters | Good answer | Stop answer |
+|---|---|---|---|
+| Which detector raises your alerts, and who runs it? | We investigate alerts, we do not detect. If the detector vendor is about to ship an investigation agent, the firm will wait for it. | in-house rules, an older vendor, a detector inside the OMS or venue | SteelEye, Solidus, or a vendor with an announced investigation agent |
+| Who holds the order and trade data, and can it leave? | The agent needs order events with best bid and ask at each event, trades, instrument statistics. The detector vendor often holds them; the feed out is the integration cost. | the firm has the data in its own store, or a daily export exists | the data lives only inside the vendor's platform with no export |
+| How many alerts a day, how many analysts? | The model cost ($0.09 an alert) is nothing; the value is analyst time. | hundreds to a few thousand alerts, 2-10 analysts | a few dozen alerts a day (little to gain), or 50+ analysts with a tier-1 platform (not our buyer) |
+| Is your investigation procedure written down, and at what level? | The written standard is the agent's decision logic. It must say things like "a two-sided quoter's spread is ordinary income, not feature (b)". | a procedure exists and compliance is willing to sharpen it during onboarding | "the analysts know what to do"; nobody owns the text |
+| Do you keep past dispositions with the alert? | Recorded decisions are the labelled set; the harness runs on them and the acceptance criterion is zero real-abuse alerts proposed as closed. | years of recorded dispositions, some with reviewer notes | dispositions kept only as free text in emails or not kept |
+| EU/UK or US? | The product is MAR-shaped (STOR, Art. 12/15/16, Annex II indicators). The logic ports; the vocabulary and the standard do not. | MAR / MiCA firm | US-only firm (FINRA, SAR): a rewrite of the standard and vocabulary first |
+| Can the firm measure analyst minutes per alert today? | We have no analyst-time baseline. FIS, SteelEye and Nasdaq lead with time saved; we can only after a pilot measures it. | yes, or willing to time a sample during the pilot | no interest in measuring: the business case will stay unquantified |
+| Who signs off a change to the procedure, and how fast? | Behaviour changes go through the firm's standard, not the prompt; that needs an owner on their side. | a named compliance owner who can approve a sentence in days | committee review in quarters |
+| Which AWS account and region would it run in? | Everything runs in the firm's account; the model is called through Bedrock in the region family (EU profiles here). | the firm has an AWS account or will open one; region acceptable to compliance | no cloud, or data residency that excludes the Bedrock regions |
+
+Two things to say unprompted: that every number so far is on synthetic data from one generator, and that "analysts spend most of their day on false positives" is an industry figure (Solidus cites McKinsey: 80% of analyst time on low- or medium-risk alerts), not something we measured.
+
+## 6. What to take from them
+
+Ranked by value here, with the source of the idea:
+
+1. **Trajectory replay for audit** (Eventus's deterministic-code argument). The trace already holds every tool call and input, and the tools are deterministic, so a session can be re-executed and its numbers reproduced; only the narrative varies, and by a measured amount. The missing piece is the script that re-runs a session's tool calls and diffs the outputs against the trace. About a day; it turns "an audit record" into "an audit record you can re-run".
+2. **Model-risk vocabulary** (Behavox governs to SR 26-2). Compliance buyers read model risk management: validation, ongoing monitoring, change control, documentation, independent review. Every one of those exists here under another name (harness and gate; variance and the online-eval plan; promotion rule and decision log; these documents). A two-page mapping is documentation work with outsized value in a sale.
+3. **Analyst time in the pilot** (FIS, SteelEye, Nasdaq). The pilot must measure minutes per alert with and without the agent, or there is no number the buyer recognises.
+4. **Pre-review of every alert** (SteelEye reviews all alerts before the analyst sees them). The market expects the report to be waiting; the analyst-triggered design here is more conservative and more auditable. Overnight pre-investigation under a service identity moves up the roadmap, with the identity trade-off already written (product doc, roadmap).
+5. **Related-alert clustering** (Solidus; NICE's "one alert is never the whole story"). One alert is investigated at a time; `repetitions_in_session` looks inside the window. A `get_related_alerts` tool (same trader, same day or week, same instrument) is a real gap for retail-volume firms and a cheap tool to add.
+6. **Verify categorical facts, not only numbers** (Robinhood's validation agent). The faithfulness check grounds every number in a tool output; it does not check "role PROP" or "registered on SYN.A". Extending it to a small set of categorical fields is deterministic and free, which is better than an LLM verifier.
+7. **Keep the analyst's briefing in the record** (eflow keeps the chat history for audit). Already in the backlog (operations doc); this confirms it matters.
+
+None of these changes the architecture. Items 1, 2 and 6 fit before the presentation; each answers a question the incumbents have taught buyers to ask.
+
+*Content from the linked sources was paraphrased for compliance with licensing restrictions.*

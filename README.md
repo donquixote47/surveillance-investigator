@@ -100,4 +100,5 @@ Open this folder as the workspace root so the steering files and hooks load. The
 - `docs/en/08-broker-brief.md` the logic for a broker's surveillance team: what the agent does, the standard it applies, what it cannot do, the audit record, the numbers
 - `docs/en/09-product-decisions.md` every product decision with its reason, where AgentCore does the work, cost to run, proof points, limitations, roadmap
 - `docs/en/10-operations.md` how the product is run after the alpha: release cycle, what to watch, measured time and token breakdown, ranked backlog
+- `docs/en/11-market-landscape.md` who else puts AI on surveillance alerts (Robinhood, Nasdaq, NICE, Eventus, eflow, SteelEye, Solidus, FIS, AWS samples), whether there is a direct competitor, who the customer is, the prospect checklist, what to borrow
 - `docs/en/glossary.md`, `docs/en/decision-log.md`, `docs/en/STATUS.md`
