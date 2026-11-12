@@ -227,7 +227,7 @@ Verified end to end on 2026-11-07 against the `demo` Runtime endpoint (pinned to
 8. Evaluation table (data doc 4.6): 167 alerts, three runs, gate 0 missed on each, safe close 79.9% -> 88.5% -> 93.5%, override rate 18.6% -> 11.4% -> 6.6%, the threshold baseline at 95.7% / 7.2% but 6 spoofers closed. Memory on/off and Opus arms in one line each. The Optimization slide: recommendation -> diff -> bundle -> offline replay (0 of 30 proposals) -> rejected by the rule. (2 min)
 9. Architecture slide (`09-product-decisions.md` section 4) and "what I'd do next" (section 9). (2 min)
 
-Total about 15 minutes. Alerts A, B, C and E have proposals on file from the rehearsal; `scripts/memory_admin.py` and the human path can reset a case if a clean run is wanted.
+Total about 15 minutes. Alerts A, B, C and E have proposals on file from the rehearsal. The November days (seed8) are kept with no proposals, the way alerts arrive from the detector, so any of them can be investigated live; `scripts/reset_cases.py --from 2026-11-01 --apply` puts them back to that state after a rehearsal (the analyst's recorded cases are kept).
 
 ## 13. Anticipated mentor questions
 
