@@ -16,7 +16,7 @@
 8. Πριν αλλάξεις οτιδήποτε: `docs/el/10-operations.md` (κύκλος release, promotion rule στην πράξη, τι παρακολουθούμε, το backlog με σειρά προτεραιότητας και μετρημένα οφέλη).
 9. Πριν μιλήσεις με υποψήφιο πελάτη: `docs/el/11-market-landscape.md` (το AI των vendors και τι κάνει, γιατί δεν υπάρχει ακόμη αυτόνομος ανταγωνιστής, η λίστα ελέγχου πρώτης συζήτησης, τι δανειζόμαστε από αυτούς).
 
-Το hook SessionStart (`.kiro/hooks/session-brief.json`) τυπώνει αυτόματα το STATUS, τις τελευταίες αποφάσεις και τα πρόσφατα αλλαγμένα αρχεία.
+Το hook SessionStart (`.kiro/hooks/session-brief.json`) τυπώνει αυτόματα το STATUS, τις τελευταίες αποφάσεις και τα πρόσφατα αλλαγμένα αρχεία. Με το Claude Code τα ίδια πέντε αρχεία steering φορτώνονται από το `.claude/rules/` (πανομοιότυπα αντίγραφα) με το `.claude/CLAUDE.md` μπροστά τους· τα hooks δεν τρέχουν εκεί, άρα το brief τυπώνεται με `bash .kiro/hooks/scripts/session-brief.sh` και ο έλεγχος docs-sync τρέχει με το χέρι πριν κλείσει ένας γύρος.
 
 ## 2. Προαπαιτούμενα μηχανήματος
 
@@ -35,7 +35,7 @@
 
 ```
 uv sync --all-groups          # ομάδες runtime, infra (aws-cdk-lib) και dev (pytest, ruff, moto)
-uv run pytest                 # 38 tests, χωρίς AWS
+uv run pytest                 # 107 tests, χωρίς AWS
 uv run ruff check .
 export JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1
 ```
@@ -74,11 +74,13 @@ uv run scripts/policy_demo.py                              # βήματα 5-6 τ
 uv run scripts/validate_policies.py                        # τα ευρήματα του engine για κάθε αρχείο στο policies/
 uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # εγγραφές Memory· επίσης ingest-procedures, seed-history, delete
 uv run scripts/reset_cases.py --from 2026-11-01 [--apply]   # καθαρίζει τις προτάσεις του agent (όχι τις καταγραφές του αναλυτή) ώστε τα alerts να έρχονται φρέσκα· dry run εξ ορισμού
+uv run scripts/reset_cases.py --alerts A-261009-0003 --include-recorded [--apply]   # επαναφορά αποφασισμένου alert: καθαρίζει και την απόφαση, το lock και το ιστορικό της (ο agent και το harness παραλείπουν τα αποφασισμένα alerts)
+uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # ξαναχτίζει ακριβώς το seed7· νέο dataset παίρνει εξ ορισμού τον τελευταίο κατάλογο σεναρίων
 uv run --group ui streamlit run ui/analyst_app.py          # UI αναλυτή στο http://127.0.0.1:8501 (μόνο loopback)
 #   SURV_RUNTIME_ENDPOINT=demo ... για το καρφωμένο endpoint. Η σύνδεση επιζεί page refresh όσο ζει η διεργασία Streamlit:
 #   το URL του browser φέρει αδιαφανές session id (?s=), την ημέρα (?d=) και το ανοιχτό alert (?a=)· τα Cognito tokens
 #   μένουν στη διεργασία. Log out ή επανεκκίνηση της διεργασίας τα σβήνει.
-python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία docs (κενή έξοδος = καθαρό)
+python3 .kiro/hooks/scripts/docs-sync-check.py             # ισοτιμία docs en/el, πηγές έναντι docs, .kiro/steering έναντι .claude/rules (κενή έξοδος = καθαρό)
 ```
 Φάση 5 (αξιολόγηση), με τη σειρά που περνά ένα run· όλα τα αποτελέσματα στο `evals/runs/<run_id>/` γίνονται commit:
 ```
@@ -110,6 +112,7 @@ uv run python -m detector.tune --out evals/runs/tune-seed7.md          # πλέ�
 ```
 .kiro/steering/          Η μόνιμη γνώση του Kiro για το project (διάβασέ τα πρώτα)
 .kiro/hooks/             Brief στο SessionStart, docs-sync nudge + έλεγχος ισοτιμίας στο Stop, deploy guard
+.claude/                 CLAUDE.md και rules/: οι ίδιες μόνιμες οδηγίες για το Claude Code (πανομοιότυπα αντίγραφα του .kiro/steering/)
 docs/en/, docs/el/       Η τεκμηρίωση, αγγλικά κανονικά, ελληνικό δίδυμο, ίδια δομή
 src/market_sim/          Simulator βιβλίου εντολών και εισαγωγή σεναρίων
 src/detector/            Ο θορυβώδης detector spoofing/layering και η επισήμανση

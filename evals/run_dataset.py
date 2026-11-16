@@ -56,6 +56,11 @@ RUNS_DIR = ROOT / "evals" / "runs"
 DEFAULT_DATASET = ROOT / "data" / "synthetic" / "seed7"
 TOKEN_TTL_S = 40 * 60  # Cognito access tokens live 60 min; a full run can take longer
 RETRY_PAUSE_S = 90
+# Row status of an alert a human had decided before the run. Since 2026-11-16 a decided case takes no further
+# proposal (the tools Lambda refuses the write), so the run does not investigate it and does not score it: before,
+# such an alert was investigated with its own recorded decision visible through history and Memory (three alerts
+# in every seed7 run, disclosed as `prior_recorded`), which is not a measurement of anything.
+DECIDED = "decided_before_run"
 
 _des = TypeDeserializer()
 
@@ -224,7 +229,9 @@ def row_from(
     report = (case or {}).get("report") if fresh else None
     resp = resp or {}
     model_view = (resp.get("proposal") or {}).get("disposition")
-    if resp.get("error"):
+    if meta.get("skipped") == DECIDED:
+        status, proposed, conf, report = DECIDED, None, None, None  # whatever is on the case is not this run's
+    elif resp.get("error"):
         status = "error"
     elif proposed is None:
         status = "no_proposal"
@@ -314,6 +321,25 @@ def run_one(
     before = cases.get(alert_id)
     meta: dict[str, Any] = {"prior_recorded": bool(before and before.get("recorded_disposition")), "repeat": repeat}
     resp: dict[str, Any] = {}
+    if meta["prior_recorded"]:
+        meta.update(
+            skipped=DECIDED,
+            recorded_disposition=before.get("recorded_disposition"),
+            recorded_by=before.get("recorded_by"),
+            recorded_at=before.get("recorded_at"),
+            wall_s=0.0,
+        )
+        resp = {"alert_id": alert_id, "skipped": DECIDED}
+        row = row_from(lab, resp, before, meta)
+        (out_dir / "responses").mkdir(parents=True, exist_ok=True)
+        (out_dir / "responses" / response_name(alert_id, repeat)).write_text(
+            json.dumps(
+                {"meta": meta, "label_hidden_from_agent": True, "response": resp, "case_after": before},
+                indent=1,
+                default=str,
+            )
+        )
+        return row, resp
     for attempt in range(1, retries + 2):
         rep = f"-r{repeat}" if repeat is not None else ""
         session_id = f"surv-eval-{run_id}-{alert_id}{rep}-{uuid.uuid4().hex[:8]}"
@@ -398,11 +424,16 @@ def finish(
     dataset: Path,
     compare: Path | None,
 ) -> dict[str, Any]:
+    # alerts decided before the run were not investigated: they are listed, not scored, and the baselines are
+    # computed on the same alerts as the agent
+    all_rows = rows
+    rows = [r for r in all_rows if r.get("status") != DECIDED]
     ids = {r["alert_id"] for r in rows}
     labels = [lab for lab in labels_all if lab["alert_id"] in ids]
     model_id = run.get("model_id") or next((r["model_id"] for r in rows if r.get("model_id")), None)
     run["model_id"] = model_id
     m = compute(rows, model_id=model_id)
+    m["excluded_decided"] = sorted({r["alert_id"] for r in all_rows if r.get("status") == DECIDED})
     base = load_baseline(dataset)
     baselines = {
         "threshold baseline (detector rules)": compute(rows_from_labels(labels, base)),
@@ -446,7 +477,7 @@ def finish(
     if variance:
         md += "\n" + "\n".join(render_variance(variance))
     (out_dir / "results.md").write_text(md)
-    pd.DataFrame(rows).to_csv(out_dir / "per_alert.csv", index=False)
+    pd.DataFrame(all_rows).to_csv(out_dir / "per_alert.csv", index=False)
     return run
 
 
@@ -599,7 +630,9 @@ def main() -> int:
             progress.write(json.dumps(row, default=str) + "\n")
             progress.flush()
             mark = (
-                "ok "
+                "SKIP"
+                if row["status"] == DECIDED
+                else "ok "
                 if row["proposed"] == row["expected_disposition"]
                 else (
                     "MISS"

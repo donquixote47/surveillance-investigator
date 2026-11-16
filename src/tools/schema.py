@@ -172,7 +172,16 @@ TOOLS: list[dict] = [
             "sides, price move before the trader's opposite-side execution, post-cancel move and reversion, round-trip "
             "P&L in ticks, repetitions over the session, and how many other traders cancelled in the second before "
             "this trader's first cancel. Vocabulary follows Delegated Regulation (EU) 2016/522 Annex II. Every value "
-            "is reproducible from get_order_events."
+            "is reproducible from get_order_events. Those numbers are totals by side over the whole window. For each "
+            "single order of at least 3 x depth placed in the window, `large_orders` gives that order's own facts: "
+            "size against depth, distance from the touch, what the trader had resting on the other side while it "
+            "rested, its own executions before and after the trader's opposite-side trade made while it rested, "
+            "the time from that trade to its first cancel or size reduction (cancelled_qty, reduced_qty, "
+            "open_qty_at_window_end and final_state say how much was withdrawn and whether the order stayed), and the "
+            "price move and reversion measured from its placement. "
+            "When the trader did other things in the window, such as quoting, the totals describe everything "
+            "together and `large_orders` describes the large order. An empty `large_orders` means no SINGLE order "
+            "reached 3 x depth; it says nothing about layering, which several smaller orders make."
         ),
         "inputSchema": _obj({"alert_id": _s("")}, "", ["alert_id"]),
         "outputSchema": _obj(
@@ -180,6 +189,9 @@ TOOLS: list[dict] = [
                 "alert_id": _s(""),
                 "evidence_id": _s("stable id for citing this computation in the report"),
                 "trader_id": _s(""),
+                "instrument": _s(""),
+                "window_start": _i("ns since epoch"),
+                "window_end": _i("ns since epoch"),
                 "window_seconds": _n(""),
                 "avg_depth_top5": _n("instrument's average one-side top-5 depth for the day"),
                 "dominant_side": _s("side with the larger gross submitted size in the window"),
@@ -226,6 +238,72 @@ TOOLS: list[dict] = [
                 "order_types": _obj({}, "counts by order type"),
                 "parent_order_ids": _arr(_s(""), ""),
                 "notes": _arr(_s(""), "deterministic remarks, e.g. executions on the dominant side"),
+                "large_orders": _arr(
+                    _obj(
+                        {
+                            "order_id": _s(""),
+                            "side": _s("BUY or SELL; 'opposite' below is the other side relative to THIS order"),
+                            "order_type": _s(
+                                "LIMIT, ICEBERG or PEGGED; for ICEBERG the size is the total, not the tip"
+                            ),
+                            "parent_order_id": _s("client or algo parent of the order, if any"),
+                            "placed_ts": _i("ns since epoch"),
+                            "placed_time": _s("HH:MM:SS.mmm"),
+                            "price_ticks": _n("limit price at placement"),
+                            "qty": _i("size at placement, plus any MODIFY increase inside the window"),
+                            "size_vs_depth": _n("qty / avg_depth_top5"),
+                            "distance_from_touch_ticks": _n("at placement; negative = improving the touch"),
+                            "other_side_resting_vs_depth": _n(
+                                "peak of the trader's own resting quantity on the other side while this order rested, "
+                                "over depth; 0 = the order was one-sided"
+                            ),
+                            "executed_qty_before_opposite_trade": _i(
+                                "executed on this order before the trader's first opposite-side execution made while "
+                                "it rested (all of its executions when there was none): an order that was working"
+                            ),
+                            "executed_qty_after_opposite_trade": _i(
+                                "executed on this order after that execution: a third party hitting it before it "
+                                "was pulled"
+                            ),
+                            "executed_share_before_opposite_trade": _n("executed_qty_before_opposite_trade / qty"),
+                            "cancelled_qty": _i("removed from this order by CANCEL inside the window"),
+                            "reduced_qty": _i("removed from this order by MODIFY size reductions inside the window"),
+                            "open_qty_at_window_end": _i(""),
+                            "final_state": _s(
+                                "FILLED, CANCELLED or OPEN at the end of the session (the one fact that looks "
+                                "past the window)"
+                            ),
+                            "opposite_trade_ts": _i(
+                                "the trader's first opposite-side execution while this order rested"
+                            ),
+                            "opposite_trade_time": _s("HH:MM:SS.mmm"),
+                            "opposite_trade_qty": _i(
+                                "the trader's opposite-side executions while this order rested (from its placement "
+                                "until nothing of it was left open, or the window end)"
+                            ),
+                            "opposite_trade_parent_order_ids": _arr(_s(""), "parents of those executions, at most 3"),
+                            "ms_from_placement_to_first_withdrawal": _n(
+                                "placement to the first CANCEL or MODIFY size reduction after the opposite-side trade "
+                                "(or the first one at all when there was no such trade); a reduction may leave the "
+                                "order working: see cancelled_qty, reduced_qty, open_qty_at_window_end, final_state"
+                            ),
+                            "ms_from_opposite_trade_to_first_withdrawal": _n(
+                                "the trader's first opposite-side execution while the order rested to that withdrawal"
+                            ),
+                            "price_move_ticks": _n(
+                                "mid before that opposite-side execution minus mid at this order's placement; "
+                                "+ = moved the way a spoofer resting on this side would want"
+                            ),
+                            "reversion_ticks": _n(
+                                "favourable move undone 10 s after this order's cancel; 0 when there was none"
+                            ),
+                        },
+                        "",
+                    ),
+                    "one entry per single order of at least 3 x avg_depth_top5 placed in the window, either side, in "
+                    "placement order, at most 3 (the largest); each measured on that order alone",
+                ),
+                "large_orders_omitted": _i("large orders in the window not listed in large_orders (cap 3)"),
             },
             "",
             ["alert_id", "evidence_id", "dominant_side"],
@@ -268,7 +346,15 @@ TOOLS: list[dict] = [
             "context, not evidence about the current window."
         ),
         "inputSchema": _obj(
-            {"trader_id": _s(""), "lookback_days": _i("default 90"), "before_date": _s("YYYY-MM-DD; default today")},
+            {
+                "trader_id": _s("the alerted trader"),
+                "alert_id": _s(
+                    "the alert under investigation; when given, the history stops at the alert's own date and the "
+                    "alert itself is left out (it is not its own prior)"
+                ),
+                "lookback_days": _i("default 90"),
+                "before_date": _s("YYYY-MM-DD; default today; ignored when alert_id is given"),
+            },
             "",
             ["trader_id"],
         ),
@@ -292,6 +378,7 @@ TOOLS: list[dict] = [
                     "",
                 ),
                 "count": _i(""),
+                "excluded_current_alert": _i("1 when the alert under investigation had a recorded decision left out"),
             },
             "",
             ["trader_id", "alerts"],
@@ -301,17 +388,18 @@ TOOLS: list[dict] = [
         "name": "get_market_events",
         "description": (
             "Public market events (news, scheduled macro prints, halts, auctions, open/close) "
-            "in and around the window; '*' means market-wide."
+            "in and around the window; '*' means market-wide. Pass the alert_id: the instrument and the window are "
+            "then the alert's own."
         ),
         "inputSchema": _obj(
             {
-                "instrument": _s(""),
-                "window_start": _i("ns since epoch"),
-                "window_end": _i("ns since epoch"),
+                "alert_id": _s("the alert under investigation; the instrument and window are taken from it"),
+                "instrument": _s("only without alert_id"),
+                "window_start": _i("ns since epoch; only without alert_id"),
+                "window_end": _i("ns since epoch; only without alert_id"),
                 "pad_seconds": _n("default 60"),
             },
             "",
-            ["instrument", "window_start", "window_end"],
         ),
         "outputSchema": _obj(
             {
@@ -328,7 +416,11 @@ TOOLS: list[dict] = [
                         "",
                     ),
                     "",
-                )
+                ),
+                "alert_id": _s("present when the lookup was made for an alert"),
+                "instrument": _s("the instrument looked up"),
+                "window_start": _i("ns since epoch"),
+                "window_end": _i("ns since epoch"),
             },
             "",
             ["events"],
@@ -423,6 +515,10 @@ TOOLS: list[dict] = [
                 "instrument_notes": _arr(_obj({"text": _s(""), "score": _n(""), "source": _s("")}, ""), ""),
                 "procedures": _arr(_obj({"text": _s(""), "score": _n(""), "source": _s("")}, ""), ""),
                 "count": _i("total records returned"),
+                "excluded_own_decision": _i(
+                    "records left out because they are the decision recorded on this same alert (the answer, not a "
+                    "prior); feedback on this alert and records about later alerts are returned"
+                ),
             },
             "",
             ["alert_id", "trader_id", "trader_notes", "count"],
@@ -433,7 +529,8 @@ TOOLS: list[dict] = [
         "description": (
             "The agent's only write. Records a PROPOSED disposition and the investigation report for the alert. "
             "Nothing is closed, escalated or filed: a human analyst records the decision through a different path. "
-            "The report must cite evidence from the tools called in this session."
+            "The report must cite evidence from the tools called in this session. Refused on an alert a human has "
+            "already decided."
         ),
         "inputSchema": _obj(
             {
@@ -472,6 +569,19 @@ TOOLS: list[dict] = [
                     },
                     "",
                     ["summary", "evidence", "legitimate_explanations_considered"],
+                ),
+                "provenance": _obj(
+                    {
+                        "session_id": _s("the investigation session (Runtime session = Gateway policy session)"),
+                        "analyst": _s("the analyst who ran the investigation"),
+                        "model_id": _s(""),
+                        "bundle": _s("configuration bundle, or none"),
+                        "mode": _s("investigate or stor_drafting"),
+                        "memory": _s("on or off"),
+                        "analyst_instruction": _s("the analyst's briefing for this run, if any"),
+                    },
+                    "where this proposal came from, stored on the case next to it; filled by the agent's guard from "
+                    "the Runtime request, never by the model",
                 ),
             },
             "",

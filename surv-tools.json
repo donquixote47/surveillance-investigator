@@ -336,7 +336,7 @@
   },
   {
     "name": "compute_discriminators",
-    "description": "The deterministic numbers an analyst computes for a spoofing alert, from the tape and the instrument's average depth: order-to-trade ratio, cancel ratio and latency, peak resting size vs depth, distance from the touch at placement, same-side vs opposite-side executions and whether the same-side executions came before or after the trader's opposite-side trade, MODIFY reductions, cancel symmetry across sides, price move before the trader's opposite-side execution, post-cancel move and reversion, round-trip P&L in ticks, repetitions over the session, and how many other traders cancelled in the second before this trader's first cancel. Vocabulary follows Delegated Regulation (EU) 2016/522 Annex II. Every value is reproducible from get_order_events.",
+    "description": "The deterministic numbers an analyst computes for a spoofing alert, from the tape and the instrument's average depth: order-to-trade ratio, cancel ratio and latency, peak resting size vs depth, distance from the touch at placement, same-side vs opposite-side executions and whether the same-side executions came before or after the trader's opposite-side trade, MODIFY reductions, cancel symmetry across sides, price move before the trader's opposite-side execution, post-cancel move and reversion, round-trip P&L in ticks, repetitions over the session, and how many other traders cancelled in the second before this trader's first cancel. Vocabulary follows Delegated Regulation (EU) 2016/522 Annex II. Every value is reproducible from get_order_events. Those numbers are totals by side over the whole window. For each single order of at least 3 x depth placed in the window, `large_orders` gives that order's own facts: size against depth, distance from the touch, what the trader had resting on the other side while it rested, its own executions before and after the trader's opposite-side trade made while it rested, the time from that trade to its first cancel or size reduction (cancelled_qty, reduced_qty, open_qty_at_window_end and final_state say how much was withdrawn and whether the order stayed), and the price move and reversion measured from its placement. When the trader did other things in the window, such as quoting, the totals describe everything together and `large_orders` describes the large order. An empty `large_orders` means no SINGLE order reached 3 x depth; it says nothing about layering, which several smaller orders make.",
     "inputSchema": {
       "type": "object",
       "description": "",
@@ -365,6 +365,18 @@
         "trader_id": {
           "type": "string",
           "description": ""
+        },
+        "instrument": {
+          "type": "string",
+          "description": ""
+        },
+        "window_start": {
+          "type": "integer",
+          "description": "ns since epoch"
+        },
+        "window_end": {
+          "type": "integer",
+          "description": "ns since epoch"
         },
         "window_seconds": {
           "type": "number",
@@ -520,6 +532,128 @@
             "type": "string",
             "description": ""
           }
+        },
+        "large_orders": {
+          "type": "array",
+          "description": "one entry per single order of at least 3 x avg_depth_top5 placed in the window, either side, in placement order, at most 3 (the largest); each measured on that order alone",
+          "items": {
+            "type": "object",
+            "description": "",
+            "properties": {
+              "order_id": {
+                "type": "string",
+                "description": ""
+              },
+              "side": {
+                "type": "string",
+                "description": "BUY or SELL; 'opposite' below is the other side relative to THIS order"
+              },
+              "order_type": {
+                "type": "string",
+                "description": "LIMIT, ICEBERG or PEGGED; for ICEBERG the size is the total, not the tip"
+              },
+              "parent_order_id": {
+                "type": "string",
+                "description": "client or algo parent of the order, if any"
+              },
+              "placed_ts": {
+                "type": "integer",
+                "description": "ns since epoch"
+              },
+              "placed_time": {
+                "type": "string",
+                "description": "HH:MM:SS.mmm"
+              },
+              "price_ticks": {
+                "type": "number",
+                "description": "limit price at placement"
+              },
+              "qty": {
+                "type": "integer",
+                "description": "size at placement, plus any MODIFY increase inside the window"
+              },
+              "size_vs_depth": {
+                "type": "number",
+                "description": "qty / avg_depth_top5"
+              },
+              "distance_from_touch_ticks": {
+                "type": "number",
+                "description": "at placement; negative = improving the touch"
+              },
+              "other_side_resting_vs_depth": {
+                "type": "number",
+                "description": "peak of the trader's own resting quantity on the other side while this order rested, over depth; 0 = the order was one-sided"
+              },
+              "executed_qty_before_opposite_trade": {
+                "type": "integer",
+                "description": "executed on this order before the trader's first opposite-side execution made while it rested (all of its executions when there was none): an order that was working"
+              },
+              "executed_qty_after_opposite_trade": {
+                "type": "integer",
+                "description": "executed on this order after that execution: a third party hitting it before it was pulled"
+              },
+              "executed_share_before_opposite_trade": {
+                "type": "number",
+                "description": "executed_qty_before_opposite_trade / qty"
+              },
+              "cancelled_qty": {
+                "type": "integer",
+                "description": "removed from this order by CANCEL inside the window"
+              },
+              "reduced_qty": {
+                "type": "integer",
+                "description": "removed from this order by MODIFY size reductions inside the window"
+              },
+              "open_qty_at_window_end": {
+                "type": "integer",
+                "description": ""
+              },
+              "final_state": {
+                "type": "string",
+                "description": "FILLED, CANCELLED or OPEN at the end of the session (the one fact that looks past the window)"
+              },
+              "opposite_trade_ts": {
+                "type": "integer",
+                "description": "the trader's first opposite-side execution while this order rested"
+              },
+              "opposite_trade_time": {
+                "type": "string",
+                "description": "HH:MM:SS.mmm"
+              },
+              "opposite_trade_qty": {
+                "type": "integer",
+                "description": "the trader's opposite-side executions while this order rested (from its placement until nothing of it was left open, or the window end)"
+              },
+              "opposite_trade_parent_order_ids": {
+                "type": "array",
+                "description": "parents of those executions, at most 3",
+                "items": {
+                  "type": "string",
+                  "description": ""
+                }
+              },
+              "ms_from_placement_to_first_withdrawal": {
+                "type": "number",
+                "description": "placement to the first CANCEL or MODIFY size reduction after the opposite-side trade (or the first one at all when there was no such trade); a reduction may leave the order working: see cancelled_qty, reduced_qty, open_qty_at_window_end, final_state"
+              },
+              "ms_from_opposite_trade_to_first_withdrawal": {
+                "type": "number",
+                "description": "the trader's first opposite-side execution while the order rested to that withdrawal"
+              },
+              "price_move_ticks": {
+                "type": "number",
+                "description": "mid before that opposite-side execution minus mid at this order's placement; + = moved the way a spoofer resting on this side would want"
+              },
+              "reversion_ticks": {
+                "type": "number",
+                "description": "favourable move undone 10 s after this order's cancel; 0 when there was none"
+              }
+            }
+          }
+        },
+        "large_orders_omitted": {
+          "type": "integer",
+          "description": "large orders in the window not listed in large_orders (cap 3)"
         }
       },
       "required": [
@@ -631,7 +765,11 @@
       "properties": {
         "trader_id": {
           "type": "string",
-          "description": ""
+          "description": "the alerted trader"
+        },
+        "alert_id": {
+          "type": "string",
+          "description": "the alert under investigation; when given, the history stops at the alert's own date and the alert itself is left out (it is not its own prior)"
         },
         "lookback_days": {
           "type": "integer",
@@ -639,7 +777,7 @@
         },
         "before_date": {
           "type": "string",
-          "description": "YYYY-MM-DD; default today"
+          "description": "YYYY-MM-DD; default today; ignored when alert_id is given"
         }
       },
       "required": [
@@ -699,6 +837,10 @@
         "count": {
           "type": "integer",
           "description": ""
+        },
+        "excluded_current_alert": {
+          "type": "integer",
+          "description": "1 when the alert under investigation had a recorded decision left out"
         }
       },
       "required": [
@@ -709,33 +851,32 @@
   },
   {
     "name": "get_market_events",
-    "description": "Public market events (news, scheduled macro prints, halts, auctions, open/close) in and around the window; '*' means market-wide.",
+    "description": "Public market events (news, scheduled macro prints, halts, auctions, open/close) in and around the window; '*' means market-wide. Pass the alert_id: the instrument and the window are then the alert's own.",
     "inputSchema": {
       "type": "object",
       "description": "",
       "properties": {
+        "alert_id": {
+          "type": "string",
+          "description": "the alert under investigation; the instrument and window are taken from it"
+        },
         "instrument": {
           "type": "string",
-          "description": ""
+          "description": "only without alert_id"
         },
         "window_start": {
           "type": "integer",
-          "description": "ns since epoch"
+          "description": "ns since epoch; only without alert_id"
         },
         "window_end": {
           "type": "integer",
-          "description": "ns since epoch"
+          "description": "ns since epoch; only without alert_id"
         },
         "pad_seconds": {
           "type": "number",
           "description": "default 60"
         }
-      },
-      "required": [
-        "instrument",
-        "window_start",
-        "window_end"
-      ]
+      }
     },
     "outputSchema": {
       "type": "object",
@@ -774,6 +915,22 @@
               }
             }
           }
+        },
+        "alert_id": {
+          "type": "string",
+          "description": "present when the lookup was made for an alert"
+        },
+        "instrument": {
+          "type": "string",
+          "description": "the instrument looked up"
+        },
+        "window_start": {
+          "type": "integer",
+          "description": "ns since epoch"
+        },
+        "window_end": {
+          "type": "integer",
+          "description": "ns since epoch"
         }
       },
       "required": [
@@ -1043,6 +1200,10 @@
         "count": {
           "type": "integer",
           "description": "total records returned"
+        },
+        "excluded_own_decision": {
+          "type": "integer",
+          "description": "records left out because they are the decision recorded on this same alert (the answer, not a prior); feedback on this alert and records about later alerts are returned"
         }
       },
       "required": [
@@ -1055,7 +1216,7 @@
   },
   {
     "name": "propose_disposition",
-    "description": "The agent's only write. Records a PROPOSED disposition and the investigation report for the alert. Nothing is closed, escalated or filed: a human analyst records the decision through a different path. The report must cite evidence from the tools called in this session.",
+    "description": "The agent's only write. Records a PROPOSED disposition and the investigation report for the alert. Nothing is closed, escalated or filed: a human analyst records the decision through a different path. The report must cite evidence from the tools called in this session. Refused on an alert a human has already decided.",
     "inputSchema": {
       "type": "object",
       "description": "",
@@ -1182,6 +1343,40 @@
             "evidence",
             "legitimate_explanations_considered"
           ]
+        },
+        "provenance": {
+          "type": "object",
+          "description": "where this proposal came from, stored on the case next to it; filled by the agent's guard from the Runtime request, never by the model",
+          "properties": {
+            "session_id": {
+              "type": "string",
+              "description": "the investigation session (Runtime session = Gateway policy session)"
+            },
+            "analyst": {
+              "type": "string",
+              "description": "the analyst who ran the investigation"
+            },
+            "model_id": {
+              "type": "string",
+              "description": ""
+            },
+            "bundle": {
+              "type": "string",
+              "description": "configuration bundle, or none"
+            },
+            "mode": {
+              "type": "string",
+              "description": "investigate or stor_drafting"
+            },
+            "memory": {
+              "type": "string",
+              "description": "on or off"
+            },
+            "analyst_instruction": {
+              "type": "string",
+              "description": "the analyst's briefing for this run, if any"
+            }
+          }
         }
       },
       "required": [

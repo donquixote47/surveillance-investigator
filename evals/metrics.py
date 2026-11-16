@@ -22,6 +22,15 @@ DRAFT_STOR = "DRAFT_STOR"
 DISPOSITIONS = (CLOSE, ESCALATE, DRAFT_STOR)
 ZERO_FLOOR_N = 2  # promotion rule: a scenario "regressed to 0%" only if the previous run closed >= 2 of its alerts
 ZERO_FLOOR_RATE = 0.25  # and at least a quarter of them
+# Promotion rule, fourth check. The data doc said "faithfulness stays at 100% (or at least does not fall)" and
+# the code never checked it: the verdict only carried the words "faithfulness pending". No run has reached 100%
+# (99.76% to 99.90% of numbers; the misses are derived figures such as a time difference), and v3 was promoted
+# at 99.88% after v2's 99.91%, so the rule as written was never the rule applied. The check as built: the share of
+# numbers traced to a tool output is at least FAITH_FLOOR (the operations doc's alarm level) and has not fallen by
+# more than FAITH_DROP against the previous run; the same floor applies to categorical claims when they were
+# checked. v1 to v4 all pass it.
+FAITH_FLOOR = 0.99
+FAITH_DROP = 0.005
 
 # Rough list prices per million tokens (in, out). Claude 5.5 is not in the Pricing API for eu-west-2 (checked
 # 2026-11-05: 768 products, none from Anthropic) and the pricing page renders its Anthropic table client-side, so
@@ -220,8 +229,9 @@ def regression(
     current_dataset: str | None = None,
 ) -> dict[str, Any]:
     """Promotion rule, data doc section 4.4: gate holds, safe close rate does not drop by more than 2 points,
-    evidence faithfulness stays at 100% (number level, once `evals/faithfulness.py` has run), no scenario
-    regresses to 0% close."""
+    evidence faithfulness at least FAITH_FLOOR and not down by more than FAITH_DROP (number level, once
+    `evals/faithfulness.py` has run; until then the verdict says "faithfulness pending"), no scenario regresses
+    to 0% close."""
     out: dict[str, Any] = {"gate_holds": current["gate"]["holds"], "checks": []}
     if previous is None:
         out["verdict"] = "no previous run to compare with"
@@ -270,7 +280,33 @@ def regression(
                 else round(v["agreement"] - p["agreement"], 3),
             }
     out["per_scenario"] = scen
-    pending = "" if current_faith else ", faithfulness pending"
+    faith_checked = bool(current_faith and current_faith.get("numbers_checked"))
+    if faith_checked:
+        cur_rate = current_faith.get("number_rate")
+        prev_rate = (previous.get("faithfulness") or {}).get("number_rate")
+        ok = (
+            cur_rate is not None
+            and cur_rate >= FAITH_FLOOR
+            and (prev_rate is None or cur_rate >= prev_rate - FAITH_DROP)
+        )
+        cat_rate = current_faith.get("categorical_rate") if current_faith.get("categorical_checked") else None
+        if cat_rate is not None:
+            ok = ok and cat_rate >= FAITH_FLOOR
+        detail = f"{_pct(cur_rate, 2)} of {current_faith['numbers_checked']} numbers"
+        detail += f", previous {_pct(prev_rate, 2)}" if prev_rate is not None else ", previous run not checked"
+        if cat_rate is not None:
+            detail += f"; {_pct(cat_rate, 2)} of {current_faith['categorical_checked']} categorical claims"
+        checks.append(
+            (
+                f"evidence faithfulness at least {_pct(FAITH_FLOOR, 0)} and not down by more than "
+                f"{FAITH_DROP * 100:.1f} points ({detail})",
+                ok,
+            )
+        )
+    pending = "" if faith_checked else ", faithfulness pending"
+    if previous.get("metrics", {}).get("n") != current.get("n"):
+        # e.g. alerts an analyst decided since the previous run are no longer investigated (excluded_decided)
+        out["n_differs"] = [previous.get("metrics", {}).get("n"), current.get("n")]
     out["verdict"] = f"PASS (offline promotion rule{pending})" if all(ok for _, ok in checks) else "FAIL"
     # the rule is defined on one fixed dataset (data doc 4.4); across datasets the alert mix differs and the
     # headline rates are not comparable, so the deltas are shown for information and no verdict is given
@@ -401,6 +437,12 @@ def render_markdown(
         lines.append(
             f"| alerts with a disposition recorded before this run (visible to the agent through history and Memory) "
             f"| {len(m['prior_recorded'])}: {', '.join(m['prior_recorded'])} |"
+        )
+    if m.get("excluded_decided"):
+        lines.append(
+            "| alerts an analyst had decided before this run: not investigated (a decided case takes no proposal), "
+            f"not scored, not in any number above or below | {len(m['excluded_decided'])}: "
+            f"{', '.join(m['excluded_decided'])} |"
         )
     if m.get("bundles_seen"):
         lines.append(f"| configuration bundle reported by the agent | {', '.join(m['bundles_seen'])} |")

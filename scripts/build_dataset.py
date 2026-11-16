@@ -1,7 +1,12 @@
 """Build a labelled synthetic dataset: N session days of simulated market with injected scenarios, run the
 noisy detector, attribute labels, compute discriminators and the threshold baseline, write parquet + manifest.
 
-    uv run scripts/build_dataset.py --seed 7 --sessions 20 --out data/synthetic/seed7
+    uv run scripts/build_dataset.py --seed 9 --sessions 20 --start-date 2026-12-01      # a new dataset, latest catalogue
+    uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1                # rebuild seed7 as it was built
+
+The scenario mix is sampled from a versioned catalogue (`market_sim.scenarios.CATALOGUE_LATEST`); a dataset can be
+rebuilt identically only from the catalogue it was built from. seed7 and seed8 are catalogue 1 (their manifests
+predate the field). The script refuses to write over an existing dataset with a different catalogue.
 
 Labels and injections are written under <out>/labels/ and must never be loaded by anything the agent can call.
 """
@@ -23,6 +28,7 @@ from detector.labels import attribute, coverage, missed_injections
 from detector.rule import DETECTOR_VERSION, DetectorParams, detect
 from market_sim.config import SimConfig
 from market_sim.run import MixConfig, run_session
+from market_sim.scenarios import CATALOGUE_LATEST
 from market_sim.types import Disposition, Truth
 from tools.discriminators import compute_discriminators
 
@@ -95,12 +101,31 @@ def main() -> int:
     ap.add_argument("--true-per-session", type=float, default=1.3)
     ap.add_argument("--false-per-session", type=float, default=4.0)
     ap.add_argument("--k-depth", type=float, default=DetectorParams().k_depth)
+    ap.add_argument(
+        "--catalogue",
+        type=int,
+        default=CATALOGUE_LATEST,
+        choices=range(1, CATALOGUE_LATEST + 1),
+        help=f"scenario catalogue version to sample the mix from (default: the latest, {CATALOGUE_LATEST}; "
+        "seed7 and seed8 were built from 1)",
+    )
     args = ap.parse_args()
 
     out = Path(args.out or f"data/synthetic/seed{args.seed}")
+    existing = out / "manifest.json"
+    if existing.exists():
+        built_from = int(json.loads(existing.read_text()).get("catalogue", 1))  # manifests before the field: 1
+        if built_from != args.catalogue:
+            raise SystemExit(
+                f"{out} was built from scenario catalogue {built_from}; this run would sample from catalogue "
+                f"{args.catalogue} and write a different dataset over it. Pass --catalogue {built_from} to rebuild "
+                "it as it was, or --out for a new dataset."
+            )
     (out / "labels").mkdir(parents=True, exist_ok=True)
     cfg = SimConfig()
-    mix = MixConfig(true_per_session=args.true_per_session, false_per_session=args.false_per_session)
+    mix = MixConfig(
+        true_per_session=args.true_per_session, false_per_session=args.false_per_session, catalogue=args.catalogue
+    )
     params = DetectorParams(k_depth=args.k_depth)
     dates = business_days(args.start_date, args.sessions)
 
@@ -205,6 +230,7 @@ def main() -> int:
         "sessions": args.sessions,
         "dates": dates,
         "generator_version": GENERATOR_VERSION,
+        "catalogue": args.catalogue,
         "detector_version": DETECTOR_VERSION,
         "detector_params": json.loads(params.to_json()),
         "mix": {"true_per_session": mix.true_per_session, "false_per_session": mix.false_per_session},
@@ -247,7 +273,7 @@ def main() -> int:
     lines = [
         f"# Dataset {out.name}",
         "",
-        f"seed {args.seed}, {args.sessions} sessions {dates[0]}..{dates[-1]}, generator {GENERATOR_VERSION}, detector {DETECTOR_VERSION} {params.to_json()}",
+        f"seed {args.seed}, {args.sessions} sessions {dates[0]}..{dates[-1]}, generator {GENERATOR_VERSION} (scenario catalogue {args.catalogue}), detector {DETECTOR_VERSION} {params.to_json()}",
         "",
         f"- order events: {len(order_events):,}; trades: {len(trades):,}; traders: {len(traders)}",
         f"- alerts: {len(alerts)} ({n_true} TRUE_ABUSE = {n_true / max(1, len(alerts)):.0%}; {manifest['counts']['background_alerts']} background)",

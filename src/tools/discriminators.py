@@ -17,6 +17,7 @@ import pandas as pd
 from market_sim.types import NS_PER_MS, NS_PER_S, EventType, OrderType, Side
 
 FILL_EVENTS = (str(EventType.FILL), str(EventType.PARTIAL_FILL))
+LARGE_ORDERS_CAP = 3  # entries listed in `large_orders`; the frozen datasets have at most 2 per alert
 
 
 @dataclass
@@ -64,6 +65,12 @@ class Discriminators:
     order_types: dict[str, int]
     parent_order_ids: list[str]
     notes: list[str] = field(default_factory=list)
+    # One entry per single order of at least 3 x depth placed in the window, either side, each measured ON THAT
+    # ORDER ALONE (see `_large_orders`). Everything above is aggregated by side over the window, which describes
+    # the large order only when the trader did nothing else in the window: a market maker who quotes for a minute
+    # and then places one order of ten times the depth gets side-level numbers that describe his quoting.
+    large_orders: list[dict] = field(default_factory=list)
+    large_orders_omitted: int = 0  # large orders in the window not listed above (cap LARGE_ORDERS_CAP)
 
     def to_dict(self) -> dict:
         d = self.__dict__.copy()
@@ -270,6 +277,12 @@ def compute_discriminators(
     if reductions > 0:
         notes.append(f"{int(reductions)} removed through MODIFY size reductions rather than cancels")
 
+    large_orders, large_omitted, large_remark = _large_orders(
+        te, w0, w1, depth, large_multiple, ref_events if all_events is not None else None
+    )
+    if large_remark:
+        notes.insert(0, large_remark)  # first, so the remarks after it are read as window-level
+
     return Discriminators(
         alert_id=str(alert["alert_id"]),
         trader_id=str(alert["trader_id"]),
@@ -304,7 +317,218 @@ def compute_discriminators(
         order_types=order_types,
         parent_order_ids=parents,
         notes=notes,
+        large_orders=large_orders,
+        large_orders_omitted=large_omitted,
     )
+
+
+def _clean(x: float | None) -> float | None:
+    """A JSON-safe number: None for NaN/inf, and 0.0 rather than -0.0."""
+    if x is None or (isinstance(x, float) and (math.isnan(x) or math.isinf(x))):
+        return None
+    return float(x) + 0.0
+
+
+def _large_orders(
+    te: pd.DataFrame,
+    w0: int,
+    w1: int,
+    depth: float,
+    large_multiple: float,
+    ref_events: pd.DataFrame | None,
+) -> tuple[list[dict], int, str | None]:
+    """Per-order facts for every single large order of the trader in the window.
+
+    Listed: non-market orders whose NEW row has qty >= large_multiple x depth and lies inside the window, on EITHER
+    side (`large_order_ids` stays dominant-side only), at most LARGE_ORDERS_CAP of them (the largest; the rest are
+    counted), in placement order. Each entry is measured on the order's own rows, and the ORDER OF EVENTS is the
+    order of rows on the tape (`te` is in tape order), never a comparison of timestamps alone: two events in the
+    same nanosecond happened in the order the venue recorded them.
+
+      rested    from the order's NEW row to its first row with nothing left open, if that is inside the window;
+                else to the window end
+      OPP       the trader's executions on the OTHER side (any order type) while the order rested:
+                "an opposite-side execution before that order was removed" (feature (b) of the firm's standard)
+      first withdrawal
+                the first CANCEL or MODIFY size reduction of the order after the first of those executions (or its
+                first one at all, when the trader never traded the other way while it rested). A reduction that
+                leaves the order working is a withdrawal of part of it, not its removal: `cancelled_qty`,
+                `reduced_qty`, `open_qty_at_window_end` and `final_state` say which.
+
+    Price numbers use the same mid helper, the same sampling points and the same sign as the window-level
+    `price_move_ticks` / `reversion_ticks`, anchored on this order's placement and its own cancel, so on a window
+    that holds nothing but one large order the two levels return the same numbers. Anything that cannot be
+    measured is None, never a default. Also returns a remark for `notes` when the window-level numbers mix the
+    large order with other orders of the trader.
+    """
+    te = te.reset_index(drop=True)  # row position = tape order
+    nonmkt = te[te["order_type"] != str(OrderType.MARKET)]
+    new = nonmkt[
+        (nonmkt["event"] == str(EventType.NEW))
+        & (nonmkt["qty"] >= large_multiple * depth)
+        & (nonmkt["ts"] >= w0)
+        & (nonmkt["ts"] <= w1)
+    ]
+    if new.empty:
+        return [], 0, None
+    candidates = list(new.itertuples())  # Index = position on the tape
+    listed = sorted(candidates, key=lambda r: (-int(r.qty), r.Index))[:LARGE_ORDERS_CAP]
+    listed.sort(key=lambda r: r.Index)
+    omitted = len(candidates) - len(listed)
+
+    fills = te[te["event"].isin(FILL_EVENTS)]
+    in_window = te["ts"] <= w1
+    entries: list[dict] = []
+    for n in listed:
+        oid, side, placed, p_new = str(n.order_id), str(n.side), int(n.ts), n.Index
+        other = str(Side.SELL) if side == str(Side.BUY) else str(Side.BUY)
+        sign = 1.0 if side == str(Side.BUY) else -1.0
+        rows = te[(te["order_id"] == n.order_id) & (te.index >= p_new)]
+        in_win = rows[rows["ts"] <= w1]
+        gone = in_win[(in_win.index > p_new) & (in_win["remaining_qty"] == 0)]
+        p_gone = gone.index[0] if not gone.empty else None
+
+        # the trader's executions on the other side while this order rested
+        opp = fills[(fills["side"] == other) & (fills.index > p_new) & in_window[fills.index]]
+        if p_gone is not None:
+            opp = opp[opp.index < p_gone]
+        p_opp = opp.index[0] if not opp.empty else None
+        t_opp = int(opp["ts"].iloc[0]) if p_opp is not None else None
+
+        own_fills = in_win[in_win["event"].isin(FILL_EVENTS)]
+        executed = int(own_fills["qty"].sum())
+        before = executed if p_opp is None else int(own_fills[own_fills.index < p_opp]["qty"].sum())
+
+        cancels = in_win[in_win["event"] == str(EventType.CANCEL)]
+        reductions = in_win[(in_win["event"] == str(EventType.MODIFY)) & (in_win["qty"] < 0)]
+        increases = in_win[(in_win["event"] == str(EventType.MODIFY)) & (in_win["qty"] > 0)]
+        withdrawals = pd.concat([cancels, reductions]).sort_index()
+        if p_opp is not None:
+            withdrawals = withdrawals[withdrawals.index > p_opp]
+        t_wd = int(withdrawals["ts"].iloc[0]) if not withdrawals.empty else None
+        qty = int(n.qty) + int(increases["qty"].sum())  # the largest size the order was given inside the window
+
+        # The trader's own RESTING quantity on the other side while this order rested: 0 = the order was one-sided.
+        # The level is read at the end of each timestamp, so an order that executes on entry (a marketable limit,
+        # which is how a spoofer may take the other side) is not counted as having rested.
+        os_rows = nonmkt[nonmkt["side"] == other]
+        other_side_peak = 0.0
+        if len(os_rows):
+            delta = np.where(
+                os_rows["event"] == str(EventType.NEW),
+                os_rows["qty"],
+                np.where(os_rows["event"] == str(EventType.MODIFY), os_rows["qty"], -os_rows["qty"]),
+            )
+            level = np.cumsum(delta)
+            pos = os_rows.index.to_numpy()
+            os_ts = os_rows["ts"].to_numpy()
+            settled = np.r_[os_ts[1:] != os_ts[:-1], True]  # the last row of each timestamp
+            end = p_gone if p_gone is not None else (te.index[in_window][-1] + 1 if in_window.any() else p_new)
+            earlier_rows = settled & (pos < p_new)
+            at_placement = float(level[earlier_rows][-1]) if earlier_rows.any() else 0.0
+            during = level[settled & (pos > p_new) & (pos < end)]
+            other_side_peak = max([0.0, at_placement, *[float(x) for x in during]])
+
+        touch = n.best_bid if side == str(Side.BUY) else n.best_ask
+        if pd.isna(touch) or pd.isna(n.price_ticks):
+            distance = None
+        else:
+            distance = (float(touch) - float(n.price_ticks)) * sign  # BUY: bid - price; SELL: price - ask
+
+        price_move = reversion = None
+        if ref_events is not None and t_opp is not None:
+            m0 = _mid_at(ref_events, placed, "before")
+            m1 = _mid_at(ref_events, t_opp - 1, "before")
+            if m0 is not None and m1 is not None:
+                price_move = (m1 - m0) * sign
+                if not cancels.empty:  # like the window-level field: a reversion is read after a CANCEL only
+                    m2 = _mid_at(ref_events, int(cancels["ts"].max()) + 10 * NS_PER_S, "before")
+                    if m2 is not None:
+                        reversion = max(0.0, -(m2 - m1) * sign) if price_move > 0 else 0.0
+
+        last = rows.iloc[-1]  # the order's last row of the session: the one fact here that looks past the window
+        if int(last["remaining_qty"]) > 0:
+            final_state = "OPEN"
+        elif str(last["event"]) in FILL_EVENTS:
+            final_state = "FILLED"
+        else:
+            final_state = "CANCELLED"
+
+        entries.append(
+            {
+                "order_id": oid,
+                "side": side,
+                "order_type": str(n.order_type),
+                "parent_order_id": None if pd.isna(n.parent_order_id) else str(n.parent_order_id),
+                "placed_ts": placed,
+                "price_ticks": None if pd.isna(n.price_ticks) else _clean(float(n.price_ticks)),
+                "qty": qty,
+                "size_vs_depth": round(qty / depth, 2),
+                "distance_from_touch_ticks": _clean(distance),
+                "other_side_resting_vs_depth": round(other_side_peak / depth, 2),
+                "executed_qty_before_opposite_trade": before,
+                "executed_qty_after_opposite_trade": executed - before,
+                "executed_share_before_opposite_trade": round(before / qty, 4) if qty else 0.0,
+                "cancelled_qty": int(cancels["qty"].sum()),
+                "reduced_qty": int(-reductions["qty"].sum()),
+                "open_qty_at_window_end": int(in_win["remaining_qty"].iloc[-1]),
+                "final_state": final_state,
+                "opposite_trade_ts": t_opp,
+                "opposite_trade_qty": int(opp["qty"].sum()),
+                "opposite_trade_parent_order_ids": sorted({str(p) for p in opp["parent_order_id"].dropna().unique()})[
+                    :3
+                ],
+                "ms_from_placement_to_first_withdrawal": None
+                if t_wd is None
+                else round((t_wd - placed) / NS_PER_MS, 1),
+                "ms_from_opposite_trade_to_first_withdrawal": None
+                if t_wd is None or t_opp is None
+                else round((t_wd - t_opp) / NS_PER_MS, 1),
+                "price_move_ticks": _clean(price_move),
+                "reversion_ticks": _clean(reversion),
+            }
+        )
+
+    # The remark: only when other orders of the trader were ACTIVE IN THE WINDOW BEFORE the first large order (a
+    # row of theirs between the window start and its placement, or still resting when it was placed), which is
+    # when the side-level numbers stop describing it (S-SPOOF-6). A window that opens with the large order and
+    # nothing else of his resting (every large-order alert of the frozen datasets) gets no remark, so its `notes`
+    # do not change.
+    first = candidates[0]
+    large_ids = {r.order_id for r in candidates}
+    not_large = ~te["order_id"].isin(large_ids)
+    before_first = te[(te.index < first.Index) & not_large]
+    active = set(before_first[before_first["ts"] >= w0]["order_id"])
+    resting = (
+        before_first[before_first["order_type"] != str(OrderType.MARKET)]
+        .groupby("order_id", sort=False)["remaining_qty"]
+        .last()
+    )
+    active |= set(resting[resting > 0].index)
+    if not active:
+        return entries, omitted, None
+    fside = str(first.side)
+    side_fills = fills[
+        (fills["ts"] >= w0)
+        & in_window[fills.index]
+        & (fills["side"] == fside)
+        & (fills["order_type"] != str(OrderType.MARKET))
+    ]
+    total = int(side_fills["qty"].sum())
+    on_large = int(side_fills[side_fills["order_id"].isin(large_ids)]["qty"].sum())
+    remark = (
+        f"large order {first.order_id} ({fside}, {round(int(first.qty) / depth, 1)} x depth) was placed after "
+        f"{len(active)} other order(s) of the trader had been active in the window: the window-level numbers "
+        "(price move, reversion, round trip, distance from the touch, cancel latency, cancel symmetry, same-side "
+        "and opposite-side executions) describe all his orders in the window together"
+    )
+    if total > 0:
+        remark += (
+            f"; of the {total} executed on his resting {fside} orders in the window, {on_large} were on the large "
+            f"order(s) and {total - on_large} on other orders"
+        )
+    remark += ". large_orders describes each large order alone"
+    return entries, omitted, remark
 
 
 def _count_cycles(

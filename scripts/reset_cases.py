@@ -11,11 +11,14 @@ relies on) unless `--include-recorded` is given, and it never touches Memory at 
     uv run scripts/reset_cases.py --alerts A-261006-0006             # named alerts
     uv run scripts/reset_cases.py --from 2026-11-01 --apply          # do it
 
-What "cleared" means: `proposed_disposition`, `confidence`, `report`, `proposed_at`, `proposal_count` are removed and
-`status` goes back to OPEN. `case_id`, `trader_id`, `date`, `scenario` stay (a case row with no proposal is what
-the human path returns for an untouched alert anyway). `--include-recorded --apply` also removes `recorded_*`,
-`analyst_note`, `override` and `feedback`, and prints the Memory namespaces that then hold stale records so you can
-delete them with `scripts/memory_admin.py delete`; it does not delete them for you.
+What "cleared" means: `proposed_disposition`, `confidence`, `report`, `proposed_at`, `proposal_count`,
+`proposal_history` and `proposal_provenance` are removed and `status` goes back to OPEN. `case_id`, `trader_id`,
+`date`, `scenario` stay (a case row with no proposal is what the human path returns for an untouched alert anyway).
+`--include-recorded --apply` also removes `recorded_*`, `analyst_note`, `override`, `feedback`, `decision_history`
+and the `decision_lock` (so the alert can be investigated again), sets the alert's own status back to OPEN, and
+prints the Memory namespaces that then hold stale records so you can delete them with
+`scripts/memory_admin.py delete`; it does not delete them for you. This is the only way to reopen a decided alert
+in the demo; a firm's reopen is a Level-2 procedure step and is not built.
 """
 
 from __future__ import annotations
@@ -23,13 +26,16 @@ from __future__ import annotations
 import argparse
 import sys
 from collections import Counter
+from pathlib import Path
 
 import boto3
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from tools.case_fields import PROPOSAL_FIELDS, RECORD_FIELDS
+
 REGION = "eu-west-2"
 TABLE = "surv-cases"
-PROPOSAL_FIELDS = ("proposed_disposition", "confidence", "report", "proposed_at", "proposal_count")
-RECORD_FIELDS = ("recorded_disposition", "recorded_by", "recorded_at", "analyst_note", "override", "feedback")
+ALERTS_TABLE = "surv-alerts"
 
 
 def scan_cases(table) -> list[dict]:
@@ -55,6 +61,7 @@ def main() -> int:
     args = ap.parse_args()
 
     table = boto3.resource("dynamodb", region_name=args.region).Table(TABLE)
+    alerts = boto3.resource("dynamodb", region_name=args.region).Table(ALERTS_TABLE)
     rows = scan_cases(table)
     sel = rows
     if args.alerts:
@@ -66,7 +73,9 @@ def main() -> int:
         sel = [r for r in sel if (r.get("date") or "") >= args.from_date]
     if args.to_date:
         sel = [r for r in sel if (r.get("date") or "") <= args.to_date]
-    with_proposal = [r for r in sel if r.get("proposed_disposition")]
+    with_proposal = [
+        r for r in sel if r.get("proposed_disposition") or (args.include_recorded and r.get("recorded_disposition"))
+    ]
     recorded = [r for r in with_proposal if r.get("recorded_disposition")]
     targets = (
         with_proposal if args.include_recorded else [r for r in with_proposal if not r.get("recorded_disposition")]
@@ -90,6 +99,15 @@ def main() -> int:
             ExpressionAttributeNames={**{f"#f{i}": f for i, f in enumerate(fields)}, "#st": "status"},
             ExpressionAttributeValues={":open": "OPEN"},
         )
+        if args.include_recorded and r.get("recorded_disposition"):
+            # the human path also wrote the decision's status on the alert; an OPEN case on a CLOSED alert would
+            # make the agent's guard stop at get_alert
+            alerts.update_item(
+                Key={"alert_id": r["alert_id"]},
+                UpdateExpression="SET #st = :open",
+                ExpressionAttributeNames={"#st": "status"},
+                ExpressionAttributeValues={":open": "OPEN"},
+            )
         done += 1
     print(f"reset {done} case rows")
     if args.include_recorded and recorded:

@@ -23,6 +23,14 @@ CORE_TOOLS = [
 ]
 CLOSE_TOOLS = [*CORE_TOOLS, "get_trader_alert_history"]  # policy 04: history before a CLOSE_FP
 
+# The catalogue is versioned because the mix is SAMPLED from it: adding a scenario changes which scenario every
+# later draw picks, so a dataset built before the addition could no longer be rebuilt from its seed. A scenario
+# carries the catalogue version it first appears in (`since`), a build names the catalogue it samples from, and
+# the manifest records it. seed7 and seed8 are catalogue 1.
+#   1  the fifteen scenarios of the first build (2026-11-02)
+#   2  + S-SPOOF-6, a market maker REGISTERED on the instrument who spoofs (2026-11-16)
+CATALOGUE_LATEST = 2
+
 
 @dataclass
 class ScenarioSpec:
@@ -40,6 +48,7 @@ class ScenarioSpec:
     profile_size: int = 500
     profile_otr: float = 4.0
     extra: dict = field(default_factory=dict)
+    since: int = 1  # the catalogue version this scenario first appears in
 
 
 # ----------------------------------------------------------------------------------------------
@@ -285,6 +294,55 @@ def s_spoof_4(session: Session, tid: str, t0: int) -> int:
         int(rng.integers(2, 4)),
         float(rng.uniform(1.5, 3.0)),
         (100, 400),
+    )
+
+
+def s_spoof_6(session: Session, tid: str, t0: int) -> int:
+    """A market maker REGISTERED on this instrument who spoofs. He quotes both sides the way F-MM-1 does for
+    35-50 s, pulls his quotes, and one to two seconds later runs one spoof cycle: a single large order away from the
+    touch on one side, a market order the other way once the book has skewed, the cancel within half a second.
+
+    Why it exists (review 2026-11-16): in seed7 all 82 alerts on a market maker registered on the instrument are
+    false positives, so nothing tested the cheapest wrong reading of the profile, "registered, therefore close".
+    The detector's 60 s window holds the two-sided quoting as well as the spoof, so the trader's cancels in the
+    window are mostly symmetric quote cancels and his profile, his desk and his typical size are a market maker's;
+    only the one large one-sided order, the trade that followed it and the cancel say otherwise."""
+    rng = session.rng
+    d = session.depth5_estimate()
+    size = int(1.2 * d)
+    session.traders[tid].typical_order_size = size  # he IS a market maker: his typical size is what he quotes
+    quotes: dict[Side, list[str]] = {Side.BUY: [], Side.SELL: []}
+
+    def requote() -> None:
+        for side in (Side.BUY, Side.SELL):
+            _cancel_many(session, quotes[side])
+            quotes[side].clear()
+        for side in (Side.BUY, Side.SELL):
+            session.after(session.uniform_ns(3, 20), _place_improving, session, tid, side, size, 1, quotes[side])
+
+    quote_s = float(rng.uniform(35, 50))
+    t = t0
+    end_quotes = t0 + session.s(quote_s)
+    while t < end_quotes:
+        session.at(t, requote)
+        t += session.s(float(rng.uniform(1.5, 3.0)))
+    # a client trades against his quotes, as in F-MM-1: the window holds an ordinary market-making execution too
+    session.at(
+        t0 + session.s(quote_s * float(rng.uniform(0.3, 0.6))),
+        lambda: _market(session, _counterparty(session), _rand_side(session), int(0.6 * d)),
+    )
+    t_pull = end_quotes + session.ms(200)
+    session.at(t_pull, _cancel_all, session, tid)
+    t_spoof = t_pull + session.s(float(rng.uniform(1.0, 2.0)))
+    return _spoof_cycle(
+        session,
+        tid,
+        t_spoof,
+        _rand_side(session),
+        float(rng.uniform(8, 12)),
+        int(rng.integers(2, 4)),
+        float(rng.uniform(1.5, 3.0)),
+        (100, 500),
     )
 
 
@@ -656,6 +714,27 @@ SCENARIOS: dict[str, ScenarioSpec] = {
         0.15,
         s_spoof_5,
     ),
+    "S-SPOOF-6": ScenarioSpec(
+        "S-SPOOF-6",
+        Truth.TRUE_ABUSE,
+        Disposition.ESCALATE,
+        Role.MARKET_MAKER,
+        "ETF-MM",
+        [
+            "registered market maker on this instrument, and it does not explain the pattern",
+            "one large one-sided order several times the depth, away from the touch, never executed",
+            "opposite-side execution, then the large order cancelled within half a second",
+            "the two-sided quoting earlier in the window is ordinary; the large order is not a quote",
+        ],
+        CORE_TOOLS,
+        "The registered-therefore-close trap: features (a) and (b) override the registration.",
+        0.15,
+        s_spoof_6,
+        registered_here=True,
+        profile_size=900,
+        profile_otr=40.0,
+        since=2,
+    ),
     "F-MM-1": ScenarioSpec(
         "F-MM-1",
         Truth.FALSE_POSITIVE,
@@ -840,9 +919,9 @@ def inject(session: Session, spec: ScenarioSpec, trader_id: str, t0: int) -> Non
     session.at(t0, start)
 
 
-def true_specs() -> list[ScenarioSpec]:
-    return [s for s in SCENARIOS.values() if s.truth is Truth.TRUE_ABUSE]
+def true_specs(catalogue: int = CATALOGUE_LATEST) -> list[ScenarioSpec]:
+    return [s for s in SCENARIOS.values() if s.truth is Truth.TRUE_ABUSE and s.since <= catalogue]
 
 
-def false_specs() -> list[ScenarioSpec]:
-    return [s for s in SCENARIOS.values() if s.truth is Truth.FALSE_POSITIVE]
+def false_specs(catalogue: int = CATALOGUE_LATEST) -> list[ScenarioSpec]:
+    return [s for s in SCENARIOS.values() if s.truth is Truth.FALSE_POSITIVE and s.since <= catalogue]

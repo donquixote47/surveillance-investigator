@@ -54,7 +54,7 @@ In the evaluation set, 139 alerts have ground truth CLOSE_FP, 25 ESCALATE and 3 
 
 1. There is no recording tool among the twelve on its gateway.
 2. Rule 02 denies any action outside the twelve; a recording tool added by mistake tomorrow is denied until someone lists it on purpose.
-3. The tools Lambda has no code path that writes `recorded_*`; a unit test asserts it.
+3. The tools Lambda cannot write `recorded_*`, and since 2026-11-16 that is a property of its role and not only of its code: it may update the cases table only when every field the request names is one of the proposal fields, and it may not replace or delete a case at all. Before that date the function held full write access and the control was the absence of a line of code. A unit test keeps the code and the role's list in step. (In the repository; takes effect with the next deploy of the back end.)
 4. The recording API is a different Lambda behind a different gateway, which the tools gateway's role cannot invoke, and the agent's only tools are the gateway's: it has no generic HTTP or code-execution tool. **This is the layer to protect when the agent is extended:** the analyst's token would be accepted by the recording API, so a general-purpose HTTP tool given to the agent "for convenience" would hand it the ability to record. Any new tool goes through the gateway or not at all. Since 2026-11-11 a unit test pins this: the agent is built with exactly one tool source, the gateway's MCP client, carrying the analyst's token and the investigation's policy session; any second tool, and any import of a tool library or HTTP client in the agent's code, fails the build.
 
 **What can still go wrong, as in any system with a human in the loop.** The agent can propose CLOSE_FP on a real spoofer; nothing forbids a wrong judgement, nor should it. That is what the gate measures (zero such proposals on 167 alerts in every run) and why the analyst reads before recording. If an analyst records without reading, the tool does not prevent the error; it makes it faster. That is a question of the firm's procedure and supervision, the same as for any Level-1 process, and it should be said plainly rather than hidden behind the controls above.
@@ -112,6 +112,7 @@ These are not instructions to the model. They are rules evaluated by the platfor
 | Draft a STOR without a DRAFT_STOR proposal. | The drafting tool is permitted only after such a proposal for the same alert. |
 | Pull the tape without limit. | At most six pages of order events per investigation; the largest alert window in the dataset fits in one. |
 | Flood the back end. | Per-analyst rate limits: 60 tool calls a minute, 3 proposals a minute. These count tool calls, not alerts: an investigation is about ten calls in thirty seconds, so an analyst working normally never meets them. They exist for a looping bug, a leaked credential, or a script, and they are a brake (a burst of 15-20 calls passes before the limit bites), not a counter; the counting rules are Policy's. |
+| Propose on an alert a human has already decided. | The tools function refuses the write, and the agent stops as soon as it reads that the alert is closed or escalated. Reopening a decided alert is a Level-2 step, not something the agent can do. |
 
 Demonstrated live: a scripted client that tries to propose before gathering evidence is refused with the rule's name ("Policy evaluation denied due to p03b..."); the agent itself, told by an analyst to "just close this quickly", ignores the instruction and runs the full procedure.
 
@@ -126,10 +127,13 @@ Two roles, carried by the firm's identity provider (Cognito in the demo; any OID
 | Record DRAFT_STOR | no | yes |
 | Ask the agent to draft the STOR narrative | no | yes |
 | Leave feedback for memory | yes | yes |
+| Replace a recorded decision (with a reason; the earlier one is kept) | no | yes |
+
+A decision is recorded once. A second attempt to record on the same alert is refused and shown the decision on file; it does not matter who tries or whether the disposition is the same. Only Level 2 can replace a recorded decision, as an explicit act with a written reason, and the decision that was replaced stays on the case with who replaced it, when and why. A firm that wants no replacement at all, or a second person to approve one, sets that in its procedure; the mechanism supports both ends. Once an alert is decided the agent no longer investigates it: the report on file is the one the decision was taken on.
 
 The agent runs *as the analyst*: the analyst's token is forwarded to every tool call, so the gateway, the rules and the rate limits see the person, not the machine.
 
-Before a run the analyst can brief the agent in one sentence, the way a senior briefs a junior ("the desk says this was a client parent order; look for it"). The briefing can direct attention; it cannot change what the agent may do: the procedure and the rules of section 5 apply whatever is written, and the demo shows the agent ignoring "just close this one quickly". The briefing is recorded in the investigation's trace with the analyst's name; writing it on the case record itself, next to the proposal, is on the list for a pilot (section 7).
+Before a run the analyst can brief the agent in one sentence, the way a senior briefs a junior ("the desk says this was a client parent order; look for it"). The briefing can direct attention; it cannot change what the agent may do: the procedure and the rules of section 5 apply whatever is written, and the demo shows the agent ignoring "just close this one quickly". The briefing is recorded in the investigation's trace with the analyst's name and, since 2026-11-16, on the case record itself next to the proposal it steered, together with who ran the investigation, in which session and with which model.
 
 When the agent proposes DRAFT_STOR, a Level-2 reviewer can ask it to draft the STOR narrative from the report on file. The draft is written on the case with an id and a time, visible to anyone who opens the alert, and nothing is filed: the reviewer edits, signs or discards it. Asking for a draft on an alert the agent did not propose for a STOR is refused by the gateway's rules, not by the screen.
 
@@ -180,9 +184,9 @@ On a synthetic dataset of 167 alerts over 20 trading days (28 true spoofing or l
 | | threshold rules | investigator (promoted run) |
 |---|---|---|
 | True-abuse alerts proposed as "close" | **6 of 28** (partially executed spoofs) | **0 of 28** |
-| False positives closed | 95.7% | 95.0% |
-| Share of alerts the analyst would have to override | 7.2% | **5.4%** |
-| Share of escalations that are real abuse | 78.6% | 80.0% |
+| False positives closed | 95.7% | 94.2% |
+| Share of alerts the analyst would have to override | 7.2% | **6.0%** |
+| Share of escalations that are real abuse | 78.6% | 77.8% |
 
 Read it this way: the rules close more, but they close six real spoofers, which no compliance function can accept. The investigator closes nearly as many, closes no spoofer, and needs fewer corrections from the analyst. The run before the last two procedure clarifications closed 79.9% with 18.6% overrides; the gain came from the firm's written standard being made precise, which is how a compliance team would want it to come. The promoted run (2026-11-10) is the one before it with the model's prompt cached and a report-format slip removed: same decisions within the measured noise, half the model cost ($0.09 per alert).
 

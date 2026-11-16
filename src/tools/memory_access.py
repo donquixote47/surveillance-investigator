@@ -84,14 +84,23 @@ def write_records(records: list[dict[str, Any]]) -> list[dict]:
     return out
 
 
-def disposition_text(alert: dict, case: dict, disposition: str, user: str, note: str, override: bool) -> str:
-    """One sentence an analyst would write in a handover, with the facts a later investigation needs."""
+def disposition_text(
+    alert: dict, case: dict, disposition: str, user: str, note: str, override: bool, supersedes: str | None = None
+) -> str:
+    """One sentence an analyst would write in a handover, with the facts a later investigation needs. A decision
+    that replaces an earlier one says so: the earlier record stays in Memory (it happened), and a reader of both
+    must be able to tell which one stands."""
     proposed = case.get("proposed_disposition")
     agent_part = f"the agent had proposed {proposed}" if proposed else "no agent proposal was on file"
     ov = " (OVERRIDE of the agent)" if override else ""
+    sup = (
+        f" This decision SUPERSEDES the earlier recorded {supersedes} on the same alert, which no longer stands."
+        if supersedes
+        else ""
+    )
     return (
         f"On {alert['date']} alert {alert['alert_id']} ({alert['scenario']} on {alert['instrument']}, trader "
-        f"{alert['trader_id']}) was recorded {disposition}{ov} by {user}; {agent_part}. Analyst note: {note}"
+        f"{alert['trader_id']}) was recorded {disposition}{ov} by {user}; {agent_part}.{sup} Analyst note: {note}"
     )
 
 
@@ -106,15 +115,23 @@ def _fan_out(alert: dict, desk: str | None, text: str, metadata: dict[str, Any])
 
 
 def record_disposition(
-    alert: dict, case: dict, disposition: str, user: str, note: str, override: bool, desk: str | None = None
+    alert: dict,
+    case: dict,
+    disposition: str,
+    user: str,
+    note: str,
+    override: bool,
+    desk: str | None = None,
+    supersedes: str | None = None,
 ) -> None:
     write_records(
         _fan_out(
             alert,
             desk,
-            disposition_text(alert, case, disposition, user, note, override),
+            disposition_text(alert, case, disposition, user, note, override, supersedes),
             {
                 "kind": "disposition",
+                "supersedes": supersedes,
                 "alert_id": alert["alert_id"],
                 "trader_id": alert["trader_id"],
                 "instrument": alert["instrument"],
@@ -171,6 +188,30 @@ def record_feedback(alert: dict, user: str, note: str, desk: str | None = None) 
         ],
         metadata=_meta({"kind": "feedback", "alert_id": alert["alert_id"], "recorded_by": user}),
     )
+
+
+def visible_to(records: list[dict], alert: dict) -> tuple[list[dict], int]:
+    """Drop the one thing an investigation of `alert` must not be shown: the DECISION recorded on that same alert.
+    That record is the answer, not a prior. It can still be in Memory when a decided alert is reopened
+    (`reset_cases.py --include-recorded` clears the case, not Memory) and it was there for three seed7 alerts in
+    every evaluation run before decided alerts were skipped.
+
+    Everything else passes, on purpose (corrected 2026-11-16, the same day a stricter filter was written):
+    - feedback an analyst left on this very alert: when the analyst sends feedback and asks for the investigation
+      again, that feedback is what the agent is being asked to take into account;
+    - decisions and feedback about alerts dated AFTER this one: a firm reviews an older alert with everything it
+      knows on the day of the review, and a correction made yesterday has to reach the backlog alert worked today,
+      or the agent does not learn from it;
+    - records without the metadata (instrument notes, procedures, facts the strategy extracted).
+    Returns (kept, number dropped)."""
+    kept = []
+    for r in records:
+        meta = r.get("metadata") or {}
+        same_alert = bool(meta.get("alert_id")) and meta["alert_id"] == alert.get("alert_id")
+        if same_alert and meta.get("kind") == "disposition":
+            continue
+        kept.append(r)
+    return kept, len(records) - len(kept)
 
 
 def recall(namespace: str, query: str, top_k: int = 5) -> list[dict]:

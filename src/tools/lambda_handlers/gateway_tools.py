@@ -17,6 +17,8 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+from botocore.exceptions import ClientError
+
 from tools import data_access as da
 from tools import memory_access as mem
 from tools import procedures
@@ -24,6 +26,11 @@ from tools.schema import REQUIRED_INPUTS, TARGET_NAME, TOOL_NAMES
 
 NS_PER_S = 1_000_000_000
 DISPOSITIONS = ("CLOSE_FP", "ESCALATE", "DRAFT_STOR")
+# Where a proposal came from, written next to it on the case: the investigation session (which is also the Gateway
+# policy session and the key to the trace), who ran it, the model and configuration, and the analyst's briefing.
+# The agent's guard fills it from the Runtime request, not the model; anything else in the object is dropped.
+PROVENANCE_KEYS = ("session_id", "analyst", "model_id", "bundle", "mode", "memory", "analyst_instruction")
+PROVENANCE_MAX_CHARS = 2000
 
 
 # ----------------------------------------------------------------------------------------------
@@ -86,6 +93,13 @@ def _alert_or_error(alert_id: str) -> tuple[dict | None, dict | None]:
     if alert is None:
         return None, {"error": f"alert {alert_id!r} not found"}
     return alert, None
+
+
+def _on_instrument(items: list[dict], alert: dict) -> list[dict]:
+    """Only the alert's instrument. The trader partition and the by_date index hold every instrument the firm
+    trades; a book, a mid or a discriminator mixed across two of them would be wrong without any error. The
+    synthetic datasets have one instrument, so this is a no-op there and a guard everywhere else."""
+    return [i for i in items if i.get("instrument") == alert["instrument"]]
 
 
 def _events_frame(items: list[dict]):
@@ -175,7 +189,7 @@ def get_order_events(ev: dict) -> dict:
     pad = min(max(float(ev.get("pad_seconds") or 0), 0.0), 600.0)
     t0 = int(alert["window_start"]) - int(pad * NS_PER_S)
     t1 = int(alert["window_end"]) + int(pad * NS_PER_S)
-    items = da.trader_day_events(alert["trader_id"], alert["date"], t0, t1)
+    items = _on_instrument(da.trader_day_events(alert["trader_id"], alert["date"], t0, t1), alert)
     page_size = 400
     start = 0
     token = da.decode_token(ev.get("next_token"))
@@ -204,7 +218,7 @@ def reconstruct_book(ev: dict) -> dict:
     sample_ms = max(int(ev.get("sample_every_ms") or 1000), 50)
     lookback_min = 20
     t0 = at_ts - lookback_min * 60 * NS_PER_S
-    day = da.day_events(alert["date"], t0, at_ts)
+    day = _on_instrument(da.day_events(alert["date"], t0, at_ts), alert)
     # resting state per order at at_ts: last event's remaining; price from the last price-bearing event
     state: dict[str, dict] = {}
     for it in day:  # already in time order within the query (sk is ts-ordered)
@@ -238,7 +252,7 @@ def reconstruct_book(ev: dict) -> dict:
     w0, w1 = int(alert["window_start"]), int(alert["window_end"])
     win = [
         i
-        for i in da.day_events(alert["date"], w0, w1)
+        for i in _on_instrument(da.day_events(alert["date"], w0, w1), alert)
         if i.get("best_bid") is not None and i.get("best_ask") is not None
     ]
     path = []
@@ -273,15 +287,28 @@ def compute_discriminators(ev: dict) -> dict:
     if err:
         return err
     stats = da.instrument_stats(alert["instrument"], alert["date"])
-    depth = float(stats["avg_depth_top5"]) if stats else 1.0
-    mine = _events_frame(da.trader_day_events(alert["trader_id"], alert["date"]))
+    if not stats or not stats.get("avg_depth_top5"):
+        # every "size vs depth" number divides by this; a silent default of 1 would report a 300-share order as
+        # 300 times the depth and read as a spoof
+        return {
+            "error": (
+                f"no instrument statistics (avg_depth_top5) for {alert['instrument']} on {alert['date']}; "
+                "the size-versus-depth discriminators cannot be computed"
+            )
+        }
+    depth = float(stats["avg_depth_top5"])
+    mine = _events_frame(_on_instrument(da.trader_day_events(alert["trader_id"], alert["date"]), alert))
     w0, w1 = int(alert["window_start"]), int(alert["window_end"])
     # the market-wide cancel count needs other traders' rows just before our first cancel;
     # one minute of context is enough
-    others = _events_frame(da.day_events(alert["date"], w0 - 60 * NS_PER_S, w1 + 15 * NS_PER_S))
+    others = _events_frame(_on_instrument(da.day_events(alert["date"], w0 - 60 * NS_PER_S, w1 + 15 * NS_PER_S), alert))
     d = compute(alert, mine, depth, all_events=others if not others.empty else None).to_dict()
     for f in d.get("opposite_side_fills", []):
         f["time"] = da.hhmmss(f["ts"])
+    for o in d.get("large_orders", []):  # times a report can quote; the faithfulness check matches them as strings
+        o["placed_time"] = da.hhmmss(o["placed_ts"])
+        if o.get("opposite_trade_ts") is not None:
+            o["opposite_trade_time"] = da.hhmmss(o["opposite_trade_ts"])
     d["evidence_id"] = f"DISC-{alert['alert_id']}"
     d["avg_depth_top5"] = depth
     d["otr"] = None if d["otr"] == "inf" else d["otr"]
@@ -325,26 +352,44 @@ def get_trader_alert_history(ev: dict) -> dict:
     from datetime import date as _date
     from datetime import timedelta
 
+    # With `alert_id` the history is the one an analyst of THAT alert may see: priors up to the alert's own date,
+    # and never the alert itself. Without it (older callers) the caller's `before_date` stands and nothing can be
+    # excluded, because the tool does not know which alert is being investigated.
+    current = None
+    if ev.get("alert_id"):
+        current, err = _alert_or_error(ev["alert_id"])
+        if err:
+            return err
+        if current["trader_id"] != ev["trader_id"]:
+            return {
+                "error": (
+                    f"alert {current['alert_id']} is on trader {current['trader_id']}, not {ev['trader_id']}; "
+                    "pass the alert's own trader_id"
+                )
+            }
     lookback = int(ev.get("lookback_days") or 90)
-    before = ev.get("before_date") or _date.today().isoformat()
+    before = (current["date"] if current else None) or ev.get("before_date") or _date.today().isoformat()
     after = (_date.fromisoformat(before) - timedelta(days=lookback)).isoformat()
-    rows = da.history(ev["trader_id"], before, after)
-    # dispositions recorded by analysts during this dataset's life also count as history
+    # One row per alert. A decision recorded through the human path is in BOTH places (the history table and the
+    # case), so the case row, which also carries the proposal it answered, replaces the history row instead of
+    # being listed next to it.
+    by_alert: dict[str, dict] = {r["alert_id"]: r for r in da.history(ev["trader_id"], before, after)}
     for c in da.recorded_cases_for_trader(ev["trader_id"]):
         if c.get("recorded_disposition") and after <= c.get("date", "") <= before:
-            rows.append(
-                {
-                    "alert_id": c["alert_id"],
-                    "date": c.get("date"),
-                    "scenario": c.get("scenario"),
-                    "proposed_disposition": c.get("proposed_disposition"),
-                    "recorded_disposition": c.get("recorded_disposition"),
-                    "recorded_by": c.get("recorded_by"),
-                    "analyst_note": c.get("analyst_note"),
-                    "override": bool(c.get("override")),
-                }
-            )
-    rows.sort(key=lambda r: (r.get("date") or "", r.get("alert_id") or ""), reverse=True)
+            by_alert[c["alert_id"]] = {
+                "alert_id": c["alert_id"],
+                "date": c.get("date"),
+                "scenario": c.get("scenario"),
+                "proposed_disposition": c.get("proposed_disposition"),
+                "recorded_disposition": c.get("recorded_disposition"),
+                "recorded_by": c.get("recorded_by"),
+                "analyst_note": c.get("analyst_note"),
+                "override": bool(c.get("override")),
+            }
+    excluded = 0
+    if current and by_alert.pop(current["alert_id"], None) is not None:
+        excluded = 1  # the alert under investigation is not its own prior
+    rows = sorted(by_alert.values(), key=lambda r: (r.get("date") or "", r.get("alert_id") or ""), reverse=True)
     out = [
         {
             k: r.get(k)
@@ -367,16 +412,32 @@ def get_trader_alert_history(ev: dict) -> dict:
         "before_date": before,
         "alerts": out,
         "count": len(out),
+        "excluded_current_alert": excluded,
     }
 
 
 def get_market_events(ev: dict) -> dict:
+    # With `alert_id` the instrument and the window are the alert's own (nothing to copy, and the lookup is tied to
+    # the alert); without it the caller passes instrument, window_start and window_end as before.
     pad = float(ev.get("pad_seconds") or 60)
-    w0, w1 = int(ev["window_start"]), int(ev["window_end"])
+    if ev.get("alert_id"):
+        alert, err = _alert_or_error(ev["alert_id"])
+        if err:
+            return err
+        instrument, w0, w1 = alert["instrument"], int(alert["window_start"]), int(alert["window_end"])
+    else:
+        missing = [k for k in ("instrument", "window_start", "window_end") if ev.get(k) in (None, "")]
+        if missing:
+            return {
+                "error": (
+                    f"get_market_events: pass alert_id, or instrument, window_start and window_end ({missing} missing)"
+                )
+            }
+        instrument, w0, w1 = ev["instrument"], int(ev["window_start"]), int(ev["window_end"])
     date = da.date_of(w0)
     rows = da.market_events(date, w0 - int(pad * NS_PER_S), w1 + int(pad * NS_PER_S))
-    rows = [r for r in rows if r.get("instrument") in ("*", ev["instrument"])]
-    return {
+    rows = [r for r in rows if r.get("instrument") in ("*", instrument)]
+    out = {
         "events": [
             {
                 "ts": int(r["ts"]),
@@ -387,8 +448,14 @@ def get_market_events(ev: dict) -> dict:
                 "seconds_from_window_start": (int(r["ts"]) - w0) / NS_PER_S,
             }
             for r in rows
-        ]
+        ],
+        "instrument": instrument,
+        "window_start": w0,
+        "window_end": w1,
     }
+    if ev.get("alert_id"):
+        out["alert_id"] = ev["alert_id"]
+    return out
 
 
 def get_instrument_stats(ev: dict) -> dict:
@@ -423,11 +490,12 @@ def recall_memory(ev: dict) -> dict:
         ev.get("query") or ""
     ).strip() or "prior dispositions, overrides and analyst notes on this trader and instrument"
     k = int(ev.get("top_k") or 5)
-    trader_notes = mem.recall(mem.trader_ns(ev["trader_id"]), q, k)
+    # the decision recorded on this same alert is the answer, not a prior (memory_access.visible_to)
+    trader_notes, dropped_t = mem.visible_to(mem.recall(mem.trader_ns(ev["trader_id"]), q, k), alert)
     tr = da.get_trader(ev["trader_id"]) or {}
     desk = tr.get("desk")
-    desk_notes = mem.recall(mem.desk_ns(desk), q, k) if desk else []
-    instrument_notes = mem.recall(mem.instrument_ns(ev["instrument"]), q, min(k, 3))
+    desk_notes, dropped_d = mem.visible_to(mem.recall(mem.desk_ns(desk), q, k), alert) if desk else ([], 0)
+    instrument_notes, dropped_i = mem.visible_to(mem.recall(mem.instrument_ns(ev["instrument"]), q, min(k, 3)), alert)
     procs = mem.recall(mem.PROCEDURES_NS, q, 2)
     return {
         "alert_id": alert["alert_id"],
@@ -440,7 +508,35 @@ def recall_memory(ev: dict) -> dict:
         ],
         "procedures": [{k2: v for k2, v in r.items() if k2 in ("text", "score", "source")} for r in procs],
         "count": len(trader_notes) + len(desk_notes) + len(instrument_notes) + len(procs),
+        "excluded_own_decision": dropped_t + dropped_d + dropped_i,
         "note": "context only: prior dispositions never replace evidence from the current window (closure standard)",
+    }
+
+
+def _provenance(raw: Any) -> dict[str, str]:
+    """The known keys of the `provenance` input as short strings; everything else is dropped."""
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for k in PROVENANCE_KEYS:
+        v = raw.get(k)
+        if v is None or v == "":
+            continue
+        out[k] = str(v)[:PROVENANCE_MAX_CHARS]
+    return out
+
+
+def _decided(alert_id: str, case: dict) -> dict:
+    return {
+        "error": (
+            f"alert {alert_id} is already decided ({case.get('recorded_disposition')} recorded by "
+            f"{case.get('recorded_by')} at {case.get('recorded_at')}); a proposal on a decided case is refused and "
+            "nothing was written. Reopening a decided alert is a Level-2 step, not an agent action. Stop and say so."
+        ),
+        "alert_id": alert_id,
+        "recorded_disposition": case.get("recorded_disposition"),
+        "recorded_by": case.get("recorded_by"),
+        "recorded_at": case.get("recorded_at"),
     }
 
 
@@ -461,31 +557,71 @@ def propose_disposition(ev: dict) -> dict:
         return {"error": "confidence must be a number between 0 and 1"}
     if not 0.0 <= conf <= 1.0:
         return {"error": "confidence must be between 0 and 1"}
+    # A decided case takes no further proposal: the report on file is the one the analyst decided on, and it stays.
+    # The read catches every decided case (including ones recorded before the lock existed); the condition on the
+    # write closes the gap between this read and the write.
+    case = da.get_case(alert["alert_id"]) or {}
+    if case.get("recorded_disposition") or case.get("decision_lock"):
+        return _decided(alert["alert_id"], case)
     now = datetime.now(UTC).isoformat(timespec="seconds")
     case_id = f"C-{alert['alert_id']}"
-    # SET only proposed_* fields: this function has no code path that touches recorded_*
-    da.table("CASES_TABLE").update_item(
-        Key={"alert_id": alert["alert_id"]},
-        UpdateExpression=(
-            "SET case_id = :c, trader_id = :t, #d = :dt, scenario = :s, proposed_disposition = :p, "
-            "confidence = :conf, report = :r, proposed_at = :at, #st = if_not_exists(#st, :status), "
-            "proposal_count = if_not_exists(proposal_count, :zero) + :one"
-        ),
-        ExpressionAttributeNames={"#d": "date", "#st": "status"},
-        ExpressionAttributeValues={
-            ":c": case_id,
-            ":t": alert["trader_id"],
-            ":dt": alert["date"],
-            ":s": alert["scenario"],
-            ":p": disp,
-            ":conf": da.to_ddb(conf),
-            ":r": json.dumps(report),
-            ":at": now,
-            ":status": "PROPOSED",
-            ":zero": 0,
-            ":one": 1,
-        },
+    prov = _provenance(ev.get("provenance"))
+    names = {"#d": "date", "#st": "status"}
+    values: dict[str, Any] = {
+        ":c": case_id,
+        ":t": alert["trader_id"],
+        ":dt": alert["date"],
+        ":s": alert["scenario"],
+        ":p": disp,
+        ":conf": da.to_ddb(conf),
+        ":r": json.dumps(report),
+        ":at": now,
+        ":status": "PROPOSED",
+        ":zero": 0,
+        ":one": 1,
+    }
+    # SET only proposal fields: this function has no code path that touches recorded_* (and its IAM role may not
+    # name those attributes in an update at all; infra/surv_firm/stack.py)
+    update = (
+        "SET case_id = :c, trader_id = :t, #d = :dt, scenario = :s, proposed_disposition = :p, "
+        "confidence = :conf, report = :r, proposed_at = :at, #st = if_not_exists(#st, :status), "
+        "proposal_count = if_not_exists(proposal_count, :zero) + :one"
     )
+    if case.get("proposed_disposition"):
+        # an earlier proposal is being replaced (a second investigation before anyone decided): keep its line.
+        # The earlier report itself is in that session's trace, found by the session id kept here.
+        earlier_prov = case.get("proposal_provenance")
+        if isinstance(earlier_prov, str):
+            try:
+                earlier_prov = json.loads(earlier_prov)
+            except json.JSONDecodeError:
+                earlier_prov = {}
+        earlier = {
+            "disposition": case.get("proposed_disposition"),
+            "confidence": da.to_ddb(float(case["confidence"])) if case.get("confidence") is not None else None,
+            "proposed_at": case.get("proposed_at"),
+            "session_id": (earlier_prov or {}).get("session_id"),
+            "replaced_at": now,
+        }
+        update += ", proposal_history = list_append(if_not_exists(proposal_history, :empty), :ph)"
+        values.update({":empty": [], ":ph": [{k: v for k, v in earlier.items() if v is not None}]})
+    if prov:
+        update += ", proposal_provenance = :prov"
+        values[":prov"] = json.dumps(prov)
+    else:
+        update += " REMOVE proposal_provenance"  # never leave the previous proposal's provenance on this one
+    try:
+        da.table("CASES_TABLE").update_item(
+            Key={"alert_id": alert["alert_id"]},
+            UpdateExpression=update,
+            ConditionExpression="attribute_not_exists(decision_lock)",
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+        return _decided(alert["alert_id"], da.get_case(alert["alert_id"]) or {})
     return {
         "alert_id": alert["alert_id"],
         "disposition": disp,

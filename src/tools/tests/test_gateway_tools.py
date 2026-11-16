@@ -87,7 +87,10 @@ def world():
     from moto import mock_aws
 
     os.environ.update(TABLE_ENV)
-    os.environ.setdefault("AWS_DEFAULT_REGION", "eu-west-2")
+    # The Lambda code reads AWS_REGION; the tables below are created in eu-west-2. A shell with another region
+    # exported (AWS_REGION=eu-west-1 failed six tests here on 2026-11-16) must not decide where the code looks.
+    saved = {k: os.environ.get(k) for k in ("AWS_REGION", "AWS_DEFAULT_REGION")}
+    os.environ["AWS_REGION"] = os.environ["AWS_DEFAULT_REGION"] = "eu-west-2"
     os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
     os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
     with mock_aws():
@@ -117,6 +120,11 @@ def world():
         local = disc[disc["alert_id"] == alert["alert_id"]].iloc[0].to_dict()
         yield alert.to_dict(), local
         da._ddb = None
+    for k, v in saved.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
 
 
 def call(tool: str, **inputs):
@@ -205,6 +213,20 @@ def test_compute_discriminators_matches_local_labels(world):
     assert sorted(out["large_order_ids"]) == sorted(json.loads(local["large_order_ids"]))
     assert len(out["opposite_side_fills"]) == len(json.loads(local["opposite_side_fills"]))
     assert all("time" in f for f in out["opposite_side_fills"])
+
+    # the per-order block comes through the Lambda with the times a report can quote, and every key it returns is
+    # declared on the Gateway target's output schema (an undeclared key would be an undocumented contract)
+    from tools.schema import TOOLS
+
+    declared = next(t for t in TOOLS if t["name"] == "compute_discriminators")["outputSchema"]["properties"]
+    assert set(out) <= set(declared), sorted(set(out) - set(declared))
+    assert [o["order_id"] for o in out["large_orders"]] == out["large_order_ids"] and out["large_orders_omitted"] == 0
+    entry_keys = set(declared["large_orders"]["items"]["properties"])
+    for o in out["large_orders"]:
+        assert set(o) <= entry_keys, sorted(set(o) - entry_keys)
+        assert len(o["placed_time"]) == 12 and o["placed_time"][2] == ":"  # HH:MM:SS.mmm
+        assert (o["opposite_trade_ts"] is None) == ("opposite_trade_time" not in o)
+    json.dumps(out, allow_nan=False)
 
 
 def test_profile_history_market_stats_procedures(world):
@@ -304,3 +326,305 @@ def test_propose_then_human_records(world):
     mine = [a for a in body["alerts"] if a["alert_id"] == alert["alert_id"]]
     assert mine and mine[0]["case"]["recorded_disposition"] == "ESCALATE"
     assert mine[0]["status"] == "ESCALATED"
+
+
+def _human(alert_id: str, route: str, body: dict | None, user: str, groups):
+    from tools.lambda_handlers import human_path
+
+    event = {
+        "routeKey": route,
+        "pathParameters": {"alert_id": alert_id},
+        "body": json.dumps(body) if body is not None else None,
+        "requestContext": {
+            "authorizer": {"jwt": {"claims": {"cognito:username": user, "cognito:groups": groups}}},
+            "http": {"method": route.split(" ")[0]},
+        },
+    }
+    r = human_path.handler(event, context=None)
+    return r["statusCode"], json.loads(r["body"])
+
+
+def test_decision_is_not_overwritten_and_l2_supersedes_with_history(world):
+    """Review 2026-11-16: a recorded decision could be silently overwritten and the agent could re-propose on a
+    decided case. Now: a second record is refused (409); Level 2 may supersede with a note and the earlier decision
+    stays in decision_history; a new proposal on a decided case is refused by the tools Lambda."""
+    from tools import data_access as da
+
+    alert_id = "A-261005-0005"
+    report = {
+        "summary": "s" * 20,
+        "evidence": [{"id": "E1", "source": "compute_discriminators", "fact": "x 1.0"}],
+        "legitimate_explanations_considered": [{"explanation": "market making", "verdict": "supported"}],
+    }
+    r = call(
+        "propose_disposition",
+        alert_id=alert_id,
+        disposition="CLOSE_FP",
+        confidence=0.8,
+        report=report,
+        provenance={"session_id": "sess-1", "analyst": "l1.analyst", "model_id": "m", "secret": "dropped"},
+    )
+    assert "error" not in r
+    prov = json.loads(da.get_case(alert_id)["proposal_provenance"])
+    assert prov == {"session_id": "sess-1", "analyst": "l1.analyst", "model_id": "m"}  # unknown keys dropped
+
+    code, body = _human(
+        alert_id,
+        "POST /cases/{alert_id}/disposition",
+        {"disposition": "ESCALATE", "note": "L2 view"},
+        "l2.reviewer",
+        ["L2"],
+    )
+    assert code == 200 and body["recorded_disposition"] == "ESCALATE" and body["override"] is True
+    # L1 tries to record over it: refused, nothing changes
+    code, body = _human(
+        alert_id,
+        "POST /cases/{alert_id}/disposition",
+        {"disposition": "CLOSE_FP", "note": "fine"},
+        "l1.analyst",
+        ["L1"],
+    )
+    assert code == 409 and "not overwritten" in body["error"]
+    assert da.get_case(alert_id)["recorded_disposition"] == "ESCALATE"
+    # L1 with supersede: still refused (Level 2 only)
+    code, body = _human(
+        alert_id,
+        "POST /cases/{alert_id}/disposition",
+        {"disposition": "CLOSE_FP", "note": "fine", "supersede": True},
+        "l1.analyst",
+        ["L1"],
+    )
+    assert code == 403
+    # L2 supersedes with a reason: accepted, the earlier decision kept
+    code, body = _human(
+        alert_id,
+        "POST /cases/{alert_id}/disposition",
+        {"disposition": "CLOSE_FP", "note": "on review, MM quoting", "supersede": True},
+        "l2.reviewer",
+        ["L2"],
+    )
+    assert code == 200
+    case = da.get_case(alert_id)
+    assert case["recorded_disposition"] == "CLOSE_FP"
+    hist = case["decision_history"]
+    assert (
+        len(hist) == 1 and hist[0]["recorded_disposition"] == "ESCALATE" and hist[0]["superseded_by"] == "l2.reviewer"
+    )
+    # the agent cannot propose on a decided case
+    r = call("propose_disposition", alert_id=alert_id, disposition="ESCALATE", confidence=0.7, report=report)
+    assert "error" in r and "decided" in r["error"] and r["recorded_disposition"] == "CLOSE_FP"
+    assert da.get_case(alert_id)["proposed_disposition"] == "CLOSE_FP"  # the earlier proposal stands
+
+
+def test_group_claim_shapes():
+    """The HTTP API JWT authorizer stringifies the groups array; every shape seen or plausible must parse."""
+    from tools.lambda_handlers.human_path import _claims
+
+    def groups(raw):
+        return _claims({"requestContext": {"authorizer": {"jwt": {"claims": {"cognito:groups": raw}}}}})[1]
+
+    assert groups(["L1", "L2"]) == ["L1", "L2"]
+    assert groups("[L1 L2]") == ["L1", "L2"]
+    assert groups("[L1]") == ["L1"]
+    assert groups("L1,L2") == ["L1", "L2"]
+    assert groups('["L2"]') == ["L2"]
+    assert groups("") == []
+
+
+def test_reproposal_before_a_decision_keeps_the_earlier_proposals_line(world):
+    """A second investigation before anyone decided replaces the report; the earlier proposal's line (what, when,
+    which session) stays on the case, and the provenance on the case is the current proposal's, never the last one's."""
+    from tools import data_access as da
+
+    alert_id = "A-261005-0004"
+    report = {
+        "summary": "s" * 20,
+        "evidence": [{"id": "E1", "source": "compute_discriminators", "fact": "x 1.0"}],
+        "legitimate_explanations_considered": [{"explanation": "market making", "verdict": "undetermined"}],
+    }
+    first = call(
+        "propose_disposition",
+        alert_id=alert_id,
+        disposition="ESCALATE",
+        confidence=0.65,
+        report=report,
+        provenance={"session_id": "sess-A"},
+    )
+    assert "error" not in first
+    second = call("propose_disposition", alert_id=alert_id, disposition="CLOSE_FP", confidence=0.8, report=report)
+    assert "error" not in second
+    case = da.get_case(alert_id)
+    assert case["proposed_disposition"] == "CLOSE_FP" and case["proposal_count"] == 2
+    assert "proposal_provenance" not in case  # the second call carried none; the first one's must not linger
+    (earlier,) = case["proposal_history"]
+    assert earlier["disposition"] == "ESCALATE" and earlier["session_id"] == "sess-A"
+    assert earlier["proposed_at"] == first["proposed_at"]
+
+
+def test_a_lock_without_a_read_still_refuses_the_write(world, monkeypatch):
+    """The read catches a decided case; the condition on the write catches a decision recorded between that read
+    and the write. Simulated by hiding the decision from the read."""
+    from tools import data_access as da
+    from tools.lambda_handlers import gateway_tools as gt
+
+    alert_id = "A-261005-0006"
+    report = {
+        "summary": "s" * 20,
+        "evidence": [{"id": "E1", "source": "get_alert", "fact": "x 1.0"}],
+        "legitimate_explanations_considered": [{"explanation": "market making", "verdict": "undetermined"}],
+    }
+    code, _ = _human(
+        alert_id, "POST /cases/{alert_id}/disposition", {"disposition": "ESCALATE", "note": "n"}, "l1.analyst", "[L1]"
+    )
+    assert code == 200 and da.get_case(alert_id)["decision_lock"] is True
+    real = da.get_case
+    reads = {"n": 0}
+
+    def first_read_sees_no_decision(a):
+        reads["n"] += 1
+        return {} if reads["n"] == 1 else real(a)
+
+    monkeypatch.setattr(gt.da, "get_case", first_read_sees_no_decision)
+    r = call("propose_disposition", alert_id=alert_id, disposition="CLOSE_FP", confidence=0.9, report=report)
+    assert "error" in r and "decided" in r["error"]
+    monkeypatch.undo()
+    assert "proposed_disposition" not in (da.get_case(alert_id) or {})
+
+
+def _named_attributes(kwargs: dict) -> set[str]:
+    """The top-level attribute names an UpdateItem request touches: set, removed, or tested in its condition."""
+    import re
+
+    names = kwargs.get("ExpressionAttributeNames") or {}
+    text = " ".join(str(kwargs.get(k) or "") for k in ("UpdateExpression", "ConditionExpression"))
+    out = set(kwargs["Key"])
+    for tok in re.findall(r"[#:]?[A-Za-z_][A-Za-z0-9_]*", text):
+        if tok.startswith(":") or tok in ("SET", "REMOVE", "ADD", "DELETE", "AND", "OR", "NOT"):
+            continue
+        if tok in ("if_not_exists", "list_append", "attribute_not_exists", "attribute_exists"):
+            continue
+        out.add(names[tok] if tok.startswith("#") else tok)
+    return out
+
+
+def test_the_agents_updates_name_only_the_attributes_its_role_allows(world, monkeypatch):
+    """moto does not evaluate IAM, so this is the check that the tools Lambda's `dynamodb:Attributes` allow-list
+    (infra/surv_firm/stack.py, from tools/case_fields.py) and the Lambda's own update expressions agree: every
+    attribute the agent's two writes name is allowed, and none is the human path's. A new field written by the
+    agent's path without being added to the list fails here instead of failing as AccessDenied after a deploy."""
+    from tools import data_access as da
+    from tools.case_fields import AGENT_WRITABLE, HUMAN_ONLY
+    from tools.lambda_handlers import gateway_tools as gt
+
+    assert not set(AGENT_WRITABLE) & set(HUMAN_ONLY)
+    captured: list[dict] = []
+    real_table = da.table
+
+    class Spy:
+        def __init__(self, tbl):
+            self._tbl = tbl
+
+        def update_item(self, **kwargs):
+            captured.append(kwargs)
+            return self._tbl.update_item(**kwargs)
+
+        def __getattr__(self, name):
+            return getattr(self._tbl, name)
+
+    monkeypatch.setattr(gt.da, "table", lambda env: Spy(real_table(env)) if env == "CASES_TABLE" else real_table(env))
+    alert_id = "A-261005-0007"
+    report = {
+        "summary": "s" * 20,
+        "evidence": [{"id": "E1", "source": "get_alert", "fact": "x 1.0"}],
+        "indicators_matched": ["high order-to-trade ratio (Annex II 4(f))"],
+        "legitimate_explanations_considered": [{"explanation": "market making", "verdict": "undetermined"}],
+    }
+    for prov in ({"session_id": "s1"}, None, {"session_id": "s3"}):  # with, without (REMOVE) and with history
+        r = call(
+            "propose_disposition",
+            alert_id=alert_id,
+            disposition="DRAFT_STOR",
+            confidence=0.8,
+            report=report,
+            **({"provenance": prov} if prov else {}),
+        )
+        assert "error" not in r
+    assert "error" not in call("draft_stor_narrative", alert_id=alert_id)
+    assert len(captured) == 4
+    named = set().union(*(_named_attributes(k) for k in captured))
+    assert named <= set(AGENT_WRITABLE), f"not in the role's allow-list: {sorted(named - set(AGENT_WRITABLE))}"
+    assert not named & set(HUMAN_ONLY)
+    assert {"proposal_history", "proposal_provenance", "decision_lock", "stor_draft"} <= named  # the parser sees them
+
+
+def test_history_is_one_row_per_alert_and_never_the_alert_itself(world):
+    """Review 2026-11-16: a recorded decision was listed twice (history table and case), and an investigation of
+    alert X was shown X's own recorded decision (three alerts in every seed7 run, disclosed in results.md)."""
+    alert, _ = world  # recorded ESCALATE by test_propose_then_human_records
+    plain = call("get_trader_alert_history", trader_id=alert["trader_id"], before_date=alert["date"])
+    mine = [r for r in plain["alerts"] if r["alert_id"] == alert["alert_id"]]
+    assert len(mine) == 1 and mine[0]["recorded_disposition"] == "ESCALATE"  # once, not twice
+    assert mine[0]["proposed_disposition"] == "DRAFT_STOR" and mine[0]["override"] is True  # the case row
+
+    scoped = call("get_trader_alert_history", trader_id=alert["trader_id"], alert_id=alert["alert_id"])
+    assert all(r["alert_id"] != alert["alert_id"] for r in scoped["alerts"])
+    assert scoped["excluded_current_alert"] == 1 and scoped["before_date"] == alert["date"]
+    assert scoped["count"] == plain["count"] - 1
+
+    other = call("get_trader_alert_history", trader_id="T-MM-01", alert_id=alert["alert_id"])
+    assert "not T-MM-01" in other["error"]
+
+
+def test_market_events_for_an_alert_equal_the_explicit_lookup(world):
+    alert, _ = world
+    by_alert = call("get_market_events", alert_id=alert["alert_id"])
+    explicit = call(
+        "get_market_events",
+        instrument=alert["instrument"],
+        window_start=int(alert["window_start"]),
+        window_end=int(alert["window_end"]),
+    )
+    assert by_alert["events"] == explicit["events"]
+    assert by_alert["alert_id"] == alert["alert_id"] and by_alert["window_start"] == int(alert["window_start"])
+    assert "pass alert_id" in call("get_market_events", instrument="SYN.A")["error"]
+    assert "not found" in call("get_market_events", alert_id="A-000000-0000")["error"]
+
+
+def test_memory_hides_only_the_decision_recorded_on_the_same_alert():
+    """The agent must not be shown the answer to the alert it is investigating, and must be shown everything an
+    analyst has taught it: feedback on this very alert (the analyst asks for the investigation again), and decisions
+    and feedback on later alerts (a correction made yesterday reaches the backlog alert worked today)."""
+    from tools.memory_access import visible_to
+
+    alert = {"alert_id": "A-261009-0003", "date": "2026-10-09"}
+    own = {"alert_id": "A-261009-0003", "date": "2026-10-09"}
+    records = [
+        {"text": "own recorded decision", "metadata": {**own, "kind": "disposition"}},
+        {"text": "analyst feedback on this alert", "metadata": {**own, "kind": "feedback"}},
+        {
+            "text": "later decision, same desk",
+            "metadata": {"alert_id": "A-261016-0003", "date": "2026-10-16", "kind": "disposition"},
+        },
+        {
+            "text": "later feedback, same desk",
+            "metadata": {"alert_id": "A-261016-0003", "date": "2026-10-16", "kind": "feedback"},
+        },
+        {
+            "text": "earlier decision",
+            "metadata": {"alert_id": "H-T-MM-01-02", "date": "2026-09-13", "kind": "disposition"},
+        },
+        {"text": "extracted fact, no metadata", "metadata": {}},
+    ]
+    kept, dropped = visible_to(records, alert)
+    assert dropped == 1 and [r["text"] for r in kept] == [r["text"] for r in records[1:]]
+
+
+def test_missing_depth_is_an_error_and_other_instruments_are_left_out(world, monkeypatch):
+    from tools.lambda_handlers import gateway_tools as gt
+
+    alert, _ = world
+    rows = [{"instrument": "SYN.A", "n": 1}, {"instrument": "SYN.B", "n": 2}, {"n": 3}]
+    assert gt._on_instrument(rows, {"instrument": "SYN.A"}) == [{"instrument": "SYN.A", "n": 1}]
+    monkeypatch.setattr(gt.da, "instrument_stats", lambda instrument, date: None)
+    out = call("compute_discriminators", alert_id=alert["alert_id"])
+    assert "avg_depth_top5" in out["error"] and "max_resting_size_vs_depth" not in out

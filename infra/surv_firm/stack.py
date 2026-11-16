@@ -7,6 +7,7 @@ the tag protects the resources from the account's automatic cleaner in the meant
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 from aws_cdk import (
@@ -47,6 +48,10 @@ from constructs import Construct
 ROOT = Path(__file__).resolve().parents[2]
 SRC = ROOT / "src"
 LAYER_DIR = ROOT / "infra" / "build" / "layer"
+
+if str(SRC) not in sys.path:  # the list of attributes the agent's path may write lives with the code that writes them
+    sys.path.insert(0, str(SRC))
+from tools.case_fields import AGENT_WRITABLE  # noqa: E402
 
 
 class SurvFirmStack(Stack):
@@ -187,12 +192,30 @@ class SurvFirmStack(Stack):
                 removal_policy=RemovalPolicy.DESTROY,
             ),
             description=(
-                "All Gateway tools under target `surv`; reads every table, writes only proposed_* on surv-cases"
+                "All Gateway tools under target `surv`; reads every table, may update only the proposal fields "
+                "of surv-cases (IAM dynamodb:Attributes)"
             ),
         )
         for t in read_tables:
             t.grant_read_data(tools_fn)
-        cases.grant_write_data(tools_fn)  # propose_disposition; the function has no code path for recorded_*
+        # The agent's only write, enforced on the role and not only in the code: UpdateItem on the cases table, and
+        # only when every attribute the request names (set, removed, or tested in a condition) is one of the
+        # proposal fields. `recorded_*`, `decision_history`, `analyst_note`, `override` and `feedback` are the human
+        # path's and cannot be named. PutItem, DeleteItem and BatchWriteItem replace or remove a whole item and are
+        # not granted. Before 2026-11-16 this was `cases.grant_write_data(tools_fn)`, i.e. every write on every
+        # attribute, with "the function has no code path for recorded_*" as the only control.
+        tools_fn.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="ProposalFieldsOnly",
+                actions=["dynamodb:UpdateItem"],
+                resources=[cases.table_arn],
+                conditions={
+                    "ForAllValues:StringEquals": {"dynamodb:Attributes": list(AGENT_WRITABLE)},
+                    # an update may not hand back the whole item (which holds the human path's attributes)
+                    "StringEqualsIfExists": {"dynamodb:ReturnValues": ["NONE", "UPDATED_OLD", "UPDATED_NEW"]},
+                },
+            )
+        )
         if memory_id:
             memory_arn = f"arn:aws:bedrock-agentcore:{self.region}:{self.account}:memory/{memory_id}"
             # the agent's tool only reads Memory; the human path writes it (records + events for extraction)
@@ -223,8 +246,9 @@ class SurvFirmStack(Stack):
                 "Analyst HTTP API: queue, case view, record disposition, send feedback. Not reachable from the Gateway."
             ),
         )
-        for t in (alerts, cases, cases_history, traders):
+        for t in (alerts, cases, cases_history):
             t.grant_read_write_data(human_fn)
+        traders.grant_read_data(human_fn)  # the desk, for the Memory namespace; the human path never writes a trader
         if memory_id:
             human_fn.add_to_role_policy(
                 iam.PolicyStatement(

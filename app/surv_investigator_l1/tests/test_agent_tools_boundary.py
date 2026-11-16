@@ -102,6 +102,31 @@ def test_memory_off_hides_only_recall_memory(captured):
         agent.cleanup()
 
 
+def test_build_agent_fills_the_provenance_from_the_request(captured, monkeypatch):
+    """What the case will say about a proposal's origin comes from the Runtime request (session, analyst, model,
+    mode, memory, the analyst's briefing), never from the model; `SURV_PROVENANCE=off` sends nothing."""
+    agent, guard, _mcp = investigator.build_agent(
+        alert_id="A-1",
+        access_token="t",
+        analyst="l1.analyst",
+        policy_session_id="sess-9",
+        instruction="  the desk says this was a client parent order  ",
+    )
+    try:
+        assert guard.provenance["session_id"] == "sess-9" and guard.provenance["analyst"] == "l1.analyst"
+        assert guard.provenance["analyst_instruction"] == "the desk says this was a client parent order"
+        assert guard.provenance["memory"] == "on" and guard.provenance["mode"] == "investigate"
+        assert guard.provenance["model_id"]
+    finally:
+        agent.cleanup()
+    monkeypatch.setenv("SURV_PROVENANCE", "off")
+    agent, guard, _mcp = investigator.build_agent(alert_id="A-1", access_token="t")
+    try:
+        assert guard.provenance == {}
+    finally:
+        agent.cleanup()
+
+
 def test_agent_source_imports_no_other_tool_library():
     """Static guard: the agent package must not import a tool library or an HTTP client for the model's use.
     `httpx`/`httpx2` appear only as the MCP transport (RetryOn429), which is what the Gateway client rides on."""

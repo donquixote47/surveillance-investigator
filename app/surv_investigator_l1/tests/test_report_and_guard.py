@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -164,10 +165,50 @@ class _Event:
         self.invocation_state = {}
 
 
+class _AfterEvent:
+    def __init__(self, name, inputs, result, cancel_message=None):
+        self.tool_use = {"toolUseId": "t2", "name": name, "input": inputs}
+        self.result = result
+        self.cancel_message = cancel_message
+        self.invocation_state = {}
+
+
+EVIDENCE_TOOLS = [
+    "get_alert",
+    "get_procedures",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_trader_alert_history",
+]
+
+
+def _ran(g, tool, inputs=None, body=None):
+    """One tool call as the guard sees it: the request, then the result the Gateway returned. A body with an
+    `error` key is what the tools Lambda answers when a tool fails (an ordinary result, not an exception)."""
+    inputs = {"alert_id": g.alert_id} if inputs is None else inputs
+    name = f"surv___{tool}"
+    before = _Event(name, inputs)
+    g.before_tool(before)
+    if before.cancel_tool:
+        g.after_tool(_AfterEvent(name, inputs, None, cancel_message=before.cancel_tool))
+        return before
+    body = {"alert_id": g.alert_id} if body is None else body
+    result = {"toolUseId": "t1", "status": "success", "content": [{"text": json.dumps(body)}]}
+    g.after_tool(_AfterEvent(name, inputs, result))
+    return before
+
+
+def _evidence(g, skip=()):
+    for t in EVIDENCE_TOOLS:
+        if t not in skip:
+            _ran(g, t)
+
+
 def test_guard_rejects_bad_report_fills_tool_calls_and_blocks_second_proposal():
     g = InvestigationGuard(alert_id="A-261006-0006")
-    for t in ("get_alert", "get_procedures", "compute_discriminators"):
-        g.before_tool(_Event(f"surv___{t}", {"alert_id": "A-261006-0006"}))
+    _evidence(g)
 
     bad = _Event(
         PROPOSE,
@@ -184,7 +225,7 @@ def test_guard_rejects_bad_report_fills_tool_calls_and_blocks_second_proposal():
     g.before_tool(good)
     assert good.cancel_tool is False
     sent = good.tool_use["input"]["report"]
-    assert sent["tool_calls"] == ["get_alert", "get_procedures", "compute_discriminators"]
+    assert sent["tool_calls"] == EVIDENCE_TOOLS
     assert "proposed_disposition" not in sent
     assert g.proposal["disposition"] == "ESCALATE"
 
@@ -244,18 +285,11 @@ def test_guard_blocks_stor_draft_in_l1_mode():
     assert ev2.cancel_tool is False
 
 
-class _AfterEvent:
-    def __init__(self, name, inputs, result, cancel_message=None):
-        self.tool_use = {"toolUseId": "t2", "name": name, "input": inputs}
-        self.result = result
-        self.cancel_message = cancel_message
-        self.invocation_state = {}
-
-
 def test_guard_releases_the_proposal_when_the_gateway_denies_it():
     """A policy denial reaches Strands as an error tool result; the guard must forget the proposal so the model can
     run the missing prerequisite and propose again, and it must keep the Gateway's reason for the record."""
     g = InvestigationGuard(alert_id="A-261006-0006")
+    _evidence(g)
     report = {k: v for k, v in GOOD.items() if k not in ("proposed_disposition", "confidence")}
     inputs = {"alert_id": "A-261006-0006", "disposition": "ESCALATE", "confidence": 0.8, "report": report}
     before = _Event(PROPOSE, inputs)
@@ -349,6 +383,7 @@ def test_guard_accepts_a_json_encoded_report_and_rejects_garbage():
             self.cancel_tool = None
 
     g = InvestigationGuard(alert_id="A-1")
+    _evidence(g)
     ev = Ev({"alert_id": "A-1", "disposition": "ESCALATE", "confidence": 0.7, "report": "not json {"})
     g.before_tool(ev)
     assert ev.cancel_tool and "JSON object" in ev.cancel_tool and g.proposal is None
@@ -358,3 +393,142 @@ def test_guard_accepts_a_json_encoded_report_and_rejects_garbage():
     ev = Ev({"alert_id": "A-1", "disposition": "ESCALATE", "confidence": 0.7, "report": "{}"})
     g.before_tool(ev)
     assert ev.cancel_tool and "report rejected" in ev.cancel_tool  # parsed as an object, then fails validation
+
+
+def _proposal(disposition="ESCALATE", **report_overrides):
+    report = {k: v for k, v in GOOD.items() if k not in ("proposed_disposition", "confidence")}
+    report.update(report_overrides)
+    return {"alert_id": GOOD["alert_id"], "disposition": disposition, "confidence": 0.8, "report": report}
+
+
+def test_guard_holds_a_proposal_until_the_evidence_tools_returned_a_result():
+    """Review 2026-11-16. The Gateway's rules 03a/03b count a call that COMPLETED, and the tools Lambda answers a
+    failure as an ordinary result `{"error": ...}`: a failed evidence call would satisfy "evidence before
+    proposal". The guard asks for more: each evidence tool returned a result, for this alert, in this run."""
+    g = InvestigationGuard(alert_id=GOOD["alert_id"])
+    _evidence(g, skip=("compute_discriminators", "get_trader_alert_history"))
+    _ran(g, "compute_discriminators", body={"error": "compute_discriminators failed: no instrument statistics"})
+    assert g.calls[-1]["status"] == "error" and "compute_discriminators" not in g.ok_tools
+    e = _Event(PROPOSE, _proposal())
+    g.before_tool(e)
+    assert "held back" in e.cancel_tool and "compute_discriminators" in e.cancel_tool
+    assert g.proposal is None and len(g.rejections) == 1
+
+    # a result for ANOTHER alert is not evidence for this one
+    _ran(g, "compute_discriminators", inputs={"alert_id": "A-000000-0001"}, body={"alert_id": "A-000000-0001"})
+    e = _Event(PROPOSE, _proposal())
+    g.before_tool(e)
+    assert "held back" in e.cancel_tool
+
+    _ran(g, "compute_discriminators")  # answers this time
+    e = _Event(PROPOSE, _proposal())
+    g.before_tool(e)
+    assert e.cancel_tool is False and g.proposal["disposition"] == "ESCALATE"
+
+
+def test_guard_needs_the_history_for_a_closure_only():
+    g = InvestigationGuard(alert_id=GOOD["alert_id"])
+    _evidence(g, skip=("get_trader_alert_history",))
+    supported = [{"explanation": "market making", "ruled_out_by": [], "verdict": "supported"}]
+    close = _Event(PROPOSE, _proposal("CLOSE_FP", legitimate_explanations_considered=supported))
+    g.before_tool(close)
+    assert "held back" in close.cancel_tool and "get_trader_alert_history" in close.cancel_tool
+    escalate = _Event(PROPOSE, _proposal("ESCALATE"))
+    g.before_tool(escalate)
+    assert escalate.cancel_tool is False  # rule 04 asks for the history only before a closure
+
+
+def test_guard_rejects_evidence_attributed_to_a_tool_that_did_not_answer():
+    g = InvestigationGuard(alert_id=GOOD["alert_id"])
+    _evidence(g)
+    evidence = [*GOOD["evidence"], {"id": "E5", "source": "reconstruct_book", "fact": "bid 9,998 held 38,461 shares"}]
+    e = _Event(PROPOSE, _proposal(evidence=evidence))
+    g.before_tool(e)
+    assert "did not return a result" in e.cancel_tool and "reconstruct_book" in e.cancel_tool
+    # `memory` is the report's name for recall_memory
+    evidence = [*GOOD["evidence"], {"id": "E5", "source": "memory", "fact": "desk note: two prior closures"}]
+    e = _Event(PROPOSE, _proposal(evidence=evidence))
+    g.before_tool(e)
+    assert "recall_memory" in e.cancel_tool
+    _ran(g, "recall_memory")
+    e = _Event(PROPOSE, _proposal(evidence=evidence))
+    g.before_tool(e)
+    assert e.cancel_tool is False
+
+
+def test_guard_stamps_the_proposal_with_its_provenance_and_ignores_the_models_own():
+    g = InvestigationGuard(alert_id=GOOD["alert_id"])
+    g.provenance = {"session_id": "sess-1", "analyst": "l1.analyst", "model_id": "m", "mode": "investigate"}
+    _evidence(g)
+    e = _Event(PROPOSE, {**_proposal(), "provenance": {"analyst": "someone.else", "session_id": "forged"}})
+    g.before_tool(e)
+    assert e.cancel_tool is False
+    assert e.tool_use["input"]["provenance"] == g.provenance
+
+    bare = InvestigationGuard(alert_id=GOOD["alert_id"])  # SURV_PROVENANCE=off: nothing is sent, not even the model's
+    _evidence(bare)
+    e = _Event(PROPOSE, {**_proposal(), "provenance": {"analyst": "someone.else"}})
+    bare.before_tool(e)
+    assert "provenance" not in e.tool_use["input"]
+
+
+def test_guard_stops_an_investigation_of_a_decided_alert():
+    """A decided alert takes no new proposal (the tools Lambda refuses the write). The guard reads the alert's
+    status from get_alert and cancels everything after it, so the refusal costs one tool call, not an
+    investigation. Level 2 drafting the STOR after recording DRAFT_STOR is not an investigation and goes on."""
+    g = InvestigationGuard(alert_id="A-1")
+    _ran(g, "get_alert", body={"alert_id": "A-1", "status": "CLOSED"})
+    assert g.decided == "CLOSED"
+    nxt = _ran(g, "get_order_events")
+    assert "already decided" in nxt.cancel_tool and g.calls[-1]["status"] == "error"
+    assert "get_order_events" not in g.ok_tools
+
+    open_alert = InvestigationGuard(alert_id="A-1")
+    _ran(open_alert, "get_alert", body={"alert_id": "A-1", "status": "OPEN"})
+    assert open_alert.decided is None and _ran(open_alert, "get_order_events").cancel_tool is False
+
+    draft = InvestigationGuard(alert_id="A-1", mode="draft_stor")
+    _ran(draft, "get_alert", body={"alert_id": "A-1", "status": "ESCALATED"})
+    assert draft.decided is None
+    assert _ran(draft, "draft_stor_narrative", body={"alert_id": "A-1", "stor_fields": {}}).cancel_tool is False
+
+
+def test_payload_flag_reads_strings():
+    import main
+
+    assert main._flag(None) is True and main._flag(True) is True and main._flag(False) is False
+    assert main._flag("false") is False and main._flag("off") is False and main._flag("0") is False
+    assert main._flag("true") is True and main._flag("on") is True
+
+
+def test_prompt_and_standard_say_which_record_governs_a_large_order():
+    """The model never sees the tool's output-schema descriptions (Strands sends name, description and input schema
+    to Bedrock), so what `large_orders` means has to be said where it does read: the prompt's line on reading the
+    discriminators, the tool description, and the firm's closure standard."""
+    from prompt import system_prompt
+
+    from tools.procedures import PROCEDURES
+    from tools.schema import TOOLS
+
+    assert "when `large_orders` is not empty, each entry is one large order measured on its own" in system_prompt()
+    closure = PROCEDURES["closure_standard"]
+    assert "both features are decided on that order's own record" in closure
+    assert "executed_qty_before_opposite_trade" in closure and "do not make it a quote" in closure
+    assert "round_trip_ticks" in closure and "is not a figure for that order" in closure
+    escalation = PROCEDURES["escalation_standard"]  # the caught-in-the-book test, read on the order's own record
+    assert "this test is read on that order's own record" in escalation
+    assert "executed_qty_after_opposite_trade > 0" in escalation
+    assert (
+        "first cancel or size reduction" in system_prompt()
+        and "`round_trip_ticks` stays a window total" in system_prompt()
+    )
+    description = next(t for t in TOOLS if t["name"] == "compute_discriminators")["description"]
+    assert "`large_orders` gives that order's own facts" in description and "says nothing about layering" in description
+
+
+def test_prompt_passes_the_alert_id_to_the_market_and_history_tools():
+    from prompt import system_prompt
+
+    p = system_prompt()
+    assert "get_market_events` (pass the alert_id" in p
+    assert "get_trader_alert_history` (pass the trader_id and the alert_id" in p

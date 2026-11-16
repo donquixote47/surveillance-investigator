@@ -283,6 +283,8 @@ def main() -> int:
             if args.only_missing and (out_dir / p.name).exists():
                 continue
             d = json.loads(p.read_text())
+            if (d.get("meta") or {}).get("skipped"):
+                continue  # decided before the run: not investigated, so there is no session and no report to check
             sid = (d.get("response") or {}).get("session_id") or (d.get("meta") or {}).get("session_id")
             report = (
                 ((d.get("case_after") or {}).get("report")) if rows_by_alert.get(p.stem, {}).get("proposed") else None
@@ -316,7 +318,8 @@ def main() -> int:
     summary = summarize(saved, rows_by_alert)
     run["faithfulness"] = summary
     prev = previous_run(run_dir, None)
-    run["regression"] = regression(run["metrics"], prev, current_faith=summary)
+    # keep the dataset: without it a cross-dataset comparison (seed8 against the seed7 line) was given a verdict
+    run["regression"] = regression(run["metrics"], prev, current_faith=summary, current_dataset=run.get("dataset"))
     (run_dir / "results.json").write_text(json.dumps(run, indent=1, default=str))
     md = render_markdown(
         run,

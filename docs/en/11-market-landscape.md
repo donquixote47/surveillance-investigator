@@ -37,7 +37,7 @@ The consequence for a sale: the objection is not "I have something better" but *
 
 1. A **gate**: real abuse proposed as closed, 0 of 28 on the evaluated set and 0 of 24 on a set nothing was tuned against, in every run. Vendors publish time saved (33%, 90%, 20x), not error rates.
 2. **Investigation rules enforced by the platform, outside the model**: evidence before proposal, history before close, one proposal per alert, STOR drafting for Level 2 only, with the rule's name in the refusal and in the log.
-3. **The firm's written standard as the decision logic**, read at run time, with behaviour improved through that text and the tools (79.9% to 95.0%) while the prompt stayed unchanged.
+3. **The firm's written standard as the decision logic**, read at run time, with behaviour improved through that text and the tools (79.9% to 95.0% over four runs while the prompt stayed unchanged; 94.2% on the 2026-11-16 release, which added one clause to the prompt and moved one alert, inside run-to-run noise).
 4. **Proposal and recording on different APIs**, the agent unable to reach the second; a unit test pins it.
 5. A **cost per investigation** ($0.09), a **measured noise band** (about 0.9 points), a **second dataset**, and the whole evaluation reproducible from the repository.
 

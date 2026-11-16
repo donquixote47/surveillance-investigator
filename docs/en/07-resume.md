@@ -16,7 +16,7 @@ Clone `https://github.com/donquixote47/surveillance-investigator` (private; `gh 
 8. Before changing anything: `docs/en/10-operations.md` (release cycle, promotion rule in practice, what to watch, the ranked backlog with measured gains).
 9. Before talking to a prospect: `docs/en/11-market-landscape.md` (the vendors' AI and what it does, why there is no standalone competitor yet, the first-conversation checklist, what we borrow from them).
 
-The SessionStart hook (`.kiro/hooks/session-brief.json`) prints STATUS, the last decisions and recently changed files automatically.
+The SessionStart hook (`.kiro/hooks/session-brief.json`) prints STATUS, the last decisions and recently changed files automatically. Under Claude Code the same five steering files load from `.claude/rules/` (identical copies) with `.claude/CLAUDE.md` in front of them; the hooks do not run there, so print the brief with `bash .kiro/hooks/scripts/session-brief.sh` and run the docs-sync check by hand before ending a turn.
 
 ## 2. Machine prerequisites
 
@@ -35,7 +35,7 @@ Then:
 
 ```
 uv sync --all-groups          # runtime, infra (aws-cdk-lib) and dev (pytest, ruff, moto) groups
-uv run pytest                 # 38 tests, no AWS needed
+uv run pytest                 # 107 tests, no AWS needed
 uv run ruff check .
 export JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1
 ```
@@ -74,11 +74,13 @@ uv run scripts/policy_demo.py                              # demo steps 5-6: the
 uv run scripts/validate_policies.py                        # the engine's findings for every file in policies/
 uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # Memory records; also ingest-procedures, seed-history, delete
 uv run scripts/reset_cases.py --from 2026-11-01 [--apply]   # clear the agent's proposals (not the analyst's records) so alerts arrive fresh; dry run by default
+uv run scripts/reset_cases.py --alerts A-261009-0003 --include-recorded [--apply]   # reopen a decided alert: also clears the decision, its lock and history (the agent and the harness skip decided alerts)
+uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # rebuild seed7 exactly; a new dataset takes the latest scenario catalogue by default
 uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
 #   SURV_RUNTIME_ENDPOINT=demo ... for the pinned endpoint. A login survives a page refresh for the life of the Streamlit
 #   process: the browser URL carries an opaque session id (?s=), the day (?d=) and the open alert (?a=); the Cognito
 #   tokens stay in the process. Log out or restart the process to drop them.
-python3 .kiro/hooks/scripts/docs-sync-check.py             # docs parity (empty output = clean)
+python3 .kiro/hooks/scripts/docs-sync-check.py             # docs parity en/el, sources vs docs, .kiro/steering vs .claude/rules (empty output = clean)
 ```
 Phase 5 (evaluation), in the order a run goes through; all run outputs under `evals/runs/<run_id>/` are committed:
 ```
@@ -110,6 +112,7 @@ Useful alert ids: `A-261006-0006` (S-SPOOF-1, true spoof), `A-261005-0002` (back
 ```
 .kiro/steering/          Kiro's standing knowledge of the project (read first)
 .kiro/hooks/             SessionStart brief, docs-sync nudge + Stop parity check, deploy guard
+.claude/                 CLAUDE.md and rules/: the same standing instructions for Claude Code (identical copies of .kiro/steering/)
 docs/en/, docs/el/       The documentation, English canonical, Greek twin, same structure
 src/market_sim/          Limit-order-book simulator and scenario injection
 src/detector/            The noisy spoofing/layering detector and labelling

@@ -2,7 +2,7 @@
 
 The Gateway's tool schema (`src/tools/schema.py`) declares the same object loosely (three required keys) so the
 model can see the shape; this model is the strict version the agent enforces on itself before the call leaves.
-A test in `tests/test_report.py` checks that every property here is also declared on the Gateway side.
+A test in `tests/test_report_and_guard.py` checks that every property here is also declared on the Gateway side.
 """
 
 from __future__ import annotations

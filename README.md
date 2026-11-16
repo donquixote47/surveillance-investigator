@@ -10,9 +10,9 @@ Repository: `https://github.com/donquixote47/surveillance-investigator` (private
 
 | Item | Value |
 |---|---|
-| Phase | 3 - Agent on Runtime, in progress: agent deployed and invoked end to end; analyst UI and demo alerts next (Phases 0-2 complete; see `docs/en/05-build-plan.md` and `docs/en/STATUS.md`) |
+| Phase | 5 complete (2026-11-07) with iterations 3 and 4, the variance run and the seed8 generalisation run (2026-11-10/11); the review hardening released 2026-11-16 as `v0.3.0-alpha` (record integrity, IAM limit on the agent's write, proposal provenance, per-order facts for large orders): Runtime v17 on `demo`, run `20261116T1828-sonnet-v5` passes the promotion rule (gate 0 of 28, safe close 94.2%). Next: Phase 6 (slides, rehearsal). In the repository only: S-SPOOF-6 (no catalogue-2 dataset built). See `docs/en/STATUS.md` and `docs/en/05-build-plan.md` |
 | Region | eu-west-2 |
-| Stack | Python 3.14 (uv), Strands Agents 1.63, Claude Sonnet 5.5 (eu. inference profile), AgentCore CLI 1.0.1 (`agentcore.json` for AgentCore resources), AWS CDK (Python) for the mock back end |
+| Stack | Python 3.14 (uv), Strands Agents 1.63, Claude Sonnet 5.5 (eu. inference profile), AgentCore CLI 1.0.2 (`agentcore.json` for AgentCore resources), AWS CDK (Python) for the mock back end |
 | Cost rule | Zero third-party cost. AWS cost is not a constraint but is announced before every deploy and tracked in STATUS; every resource carries `Project` and `auto-delete=no` tags (`scripts/check_tags.py`) |
 | Deployed resources | eu-west-2: stack `SurvFirm` (DynamoDB, Lambdas, Cognito, HTTP API), stack `AgentCore-surv-default` (Gateway + rate limits, Runtime); full table in `docs/en/STATUS.md`. Dataset `data/synthetic/seed7` (committed): 167 alerts, 17% true abuse, loaded in DynamoDB |
 
@@ -38,7 +38,7 @@ Every tool call goes through AgentCore Gateway, where Policy decides determinist
 | Identity | Cognito JWT inbound auth; L1 and L2 analyst groups; separate human path for recording dispositions |
 | Policy (Dogwood/Cedar, temporal) | Evidence before proposal, one proposal per alert, no disposition recording, STOR drafting only for L2 |
 | Memory | Analyst dispositions and feedback per trader and instrument; ingested procedures |
-| Code Interpreter | Ad-hoc analysis and charts for the report |
+| Code Interpreter | Designed for charts in the report; **not built** (the deterministic metrics stayed in Lambda; `docs/en/09-product-decisions.md` section 4) |
 | Observability | Traces plus policy decision logs: the regulator's "why" |
 | Evaluations | Ground-truth and custom evaluators over a labelled synthetic dataset; our harness computes the gate (0 missed true cases), the safe close rate and the override rate |
 | Optimization | Prompt recommendations from traces, configuration bundles, A/B through the Gateway; promoted only through the deterministic gate (the governed learning loop) |
@@ -49,6 +49,7 @@ Every tool call goes through AgentCore Gateway, where Policy decides determinist
 ```
 .kiro/steering/     Always-on project knowledge for Kiro (read these first)
 .kiro/hooks/        Session brief, docs-sync, deploy cost guard
+.claude/            The same standing instructions for Claude Code: CLAUDE.md and rules/ (identical copies of .kiro/steering/)
 docs/en/            Scope, domain primer, problem statement, design, data and evaluation, build plan, resources, glossary, decisions, STATUS
 docs/el/            Greek twins of the above
 src/market_sim/     Limit-order-book simulator with scenario injection
@@ -69,8 +70,8 @@ ui/                 Analyst UI (Streamlit, loopback) and its clients: Cognito lo
 
 ```
 uv sync --all-groups
-uv run pytest                                                  # 38 tests: book, detector, discriminators, tools on moto DynamoDB, report guard
-uv run scripts/build_dataset.py --seed 7 --sessions 20         # ~15 s; regenerates data/synthetic/seed7 + report.md
+uv run pytest                                                  # 107 tests: book, detector, scenarios, discriminators, tools on moto DynamoDB, report guard, metrics
+uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # ~30 s; regenerates data/synthetic/seed7 exactly (catalogue 1 = the scenarios it was built from)
 uv run scripts/replay_alert.py data/synthetic/seed7 --random 3 --reveal
 ```
 
@@ -87,6 +88,10 @@ Analyst passwords are not in the repo (`~/.config/surv-investigator/analyst-cred
 
 Open this folder as the workspace root so the steering files and hooks load. The SessionStart hook prints `docs/en/STATUS.md` and recent changes. A PostToolUse hook fires after every file write and tells Kiro which documents to update, in both `docs/en` and `docs/el`, for the code or doc that changed (tool contracts, policy set, scenario catalogue, STATUS, decision log, or the language twin). A Stop hook checks at the end of each turn that sources are not newer than the docs and that every English document has a Greek twin with matching structure, and asks for a fix if not. The PreToolUse hook asks for confirmation before commands that create billable AWS resources. Kiro is instructed (`.kiro/steering/challenge-and-verify.md`) not to agree by default and to verify claims from primary sources.
 
+## Working on this project with Claude Code
+
+The same standing instructions load from `.claude/rules/` (five files, byte-identical to `.kiro/steering/`), and `.claude/CLAUDE.md` says how to read them there: the Kiro hooks do not run under Claude Code, so the session brief, the docs update, the docs-sync check and the confirmation before a billable AWS command are done by hand. `python3 .kiro/hooks/scripts/docs-sync-check.py` checks three things: sources not newer than the docs, English and Greek twins with the same structure, and the two copies of the instructions identical. Change a rule on one side and copy it to the other.
+
 ## Documents
 
 - `docs/en/00-scope.md` what is in, what is out, why surveillance and not sanctions
@@ -101,4 +106,5 @@ Open this folder as the workspace root so the steering files and hooks load. The
 - `docs/en/09-product-decisions.md` every product decision with its reason, where AgentCore does the work, cost to run, proof points, limitations, roadmap
 - `docs/en/10-operations.md` how the product is run after the alpha: release cycle, what to watch, measured time and token breakdown, ranked backlog
 - `docs/en/11-market-landscape.md` who else puts AI on surveillance alerts (Robinhood, Nasdaq, NICE, Eventus, eflow, SteelEye, Solidus, FIS, AWS samples), whether there is a direct competitor, who the customer is, the prospect checklist, what to borrow
+- `docs/en/12-presenter-guide.md` for the speaker: the story in plain words, the seven domain ideas needed to tell it, what to say at each demo step, the numbers to know, hard questions with honest answers, what not to claim
 - `docs/en/glossary.md`, `docs/en/decision-log.md`, `docs/en/STATUS.md`

@@ -319,6 +319,40 @@ def report_view(report: dict, confidence: float | None, disposition: str | None)
         st.caption("Tools (from the agent's trace): " + " → ".join(report["tool_calls"]))
 
 
+def provenance_view(cfg: Config, case: dict):
+    """Where the proposal on file came from (written by the agent's guard next to the proposal): who ran the
+    investigation, in which session, with which model and briefing. The session id is the key to the trace, so the
+    link works for anyone who opens the case later, not only in the browser session that ran it."""
+    prov = case.get("proposal_provenance") or {}
+    if isinstance(prov, str):
+        try:
+            prov = json.loads(prov)
+        except json.JSONDecodeError:
+            prov = {}
+    if prov:
+        bits = [f"investigated by {prov['analyst']}" if prov.get("analyst") else "", prov.get("model_id", "")]
+        if prov.get("bundle") and prov["bundle"] != "none":
+            bits.append(f"bundle {prov['bundle']}")
+        if prov.get("memory") == "off":
+            bits.append("memory off")
+        st.caption("Proposal: " + " · ".join(b for b in bits if b))
+        if prov.get("analyst_instruction"):
+            st.caption(f"Analyst's briefing for this run: “{prov['analyst_instruction']}”")
+        if prov.get("session_id"):
+            url = logs_console_url(cfg, prov["session_id"])
+            st.caption(f"session `{prov['session_id']}`" + (f" · [trace of this investigation]({url})" if url else ""))
+    earlier = case.get("proposal_history") or []
+    if earlier:
+        st.caption(
+            "Earlier proposals on this alert, replaced before any decision: "
+            + "; ".join(
+                f"{h.get('disposition')} at {str(h.get('proposed_at', ''))[:16].replace('T', ' ')}"
+                + (f" (session `{h['session_id']}`)" if h.get("session_id") else "")
+                for h in earlier
+            )
+        )
+
+
 def case_panel(cfg: Config, sess: Session, api: HumanPath):
     alert_id = ss().get("alert_id")
     if not alert_id:
@@ -336,34 +370,45 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
     st.markdown(f"*Detector:* {alert['trigger_summary']}")
 
     # ---- run the agent
-    with st.expander("Run the agent", expanded=not case.get("proposed_disposition")):
-        instruction = st.text_input(
-            "Ask the agent to check something specific (optional)",
-            placeholder="e.g. the desk says this was a client parent order; look for it",
-            help="A briefing, the way you would brief a junior. The agent still runs the full procedure and the "
-            "Gateway's rules apply whatever is written here. The text is in the session trace; it is not yet "
-            "stored on the case record.",
-            key=f"instr-{alert_id}",
-        )
-        already = case.get("proposed_disposition")
-        if already:
-            st.caption(
-                f"A proposal is on file ({already}, {str(case.get('proposed_at', ''))[:16].replace('T', ' ')}). "
-                "Running again starts a new session, repeats the full procedure and replaces it; the earlier one stays "
-                "in its session's trace."
+    decided = case.get("recorded_disposition")
+    with st.expander("Run the agent", expanded=not case.get("proposed_disposition") and not decided):
+        if decided:
+            # the tools Lambda refuses a proposal on a decided case and the agent stops at get_alert; the button
+            # would only spend a session to say so
+            st.info(
+                f"This alert is decided: **{decided}** recorded by {case.get('recorded_by')} at "
+                f"{str(case.get('recorded_at', ''))[:16].replace('T', ' ')}. The agent does not investigate a "
+                "decided alert, and the report on file is the one the decision was taken on. Reopening is a "
+                "Level-2 step."
             )
-        if st.button("Investigate again" if already else "Investigate", type="primary", key=f"run-{alert_id}"):
-            session_id = new_session_id(alert_id)
-            with st.spinner("the agent is working (30-60 s)…"):
-                result, session_id, wall = invoke_runtime(
-                    cfg, sess, alert_id, mode="investigate", instruction=instruction or None, session_id=session_id
+        else:
+            instruction = st.text_input(
+                "Ask the agent to check something specific (optional)",
+                placeholder="e.g. the desk says this was a client parent order; look for it",
+                help="A briefing, the way you would brief a junior. The agent still runs the full procedure and the "
+                "Gateway's rules apply whatever is written here. The text is stored on the case next to the "
+                "proposal it steered, and in the session trace.",
+                key=f"instr-{alert_id}",
+            )
+            already = case.get("proposed_disposition")
+            if already:
+                st.caption(
+                    f"A proposal is on file ({already}, {str(case.get('proposed_at', ''))[:16].replace('T', ' ')}). "
+                    "Running again starts a new session, repeats the full procedure and replaces it; the earlier "
+                    "proposal's line stays on the case and its report in its session's trace."
                 )
-            ss()["run"] = result
-            ss()["run_session_id"] = session_id
-            ss()["run_wall"] = wall
-            ss().pop("draft", None)
-            remember_in_url(r=session_id)
-            st.rerun()
+            if st.button("Investigate again" if already else "Investigate", type="primary", key=f"run-{alert_id}"):
+                session_id = new_session_id(alert_id)
+                with st.spinner("the agent is working (30-60 s)…"):
+                    result, session_id, wall = invoke_runtime(
+                        cfg, sess, alert_id, mode="investigate", instruction=instruction or None, session_id=session_id
+                    )
+                ss()["run"] = result
+                ss()["run_session_id"] = session_id
+                ss()["run_wall"] = wall
+                ss().pop("draft", None)
+                remember_in_url(r=session_id)
+                st.rerun()
 
     run = ss().get("run")
     if run and run.get("alert_id") == alert_id:
@@ -418,6 +463,7 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
         except json.JSONDecodeError:
             report = {}
     report_view(report, case.get("confidence"), case.get("proposed_disposition"))
+    provenance_view(cfg, case)
     if case.get("recorded_disposition"):
         st.success(
             f"Recorded **{case['recorded_disposition']}** by {case['recorded_by']} at {case['recorded_at']}"
@@ -427,6 +473,12 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
         st.caption(
             "This decision is now in AgentCore Memory under the trader and the desk; "
             "the agent will recall it next time."
+        )
+    for h in reversed(case.get("decision_history") or []):
+        st.warning(
+            f"Superseded: **{h.get('recorded_disposition')}** by {h.get('recorded_by')} at {h.get('recorded_at')} "
+            f"({h.get('analyst_note', '')}). Replaced by {h.get('superseded_by')} at {h.get('superseded_at')}: "
+            f"{h.get('superseded_note', '')}"
         )
     if case.get("stor_draft"):
         st.markdown("**STOR narrative draft on file**")
@@ -449,20 +501,44 @@ def case_panel(cfg: Config, sess: Session, api: HumanPath):
     # ---- record
     st.markdown("### Your decision")
     allowed = DISPOSITIONS_L2 if sess.level == "L2" else DISPOSITIONS_L1
-    with st.form(f"record-{alert_id}"):
-        proposed = case.get("proposed_disposition")
-        default = allowed.index(proposed) if proposed in allowed else 0
-        disp = st.radio("Disposition", allowed, index=default, horizontal=True)
-        note = st.text_area(
-            "Note for the record (required)", placeholder="your reasoning, with reference to the tape", height=80
+    if not decided:
+        with st.form(f"record-{alert_id}"):
+            proposed = case.get("proposed_disposition")
+            default = allowed.index(proposed) if proposed in allowed else 0
+            disp = st.radio("Disposition", allowed, index=default, horizontal=True)
+            note = st.text_area(
+                "Note for the record (required)", placeholder="your reasoning, with reference to the tape", height=80
+            )
+            if st.form_submit_button("Record disposition"):
+                r = api.record(alert_id, disp, note)
+                if r.get("error"):
+                    st.error(r["error"])
+                else:
+                    st.success(f"recorded {r['recorded_disposition']}" + (" (override)" if r.get("override") else ""))
+                    st.rerun()
+    elif sess.level == "L2":
+        # A decision is recorded once. Level 2 may replace it, explicitly and with a reason; the earlier decision
+        # stays on the case (shown above as "Superseded").
+        st.caption(
+            "A decision is recorded and cannot be overwritten. As Level 2 you can supersede it: the earlier decision "
+            "stays on the case with your reason."
         )
-        if st.form_submit_button("Record disposition"):
-            r = api.record(alert_id, disp, note)
-            if r.get("error"):
-                st.error(r["error"])
-            else:
-                st.success(f"recorded {r['recorded_disposition']}" + (" (override)" if r.get("override") else ""))
-                st.rerun()
+        with st.form(f"supersede-{alert_id}"):
+            disp = st.radio("New disposition", allowed, horizontal=True)
+            note = st.text_area("Why the recorded decision is replaced (required)", height=80)
+            confirm = st.checkbox(f"I am superseding the recorded {decided}")
+            if st.form_submit_button("Supersede the decision"):
+                if not confirm:
+                    st.error("tick the box to confirm that you are replacing a recorded decision")
+                else:
+                    r = api.record(alert_id, disp, note, supersede=True)
+                    if r.get("error"):
+                        st.error(r["error"])
+                    else:
+                        st.success(f"recorded {r['recorded_disposition']}, superseding {r.get('superseded')}")
+                        st.rerun()
+    else:
+        st.caption("A decision is recorded and cannot be overwritten. Only Level 2 can supersede it, with a reason.")
     with st.form(f"feedback-{alert_id}"):
         fb = st.text_input(
             "Feedback for the agent (saved on the case and written to AgentCore Memory for the trader and the desk)"

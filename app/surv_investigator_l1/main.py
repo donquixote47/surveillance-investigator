@@ -37,6 +37,15 @@ def _bearer(context: RequestContext | None) -> str | None:
     return None
 
 
+def _flag(value: object, default: bool = True) -> bool:
+    """A JSON boolean, or the strings a hand-written payload carries: bool("false") is True."""
+    if value is None:
+        return default
+    if isinstance(value, str):
+        return value.strip().lower() not in ("false", "0", "off", "no", "")
+    return bool(value)
+
+
 def _claims(token: str) -> dict:
     """Unverified read of the JWT body for trace attributes only. The Runtime and the Gateway verify the signature."""
     try:
@@ -62,6 +71,8 @@ def invoke(payload: dict, context: RequestContext):
         return {"error": "no analyst token: send Authorization: Bearer <Cognito access token>"}
     claims = _claims(token)
     groups = claims.get("cognito:groups") or []
+    if isinstance(groups, str):  # a token body carries the array; tolerate a provider that sends one name
+        groups = [g for g in groups.replace(",", " ").strip("[]").split() if g]
     if mode in L2_MODES and "L2" not in groups:
         return {"error": f"{mode} mode needs a Level-2 analyst (cognito:groups must include L2)"}
     if mode == "draft_stor" and not getattr(context, "session_id", None):
@@ -83,7 +94,7 @@ def invoke(payload: dict, context: RequestContext):
         analyst=analyst,
         session_id=getattr(context, "session_id", None),
         extra_instruction=(payload.get("instruction") or None),
-        memory=bool(payload.get("memory", True)),
+        memory=_flag(payload.get("memory"), True),
     )
     out = result.to_dict()
     out["analyst"] = analyst

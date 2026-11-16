@@ -8,7 +8,7 @@ import numpy as np
 
 from .agents import build_background
 from .config import SimConfig
-from .scenarios import SCENARIOS, ScenarioSpec, false_specs, inject, true_specs
+from .scenarios import CATALOGUE_LATEST, SCENARIOS, ScenarioSpec, false_specs, inject, true_specs
 from .session import Session, SessionTables
 from .types import NS_PER_S
 
@@ -20,6 +20,9 @@ class MixConfig:
     first_injection_after_s: int = 20 * 60  # let the book warm up
     last_injection_before_s: int = 20 * 60
     min_gap_s: int = 240  # between injection starts
+    # which version of the scenario catalogue the mix is sampled from; a dataset is reproducible only with the
+    # catalogue it was built from (seed7 and seed8: 1), see scenarios.CATALOGUE_LATEST
+    catalogue: int = CATALOGUE_LATEST
 
 
 def _weighted_pick(rng: np.random.Generator, specs: list[ScenarioSpec]) -> ScenarioSpec:
@@ -40,8 +43,8 @@ def run_session(
     if scenario_ids is None:
         n_true = int(rng.poisson(mix.true_per_session))
         n_false = int(rng.poisson(mix.false_per_session))
-        chosen = [_weighted_pick(rng, true_specs()) for _ in range(n_true)] + [
-            _weighted_pick(rng, false_specs()) for _ in range(n_false)
+        chosen = [_weighted_pick(rng, true_specs(mix.catalogue)) for _ in range(n_true)] + [
+            _weighted_pick(rng, false_specs(mix.catalogue)) for _ in range(n_false)
         ]
     else:
         chosen = [SCENARIOS[s] for s in scenario_ids]

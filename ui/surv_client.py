@@ -144,8 +144,13 @@ class HumanPath:
     def case(self, alert_id: str) -> dict:
         return self._call("GET", f"/cases/{alert_id}")
 
-    def record(self, alert_id: str, disposition: str, note: str) -> dict:
-        return self._call("POST", f"/cases/{alert_id}/disposition", json={"disposition": disposition, "note": note})
+    def record(self, alert_id: str, disposition: str, note: str, supersede: bool = False) -> dict:
+        """Record the decision. A second record is refused (409); `supersede=True` replaces a recorded decision,
+        Level 2 only, and the earlier one stays on the case in `decision_history`."""
+        body: dict = {"disposition": disposition, "note": note}
+        if supersede:
+            body["supersede"] = True
+        return self._call("POST", f"/cases/{alert_id}/disposition", json=body)
 
     def feedback(self, alert_id: str, note: str) -> dict:
         return self._call("POST", f"/cases/{alert_id}/feedback", json={"note": note})

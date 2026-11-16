@@ -107,6 +107,99 @@ def test_zero_close_regression_has_a_materiality_floor():
     assert r["verdict"] == "FAIL"
 
 
+def test_promotion_rule_checks_faithfulness_once_it_has_run():
+    """The fourth check of the promotion rule (data doc 4.4) was written down and never coded: the verdict only
+    said "faithfulness pending". It is a floor (99% of numbers traced to a tool output) and a maximum fall of half
+    a point against the previous run; the history of the promoted runs (99.76, 99.91, 99.88, 99.90) passes."""
+    rows = [
+        _row("f1", "FALSE_POSITIVE", "F-MM-1", CLOSE, CLOSE),
+        _row("a1", "TRUE_ABUSE", "S-SPOOF-1", ESCALATE, ESCALATE),
+    ]
+    m = compute(rows)
+    prev = {"run_id": "prev", "metrics": m, "faithfulness": {"numbers_checked": 4221, "number_rate": 0.9991}}
+
+    pending = regression(m, prev)
+    assert pending["verdict"] == "PASS (offline promotion rule, faithfulness pending)" and len(pending["checks"]) == 3
+
+    ok = regression(m, prev, current_faith={"numbers_checked": 4132, "number_rate": 0.9988})  # v2 -> v3
+    assert ok["verdict"] == "PASS (offline promotion rule)" and len(ok["checks"]) == 4
+    assert "99.88% of 4132 numbers, previous 99.91%" in ok["checks"][-1][0]
+
+    below_floor = regression(m, prev, current_faith={"numbers_checked": 4000, "number_rate": 0.985})
+    assert below_floor["verdict"] == "FAIL" and below_floor["checks"][-1][1] is False
+
+    fell = regression(
+        m,
+        {**prev, "faithfulness": {"numbers_checked": 4000, "number_rate": 0.999}},
+        current_faith={"numbers_checked": 4000, "number_rate": 0.992},  # above the floor, down 0.7 points
+    )
+    assert fell["verdict"] == "FAIL"
+
+    invented_role = regression(
+        m,
+        prev,
+        current_faith={
+            "numbers_checked": 4096,
+            "number_rate": 0.999,
+            "categorical_checked": 615,
+            "categorical_rate": 0.97,
+        },
+    )
+    assert invented_role["verdict"] == "FAIL"
+
+    first_checked = regression(
+        m, {"run_id": "prev", "metrics": m}, current_faith={"numbers_checked": 10, "number_rate": 1.0}
+    )
+    assert first_checked["verdict"].startswith("PASS") and "previous run not checked" in first_checked["checks"][-1][0]
+
+
+def test_alerts_decided_before_the_run_are_listed_and_not_scored(tmp_path):
+    """A decided case takes no further proposal, so the harness does not investigate it; it is excluded from every
+    number (the agent's and the baselines') and named in the results."""
+    import json
+
+    from run_dataset import DECIDED, finish, row_from
+
+    labels = [
+        {"alert_id": "f1", "truth": "FALSE_POSITIVE", "injected_scenario": "F-MM-1", "expected_disposition": CLOSE},
+        {"alert_id": "f2", "truth": "FALSE_POSITIVE", "injected_scenario": "F-MM-1", "expected_disposition": CLOSE},
+        {"alert_id": "a1", "truth": "TRUE_ABUSE", "injected_scenario": "S-SPOOF-1", "expected_disposition": ESCALATE},
+    ]
+    started = "2026-11-16T10:00:00"
+
+    def investigated(lab, disposition):
+        case = {"proposed_disposition": disposition, "confidence": 0.8, "proposed_at": "2026-11-16T10:00:30"}
+        return row_from(lab, {"proposal": {"disposition": disposition}}, case, {"invoke_started_at": started})
+
+    decided_case = {
+        "proposed_disposition": ESCALATE,  # an old proposal on file must not be read as this run's
+        "proposed_at": "2026-11-16T11:00:00",
+        "recorded_disposition": CLOSE,
+    }
+    skipped = row_from(labels[1], {"skipped": DECIDED}, decided_case, {"skipped": DECIDED, "prior_recorded": True})
+    assert skipped["status"] == DECIDED and skipped["proposed"] is None
+
+    dataset = tmp_path / "ds"
+    (dataset / "labels").mkdir(parents=True)
+    pd.DataFrame(
+        [
+            {"alert_id": lab["alert_id"], "baseline_disposition": CLOSE if lab["truth"] != "TRUE_ABUSE" else ESCALATE}
+            for lab in labels
+        ]
+    ).to_parquet(dataset / "labels" / "baseline.parquet")
+    out = tmp_path / "run"
+    out.mkdir()
+    rows = [investigated(labels[0], CLOSE), skipped, investigated(labels[2], ESCALATE)]
+    run = finish(out, {"run_id": "t", "dataset": "ds"}, rows, labels, dataset, compare=None)
+    m = run["metrics"]
+    assert m["n"] == 2 and m["excluded_decided"] == ["f2"] and m["n_false_positive"] == 1
+    assert m["safe_close_rate"] == 1.0 and m["status_counts"] == {"ok": 2}
+    assert run["baselines"]["escalate everything"]["n"] == 2
+    assert "f2" in (out / "results.md").read_text() and "not investigated" in (out / "results.md").read_text()
+    assert len(pd.read_csv(out / "per_alert.csv")) == 3  # the row is kept, with its status
+    assert json.loads((out / "results.json").read_text())["metrics"]["excluded_decided"] == ["f2"]
+
+
 @pytest.mark.skipif(not (DATASET / "labels" / "baseline.parquet").exists(), reason="dataset not built")
 def test_threshold_baseline_matches_phase1_report():
     """Phase 1 recorded: raw safe close 96%, gate failed on 6 of 7 S-SPOOF-5 alerts (build plan, Phase 1)."""

@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Stop hook: keep code, architecture and the bilingual docs in sync.
 
-Two checks, run at the end of every agent turn:
+Three checks, run at the end of every agent turn:
 
 1. Source vs docs: if any file under the source paths is newer than every doc and newer than the
    marker .kiro/.docs-sync-last, ask the agent to review and update the docs (both languages).
 2. EN/EL parity: for every docs/en/X.md there must be a docs/el/X.md (and vice versa) with the
    same number of headings, table rows, checkboxes and fenced code blocks, and the Greek file
    must not be older than the English one.
+3. Rule parity: the standing instructions exist twice, .kiro/steering/X.md for Kiro and
+   .claude/rules/X.md for Claude Code (copied 2026-11-16). Each file must exist on both sides with
+   identical content, or the two tools work to different rules.
 
 Output {"decision":"block","reason":...} to make the agent do another turn. Blocks at most once
 per identical set of findings (guard file), so a forgotten fix cannot loop forever; it will nag
@@ -152,6 +155,32 @@ def parity_findings() -> list[str]:
     return findings
 
 
+def steering_findings() -> list[str]:
+    kiro_dir = os.path.join(ROOT, ".kiro", "steering")
+    claude_dir = os.path.join(ROOT, ".claude", "rules")
+    if not os.path.isdir(kiro_dir) or not os.path.isdir(claude_dir):
+        return []  # a checkout that carries only one tool's rules has nothing to compare
+    kiro = {f for f in os.listdir(kiro_dir) if f.endswith(".md")}
+    claude = {f for f in os.listdir(claude_dir) if f.endswith(".md")}
+    findings = []
+    for name in sorted(kiro - claude):
+        findings.append(f".claude/rules/{name} is missing: copy .kiro/steering/{name} there.")
+    for name in sorted(claude - kiro):
+        findings.append(f".kiro/steering/{name} is missing: copy .claude/rules/{name} there.")
+    for name in sorted(kiro & claude):
+        try:
+            with open(os.path.join(kiro_dir, name), "rb") as a, open(os.path.join(claude_dir, name), "rb") as b:
+                same = a.read() == b.read()
+        except OSError:
+            same = False
+        if not same:
+            findings.append(
+                f".kiro/steering/{name} and .claude/rules/{name} differ: make them identical "
+                "(the newer edit is the one to keep; copy it over the other)."
+            )
+    return findings
+
+
 def main() -> int:
     # Clear the PostToolUse nudge de-dupe state at the end of every turn.
     try:
@@ -159,7 +188,7 @@ def main() -> int:
     except OSError:
         pass
 
-    findings = source_findings() + parity_findings()
+    findings = source_findings() + parity_findings() + steering_findings()
     if not findings:
         try:
             os.remove(GUARD)

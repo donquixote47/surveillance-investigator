@@ -6,7 +6,10 @@ Policy Engine and the rate limits) see the analyst, not the agent, as the princi
 `InvestigationGuard` is the agent's own belt before the Gateway's braces: it validates the report against the
 strict `InvestigationReport` model before `propose_disposition` leaves, fills `tool_calls` from the calls it
 observed (the model does not get to self-report its trajectory), refuses a second proposal in the same run, and
-keeps the proposal and its result for the caller.
+keeps the proposal and its result for the caller. Since 2026-11-16 it also holds a proposal back until the
+evidence tools have RETURNED A RESULT for this alert (the Gateway's rules 03a/03b/04 count a call that completed,
+and a tool that answers `{"error": ...}` completes), refuses evidence attributed to a tool that did not answer,
+stops an investigation of an alert a human has already decided, and stamps the proposal with where it came from.
 """
 
 from __future__ import annotations
@@ -49,6 +52,18 @@ DRAFT_STOR = f"{TOOL_PREFIX}draft_stor_narrative"
 # `draft_stor`: a second run in the same session, after the proposal, that only drafts (the UI's L2 button; the
 # Gateway's policy 05 needs the DRAFT_STOR proposal in the same policy session, so the session id is reused).
 DRAFTING_MODES = ("stor_drafting", "draft_stor")
+# The evidence a proposal rests on: the same tools the Gateway's rules 03a and 03b ask for, and 04 for a closure.
+# The rules check that the call COMPLETED; the guard checks that it returned a result and not an error.
+REQUIRED_EVIDENCE = (
+    "get_alert",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+)
+CLOSE_EVIDENCE = ("get_trader_alert_history",)
+# `get_alert.status` once a human has recorded a decision (human path); OPEN and IN_REVIEW are undecided
+DECIDED_STATUSES = ("CLOSED", "ESCALATED")
 
 
 def bundle_config() -> tuple[dict[str, Any], str]:
@@ -143,6 +158,11 @@ class InvestigationGuard(HookProvider):
     proposal_result: dict[str, Any] | None = None
     rejections: list[str] = field(default_factory=list)
     stor_draft: dict[str, Any] | None = None
+    # where the proposal came from (session, analyst, model, bundle, mode, memory, the analyst's briefing); set by
+    # build_agent from the Runtime request and written into the tool call by the guard, never by the model
+    provenance: dict[str, str] = field(default_factory=dict)
+    ok_tools: set[str] = field(default_factory=set)  # tools that returned a result (not an error) for this alert
+    decided: str | None = None  # the alert's status when a human has already decided it
 
     def register_hooks(self, registry: HookRegistry, **kwargs: Any) -> None:
         registry.add_callback(BeforeToolCallEvent, self.before_tool)
@@ -154,6 +174,15 @@ class InvestigationGuard(HookProvider):
         inputs = event.tool_use.get("input") or {}
         self.calls.append({"tool": name.removeprefix(TOOL_PREFIX), "input": _compact(inputs), "t": time.time()})
 
+        if self.decided and name != f"{TOOL_PREFIX}get_alert":
+            # A decided alert takes no new proposal (the tools Lambda refuses the write); running the evidence
+            # tools first would spend an investigation to learn that at the end.
+            event.cancel_tool = (
+                f"alert {self.alert_id} is already decided (status {self.decided}): a human recorded a disposition. "
+                "Do not investigate or propose. Say that the alert is decided and stop; reopening it is a Level-2 "
+                "step."
+            )
+            return
         if name == DRAFT_STOR and self.mode not in DRAFTING_MODES:
             event.cancel_tool = "draft_stor_narrative is a Level-2 action; you are in Level-1 mode. Do not call it."
             return
@@ -183,6 +212,19 @@ class InvestigationGuard(HookProvider):
             event.cancel_tool = (
                 f"this investigation is for alert {self.alert_id}; the proposal names {inputs.get('alert_id')!r}."
             )
+            return
+        disposition = str(inputs.get("disposition") or "").upper()
+        needed = REQUIRED_EVIDENCE + (CLOSE_EVIDENCE if disposition == "CLOSE_FP" else ())
+        missing = [t for t in needed if t not in self.ok_tools]
+        if missing:
+            msg = (
+                "proposal held back before it reached the Gateway: these evidence tools have not returned a result "
+                f"for alert {self.alert_id} in this investigation: {', '.join(missing)}. A call that answered with "
+                "an error is not evidence. Run them; if one keeps failing, say what failed and stop instead of "
+                "proposing."
+            )
+            self.rejections.append(msg)
+            event.cancel_tool = msg
             return
         report_in = inputs.get("report") or {}
         if isinstance(report_in, str):  # Opus 5.5 sometimes passes the object JSON-encoded (5 of 167 runs, 2026-11-07)
@@ -214,8 +256,24 @@ class InvestigationGuard(HookProvider):
             self.rejections.append(msg)
             event.cancel_tool = msg
             return
+        unanswered = sorted(
+            {("recall_memory" if e.source == "memory" else e.source) for e in report.evidence} - self.ok_tools
+        )
+        if unanswered:
+            msg = (
+                "report rejected before it reached the Gateway: its evidence cites "
+                f"{', '.join(unanswered)}, which did not return a result in this investigation. Cite only what a "
+                "tool returned to you, or run the tool first."
+            )
+            self.rejections.append(msg)
+            event.cancel_tool = msg
+            return
         gateway_report = report.for_gateway()
-        event.tool_use = {**event.tool_use, "input": {**inputs, "report": gateway_report}}
+        sent = {**inputs, "report": gateway_report}
+        sent.pop("provenance", None)  # the model does not write its own provenance
+        if self.provenance:
+            sent["provenance"] = dict(self.provenance)
+        event.tool_use = {**event.tool_use, "input": sent}
         self.proposal = {
             "disposition": report.proposed_disposition,
             "confidence": report.confidence,
@@ -226,9 +284,22 @@ class InvestigationGuard(HookProvider):
     def after_tool(self, event: AfterToolCallEvent) -> None:
         name = event.tool_use["name"]
         body = _result_json(event.result)
+        failed = bool(event.cancel_message or _is_error(event.result, body))
         if self.calls and self.calls[-1]["tool"] == name.removeprefix(TOOL_PREFIX):
-            self.calls[-1]["ms"] = int((time.time() - self.calls[-1].pop("t")) * 1000)
-            self.calls[-1]["status"] = "error" if (event.cancel_message or _is_error(event.result, body)) else "ok"
+            self.calls[-1]["ms"] = int((time.time() - self.calls[-1].pop("t", time.time())) * 1000)
+            self.calls[-1]["status"] = "error" if failed else "ok"
+        inputs = event.tool_use.get("input") or {}
+        if not failed and inputs.get("alert_id") in (None, self.alert_id):
+            # a result for another alert is not evidence for this one
+            self.ok_tools.add(name.removeprefix(TOOL_PREFIX))
+            if (
+                name == f"{TOOL_PREFIX}get_alert"
+                and self.mode != "draft_stor"  # Level 2 may draft the STOR after recording DRAFT_STOR
+                and isinstance(body, dict)
+                and str(body.get("status") or "").upper() in DECIDED_STATUSES
+            ):
+                self.decided = str(body["status"]).upper()
+                self.rejections.append(f"alert {self.alert_id} is already decided (status {self.decided})")
         if name == PROPOSE and self.proposal is not None:
             if event.cancel_message or _is_error(event.result, body):
                 # the Gateway or a policy refused it: let the model try again with the same report
@@ -293,6 +364,7 @@ class InvestigationResult:
     session_id: str | None = None
     error: str | None = None
     bundle: str = "none"
+    decided: str | None = None  # set when the alert was already decided and the investigation was not run
 
     def to_dict(self) -> dict[str, Any]:
         return self.__dict__.copy()
@@ -307,6 +379,7 @@ def build_agent(
     model_id: str | None = None,
     policy_session_id: str | None = None,
     memory: bool = True,
+    instruction: str | None = None,
 ) -> tuple[Agent, InvestigationGuard, MCPClient]:
     """`policy_session_id` scopes the Gateway's temporal policies: one investigation = one policy session, so
     "evidence before proposal" and "one proposal per alert" are judged on this run's history only. The Runtime
@@ -342,6 +415,22 @@ def build_agent(
         tool_filters=None if memory else {"rejected": [f"{TOOL_PREFIX}recall_memory"]},
     )
     guard = InvestigationGuard(alert_id=alert_id, mode=mode)
+    # What the case will say about this proposal's origin. `SURV_PROVENANCE=off` drops it, for a Gateway target
+    # whose schema does not declare the field yet (deploy the tools Lambda and the target before the Runtime).
+    if os.environ.get("SURV_PROVENANCE", "on").lower() != "off":
+        guard.provenance = {
+            k: v
+            for k, v in {
+                "session_id": policy_session_id,
+                "analyst": analyst,
+                "model_id": model_id,
+                "bundle": bundle,
+                "mode": mode,
+                "memory": "on" if memory else "off",
+                "analyst_instruction": (instruction or "").strip()[:2000],
+            }.items()
+            if v
+        }
     agent = Agent(
         model=model,
         tools=[mcp],
@@ -385,6 +474,7 @@ def investigate(
         model_id=model_id,
         policy_session_id=session_id,
         memory=memory,
+        instruction=extra_instruction,
     )
     if mode == "draft_stor":
         prompt = f"Draft the STOR narrative for alert {alert_id}, which was proposed DRAFT_STOR in this session."
@@ -440,4 +530,5 @@ def investigate(
         session_id=session_id,
         error=error,
         bundle=agent.trace_attributes.get("surv.bundle", "none") if hasattr(agent, "trace_attributes") else "none",
+        decided=guard.decided,
     )
