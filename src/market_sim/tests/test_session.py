@@ -52,9 +52,15 @@ def test_catalogue_1_is_the_first_build_and_2_adds_the_registered_spoofer() -> N
     v1 = [s.id for s in true_specs(1)]
     assert v1 == ["S-SPOOF-1", "S-SPOOF-2", "S-LAYER-1", "S-SPOOF-3", "S-SPOOF-4", "S-SPOOF-5"]
     assert [s.weight for s in true_specs(1)] == [0.30, 0.15, 0.20, 0.10, 0.10, 0.15]
-    assert len(false_specs(1)) == 9 and len(false_specs(CATALOGUE_LATEST)) == 9
+    f1 = [s.id for s in false_specs(1)]
+    assert len(f1) == 9 and [s.id for s in false_specs(2)] == f1
     assert [s.id for s in true_specs(2)] == [*v1, "S-SPOOF-6"]
     assert SCENARIOS["S-SPOOF-6"].since == 2 and SCENARIOS["S-SPOOF-6"].registered_here
+    # catalogue 3 adds the spoofer's innocent twin and leaves the true-abuse list as catalogue 2 had it
+    assert CATALOGUE_LATEST == 3
+    assert [s.id for s in false_specs(3)] == [*f1, "F-MM-LARGE-1"]
+    assert [s.id for s in true_specs(3)] == [s.id for s in true_specs(2)]
+    assert SCENARIOS["F-MM-LARGE-1"].since == 3 and SCENARIOS["F-MM-LARGE-1"].registered_here
 
 
 def test_registered_market_maker_who_spoofs_defeats_the_registration_rule() -> None:
@@ -101,3 +107,49 @@ def test_registered_market_maker_who_spoofs_defeats_the_registration_rule() -> N
     assert (
         d["notes"][0].startswith(f"large order {e['order_id']} (") and "other order(s) of the trader" in d["notes"][0]
     )
+
+
+def test_the_innocent_twin_differs_from_the_spoofer_only_on_the_large_orders_own_record() -> None:
+    """F-MM-LARGE-1: the same registered market maker, the same quoting, the same pull, an order of the same size.
+    It sits at the front of the queue, a material part of it trades before his small passive execution on the other
+    side, and the remainder goes seconds later. The detector fires on it as it does on S-SPOOF-6 and the threshold
+    rules close both with the same rule, so a run that tells the two apart can only have read `large_orders`."""
+    import json
+
+    from detector.baseline import classify
+    from detector.rule import DetectorParams
+    from tools.discriminators import compute_discriminators
+
+    params = DetectorParams(k_depth=4.0)
+    entries = {}
+    for scenario in ("F-MM-LARGE-1", "S-SPOOF-6"):
+        tab = run_session(SimConfig(), seed=31, date="2026-12-01", scenario_ids=[scenario])
+        alerts = detect(tab.order_events, tab.instrument_stats, params)
+        labels = attribute(alerts, tab.injections, tab.traders, params.window_s, params.cancel_within_s)
+        mine = labels[labels.injected_scenario == scenario]
+        assert len(mine) == 1, scenario
+        alert = alerts[alerts.alert_id == mine.iloc[0].alert_id].iloc[0].to_dict()
+        profile = tab.traders.set_index("trader_id").to_dict("index")[alert["trader_id"]]
+        assert profile["role"] == "MARKET_MAKER" and "SYN.A" in json.loads(profile["registered_mm_instruments"])
+        oe = tab.order_events
+        depth = float(tab.instrument_stats.avg_depth_top5.iloc[0])
+        d = compute_discriminators(alert, oe[oe.trader_id == alert["trader_id"]], depth, all_events=oe).to_dict()
+        verdict = classify(d, profile, tab.market_events.to_dict("records"), alert)
+        assert (verdict.disposition, verdict.rule) == ("CLOSE_FP", "R1-registered-mm"), scenario
+        assert d["cancel_symmetry"] >= 0.6, scenario  # the quoting in the window looks two-sided in both
+        (entry,) = d["large_orders"]
+        entries[scenario] = (mine.iloc[0], entry)
+
+    label, twin = entries["F-MM-LARGE-1"]
+    assert (label.truth, label.expected_disposition) == ("FALSE_POSITIVE", "CLOSE_FP")
+    assert twin["size_vs_depth"] >= 8 and twin["distance_from_touch_ticks"] <= 0  # at the front of the queue
+    assert twin["executed_share_before_opposite_trade"] >= 0.25  # a material part traded first
+    assert 0 < twin["opposite_trade_qty"] < twin["executed_qty_before_opposite_trade"]  # a smaller trade the other way
+    assert twin["other_side_resting_vs_depth"] > 0  # a small quote was resting on the other side
+    assert twin["ms_from_opposite_trade_to_first_withdrawal"] >= 2000 and twin["final_state"] == "CANCELLED"
+
+    label, spoof = entries["S-SPOOF-6"]
+    assert (label.truth, label.expected_disposition) == ("TRUE_ABUSE", "ESCALATE")
+    assert spoof["size_vs_depth"] >= 8 and spoof["distance_from_touch_ticks"] >= 2
+    assert spoof["executed_qty_before_opposite_trade"] == 0 and spoof["other_side_resting_vs_depth"] == 0.0
+    assert spoof["ms_from_opposite_trade_to_first_withdrawal"] <= 500

@@ -3,10 +3,17 @@ noisy detector, attribute labels, compute discriminators and the threshold basel
 
     uv run scripts/build_dataset.py --seed 9 --sessions 20 --start-date 2026-12-01      # a new dataset, latest catalogue
     uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1                # rebuild seed7 as it was built
+    uv run scripts/build_dataset.py --seed 9 --sessions 12 --start-date 2026-09-14 --k-depth 4 \
+        --scenarios S-SPOOF-6 F-MM-LARGE-1 F-MM-1 F-SPOOFLIKE-HARD-1                    # a focused set (below)
 
 The scenario mix is sampled from a versioned catalogue (`market_sim.scenarios.CATALOGUE_LATEST`); a dataset can be
 rebuilt identically only from the catalogue it was built from. seed7 and seed8 are catalogue 1 (their manifests
 predate the field). The script refuses to write over an existing dataset with a different catalogue.
+
+`--scenarios` builds a FOCUSED set instead: every session injects exactly the listed scenarios (in shuffled order)
+and nothing is sampled. It answers one question with enough cases of each kind, which a sampled mix would not
+give (a scenario with weight 0.0625 appears about five times in twenty sessions). Its headline numbers are not
+comparable with a sampled dataset's and must not be reported as such; the manifest records the list.
 
 Labels and injections are written under <out>/labels/ and must never be loaded by anything the agent can call.
 """
@@ -28,7 +35,7 @@ from detector.labels import attribute, coverage, missed_injections
 from detector.rule import DETECTOR_VERSION, DetectorParams, detect
 from market_sim.config import SimConfig
 from market_sim.run import MixConfig, run_session
-from market_sim.scenarios import CATALOGUE_LATEST
+from market_sim.scenarios import CATALOGUE_LATEST, SCENARIOS
 from market_sim.types import Disposition, Truth
 from tools.discriminators import compute_discriminators
 
@@ -109,17 +116,38 @@ def main() -> int:
         help=f"scenario catalogue version to sample the mix from (default: the latest, {CATALOGUE_LATEST}; "
         "seed7 and seed8 were built from 1)",
     )
+    ap.add_argument(
+        "--scenarios",
+        nargs="+",
+        default=None,
+        metavar="ID",
+        help="a focused set: inject exactly these scenarios in every session instead of sampling the mix",
+    )
     args = ap.parse_args()
+
+    if args.scenarios:
+        unknown = [s for s in args.scenarios if s not in SCENARIOS]
+        if unknown:
+            raise SystemExit(f"unknown scenario id(s) {unknown}; the catalogue has {sorted(SCENARIOS)}")
+        late = [s for s in args.scenarios if SCENARIOS[s].since > args.catalogue]
+        if late:
+            raise SystemExit(f"{late} are not in scenario catalogue {args.catalogue}")
 
     out = Path(args.out or f"data/synthetic/seed{args.seed}")
     existing = out / "manifest.json"
     if existing.exists():
-        built_from = int(json.loads(existing.read_text()).get("catalogue", 1))  # manifests before the field: 1
+        prior = json.loads(existing.read_text())
+        built_from = int(prior.get("catalogue", 1))  # manifests before the field: 1
         if built_from != args.catalogue:
             raise SystemExit(
                 f"{out} was built from scenario catalogue {built_from}; this run would sample from catalogue "
                 f"{args.catalogue} and write a different dataset over it. Pass --catalogue {built_from} to rebuild "
                 "it as it was, or --out for a new dataset."
+            )
+        if prior.get("scenarios") != args.scenarios:
+            raise SystemExit(
+                f"{out} was built with --scenarios {prior.get('scenarios')}; this run has {args.scenarios} and would "
+                "write a different dataset over it. Pass the same list to rebuild it, or --out for a new dataset."
             )
     (out / "labels").mkdir(parents=True, exist_ok=True)
     cfg = SimConfig()
@@ -143,7 +171,7 @@ def main() -> int:
         )
     }
     for i, date in enumerate(dates):
-        tab = run_session(cfg, seed=args.seed * 1000 + i, date=date, mix=mix)
+        tab = run_session(cfg, seed=args.seed * 1000 + i, date=date, mix=mix, scenario_ids=args.scenarios)
         for k in parts:
             parts[k].append(getattr(tab, k))
         print(f"  {date}: {len(tab.order_events):>7,} events, {len(tab.injections)} injections", flush=True)
@@ -231,6 +259,7 @@ def main() -> int:
         "dates": dates,
         "generator_version": GENERATOR_VERSION,
         "catalogue": args.catalogue,
+        "scenarios": args.scenarios,  # None: the mix was sampled; a list: a focused set, the same list every session
         "detector_version": DETECTOR_VERSION,
         "detector_params": json.loads(params.to_json()),
         "mix": {"true_per_session": mix.true_per_session, "false_per_session": mix.false_per_session},
@@ -275,6 +304,15 @@ def main() -> int:
         "",
         f"seed {args.seed}, {args.sessions} sessions {dates[0]}..{dates[-1]}, generator {GENERATOR_VERSION} (scenario catalogue {args.catalogue}), detector {DETECTOR_VERSION} {params.to_json()}",
         "",
+        *(
+            [
+                f"FOCUSED SET: every session injects exactly {', '.join(args.scenarios)}; nothing is sampled. Its "
+                "headline numbers are not comparable with a sampled dataset's.",
+                "",
+            ]
+            if args.scenarios
+            else []
+        ),
         f"- order events: {len(order_events):,}; trades: {len(trades):,}; traders: {len(traders)}",
         f"- alerts: {len(alerts)} ({n_true} TRUE_ABUSE = {n_true / max(1, len(alerts)):.0%}; {manifest['counts']['background_alerts']} background)",
         f"- detector recall on injected abuse: {manifest['detector']['recall_on_true_injections']:.0%}; precision: {manifest['detector']['precision']:.0%}",

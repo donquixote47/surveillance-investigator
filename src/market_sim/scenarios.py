@@ -29,7 +29,8 @@ CLOSE_TOOLS = [*CORE_TOOLS, "get_trader_alert_history"]  # policy 04: history be
 # the manifest records it. seed7 and seed8 are catalogue 1.
 #   1  the fifteen scenarios of the first build (2026-11-02)
 #   2  + S-SPOOF-6, a market maker REGISTERED on the instrument who spoofs (2026-11-16)
-CATALOGUE_LATEST = 2
+#   3  + F-MM-LARGE-1, his innocent twin: the same market maker working a large order that executes (2026-11-17)
+CATALOGUE_LATEST = 3
 
 
 @dataclass
@@ -608,6 +609,70 @@ def f_spooflike_hard_1(session: Session, tid: str, t0: int) -> int:
     return end + session.s(1)
 
 
+def f_mm_large_1(session: Session, tid: str, t0: int) -> int:
+    """The innocent twin of S-SPOOF-6: the same registered market maker, the same 35-50 s of two-sided quoting, the
+    same pull of his quotes, and then one order as large as the spoofer's. What follows differs in the two ways the
+    firm's standard cares about. The order goes one tick inside the touch, first in queue, and counterparties
+    trade against 30-55% of it before anything else happens: it was there to execute. His only execution on the
+    other side is a client hitting a small quote he left there, smaller than what the large order had already
+    traded. He withdraws the remainder a few seconds later, when he has what he wanted.
+
+    Why it exists (2026-11-17): without it, a run that escalates every S-SPOOF-6 shows only that the agent
+    escalates large orders from market makers. With it, the same run must close this one, which it can do only
+    from the large order's own record (`large_orders` in the discriminators): the window-level numbers describe
+    his quoting in both scenarios."""
+    rng = session.rng
+    d = session.depth5_estimate()
+    size = int(1.2 * d)
+    session.traders[tid].typical_order_size = size  # he IS a market maker: his typical size is what he quotes
+    quotes: dict[Side, list[str]] = {Side.BUY: [], Side.SELL: []}
+
+    def requote() -> None:
+        for side in (Side.BUY, Side.SELL):
+            _cancel_many(session, quotes[side])
+            quotes[side].clear()
+        for side in (Side.BUY, Side.SELL):
+            session.after(session.uniform_ns(3, 20), _place_improving, session, tid, side, size, 1, quotes[side])
+
+    quote_s = float(rng.uniform(35, 50))
+    t = t0
+    end_quotes = t0 + session.s(quote_s)
+    while t < end_quotes:
+        session.at(t, requote)
+        t += session.s(float(rng.uniform(1.5, 3.0)))
+    session.at(
+        t0 + session.s(quote_s * float(rng.uniform(0.3, 0.6))),
+        lambda: _market(session, _counterparty(session), _rand_side(session), int(0.6 * d)),
+    )
+    t_pull = end_quotes + session.ms(200)
+    session.at(t_pull, _cancel_all, session, tid)
+
+    # the large order: as big as the spoofer's, but at the front of the queue, where it trades
+    t_work = t_pull + session.s(float(rng.uniform(1.0, 2.0)))
+    side = _rand_side(session)
+    total = int(float(rng.uniform(8, 12)) * d)
+    work: list[str] = []
+    session.at(t_work, _place_improving, session, tid, side, total, 1, work)
+    per = max(1, int(total * float(rng.uniform(0.30, 0.55)) / 3))
+    t = t_work
+    for _ in range(3):
+        t += session.s(float(rng.uniform(1.5, 3.0)))
+        session.at(t, lambda: _market(session, _counterparty(session), side.opposite, per))
+
+    # a small quote on the other side, hit by a client: his only opposite-side execution, passive and small
+    small: list[str] = []
+    t_quote = t + session.s(float(rng.uniform(1.0, 2.0)))
+    session.at(t_quote, _place_improving, session, tid, side.opposite, int(0.2 * d), 1, small)
+    t_hit = t_quote + session.s(float(rng.uniform(1.0, 2.0)))
+    session.at(t_hit, lambda: _market(session, _counterparty(session), side, int(0.6 * d)))
+
+    # he has what he wanted: the remainder is withdrawn seconds later, not in the half second after a trade
+    t_cancel = t_hit + session.s(float(rng.uniform(2.0, 4.0)))
+    session.at(t_cancel, _cancel_many, session, work)
+    session.at(t_cancel + session.ms(50), _cancel_all, session, tid)
+    return t_cancel + session.ms(50)
+
+
 # ----------------------------------------------------------------------------------------------
 # catalogue
 # ----------------------------------------------------------------------------------------------
@@ -891,6 +956,28 @@ SCENARIOS: dict[str, ScenarioSpec] = {
         registered_here=True,
         profile_size=1000,
         profile_otr=35.0,
+    ),
+    "F-MM-LARGE-1": ScenarioSpec(
+        "F-MM-LARGE-1",
+        Truth.FALSE_POSITIVE,
+        Disposition.CLOSE_FP,
+        Role.MARKET_MAKER,
+        "ETF-MM",
+        [
+            "registered market maker on this instrument, and the registration is not what closes it",
+            "one large order several times the depth at the front of the queue, a material part of it executed "
+            "before the trader's opposite-side execution",
+            "the opposite-side execution is a small passive fill, smaller than what the large order had traded",
+            "the remainder withdrawn seconds later: an order that was working, then ordinary order management",
+        ],
+        CLOSE_TOOLS,
+        "The innocent twin of S-SPOOF-6: genuine execution of the large order, read on its own record.",
+        0.0625,
+        f_mm_large_1,
+        registered_here=True,
+        profile_size=900,
+        profile_otr=40.0,
+        since=3,
     ),
 }
 

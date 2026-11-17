@@ -58,7 +58,7 @@ See the table in `STATUS.md`. Two CloudFormation stacks in eu-west-2:
 
 Every resource must carry `Project=agentcore-surveillance-investigator` and `auto-delete=no`. Audit: `uv run scripts/check_tags.py` (add `--fix` to tag what is missing). Resources the stacks do not tag (so far: the Gateway's workload identity) are caught by this script.
 
-The data is already in DynamoDB (seed7, 1,961,720 items). To reload after a table rebuild: `uv run scripts/load_dynamodb.py data/synthetic/seed7` (about 12 minutes, about $3). To regenerate the dataset itself: `uv run scripts/build_dataset.py --seed 7 --sessions 20` (deterministic; the committed parquet files are the reference).
+The data is already in DynamoDB (seed7, 1,961,720 items). To reload after a table rebuild: `uv run scripts/load_dynamodb.py data/synthetic/seed7` (about 12 minutes, about $3). To regenerate the dataset itself: `uv run scripts/build_dataset.py --seed 7 --sessions 20` (deterministic; the committed parquet files are the reference). seed9 was loaded on 2026-11-17 with `uv run scripts/load_dynamodb.py data/synthetic/seed9 --tables order_events trades traders market_events instrument_stats alerts --keep-existing-traders` (about 7 minutes, about $1.70; no cases history, which would add rows to the background traders the three sets share).
 
 ## 5. Everyday commands
 
@@ -76,6 +76,7 @@ uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # Memory records; al
 uv run scripts/reset_cases.py --from 2026-11-01 [--apply]   # clear the agent's proposals (not the analyst's records) so alerts arrive fresh; dry run by default
 uv run scripts/reset_cases.py --alerts A-261009-0003 --include-recorded [--apply]   # reopen a decided alert: also clears the decision, its lock and history (the agent and the harness skip decided alerts)
 uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # rebuild seed7 exactly; a new dataset takes the latest scenario catalogue by default
+uv run scripts/build_dataset.py --seed 9 --sessions 12 --start-date 2026-09-14 --k-depth 4 --scenarios S-SPOOF-6 F-MM-LARGE-1 F-MM-1 F-SPOOFLIKE-HARD-1   # rebuild seed9, the focused set: the same four scenarios every session, nothing sampled
 uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
 #   SURV_RUNTIME_ENDPOINT=demo ... for the pinned endpoint. A login survives a page refresh for the life of the Streamlit
 #   process: the browser URL carries an opaque session id (?s=), the day (?d=) and the open alert (?a=); the Cognito

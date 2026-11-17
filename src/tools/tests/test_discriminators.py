@@ -215,12 +215,13 @@ import pytest  # noqa: E402
 DATA = Path(__file__).resolve().parents[3] / "data" / "synthetic"
 
 
-@pytest.mark.parametrize("dataset", ["seed7", "seed8"])
+@pytest.mark.parametrize("dataset", ["seed7", "seed8", "seed9"])
 def test_frozen_datasets_reproduce_their_committed_discriminators(dataset: str) -> None:
     """seed7 and seed8 are the regression and generalisation sets; `labels/discriminators.parquet` in each is what
     `compute_discriminators` returned when the dataset was built and what every evaluation run's tool results
     contained. A change to this module may ADD fields; it may not change the value of a field those runs saw, on
-    any of the 267 alerts. (Added 2026-11-16 with the per-order block for large orders.)"""
+    any of the 267 alerts. (Added 2026-11-16 with the per-order block for large orders. seed9, the focused set of
+    2026-11-17, is held the same way from the day it was built: 48 more alerts.)"""
     root = DATA / dataset
     if not (root / "labels" / "discriminators.parquet").exists():
         pytest.skip(f"{dataset} not built")

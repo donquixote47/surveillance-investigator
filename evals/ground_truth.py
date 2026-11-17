@@ -44,6 +44,9 @@ FP_EXPLANATION = {
     "completed; intent consistent with the resting side",
     "F-SPOOFLIKE-HARD-1": "registered market maker selling inventory: asks inside the touch re-priced down with the market, "
     "same-side executions dominate, no reversion after the cancels",
+    "F-MM-LARGE-1": "registered market maker working one large order at the front of the queue: a material part of it "
+    "executed before his small passive execution on the other side, and the remainder was withdrawn seconds later; "
+    "an order that was there to trade, judged on its own record and not on the registration",
     "F-STOP-1": "momentum trader stopped out: the market moved against the resting bids, he sold at a loss "
     "(negative round trip) and cancelled; nothing to revert",
     "F-NEWS-1": "market event (news) within 200 ms before the cancels and a market-wide cancel storm, not only this trader",
