@@ -88,7 +88,7 @@ uv run evals/run_dataset.py --sample 6 --tag pilot                     # έξι 
 uv run evals/run_dataset.py --tag sonnet-vN --notes "..."              # όλα τα 167 alerts, ~57 λεπτά, ~15 $ σε tokens Sonnet με prompt caching (v14+· 31 $ πριν)
 uv run evals/run_dataset.py --scenario F-ICE-1 S-SPOOF-5 --tag slice   # μια φέτα· --no-memory κρύβει το recall_memory· --bundle <name> στέλνει config bundle
 SURV_PROMPT_CACHE=off uv run evals/run_dataset.py --backend local ...   # το arm χωρίς caching (μόνο local backend· το Runtime διαβάζει το δικό του env)
-uv run evals/compare_runs.py evals/runs/<A> evals/runs/<B> --out ...   # paired σύγκριση δύο runs στα κοινά τους alerts
+uv run evals/compare_runs.py evals/runs/<A> evals/runs/<B> --out ...   # paired σύγκριση δύο runs του ίδιου dataset στα κοινά τους alerts
 uv run evals/run_dataset.py --repeat 5 --alerts ... --tag variance    # run-to-run variance: σταθερότητα ανά alert, διασπορά pseudo-runs (~8 $ για 21 x 5)
 uv run scripts/span_turns.py --run evals/runs/<run_id> --alerts A-...  # χρόνοι ανά turn ενός session από τα spans του: model turns, tokens, tools
 uv run evals/run_dataset.py --dataset data/synthetic/seed8 --tag seed8-...  # το σύνολο γενίκευσης (100 alerts, ~9 $)· --rescore/--resume διαλέγουν μόνα τους το dataset του run

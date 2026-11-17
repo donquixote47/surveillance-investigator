@@ -6,7 +6,8 @@
     uv run evals/compare_runs.py ... --out evals/runs/compare-<name>.md
 
 Prints the headline metrics of both, the paired disposition changes (which alerts moved, in which direction),
-the per-scenario agreement of both, and the cost/latency columns.
+the per-scenario agreement of both, and the cost/latency columns. The labels are those of the dataset the runs
+were made on (`run.json`); two runs on different datasets share no alert and are refused.
 """
 
 from __future__ import annotations
@@ -27,15 +28,25 @@ def _pct(x: float | None) -> str:
     return "n/a" if x is None else f"{100 * x:.1f}%"
 
 
-def main() -> int:
+def dataset_of(run_dir: Path) -> str:
+    """The dataset a run was made on. Until 2026-11-16 this script scored every run with seed7's labels, so two
+    seed8 runs compared as "0 shared alerts" with every metric empty."""
+    return json.loads((run_dir / "run.json").read_text()).get("dataset") or "seed7"
+
+
+def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("run_a", type=Path)
     ap.add_argument("run_b", type=Path)
     ap.add_argument("--label-a", default=None)
     ap.add_argument("--label-b", default=None)
     ap.add_argument("--out", type=Path, default=None)
-    args = ap.parse_args()
-    labels = load_labels(ROOT / "data" / "synthetic" / "seed7")
+    args = ap.parse_args(argv)
+    ds_a, ds_b = dataset_of(args.run_a), dataset_of(args.run_b)
+    if ds_a != ds_b:
+        print(f"the two runs are on different datasets ({ds_a}, {ds_b}): they share no alert", file=sys.stderr)
+        return 2
+    labels = load_labels(ROOT / "data" / "synthetic" / ds_a)
     rows_a, run_a = rescore(args.run_a.resolve(), labels)
     rows_b, run_b = rescore(args.run_b.resolve(), labels)
     la = args.label_a or run_a["run_id"]
@@ -48,7 +59,12 @@ def main() -> int:
     ma = compute(ra, model_id=run_a.get("model_id") or next((r["model_id"] for r in ra if r.get("model_id")), None))
     mb = compute(rb, model_id=run_b.get("model_id") or next((r["model_id"] for r in rb if r.get("model_id")), None))
 
-    lines = [f"# {la} vs {lb}", "", f"{len(shared)} shared alerts (A has {len(rows_a)}, B has {len(rows_b)}).", ""]
+    lines = [
+        f"# {la} vs {lb}",
+        "",
+        f"{len(shared)} shared alerts on dataset `{ds_a}` (A has {len(rows_a)}, B has {len(rows_b)}).",
+        "",
+    ]
     lines.append(f"| metric | {la} | {lb} |")
     lines.append("|---|---|---|")
     g = lambda m: "holds" if m["gate"]["holds"] else f"FAILED ({len(m['gate']['missed'])})"  # noqa: E731

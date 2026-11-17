@@ -86,7 +86,7 @@ A thousand alerts a month on Sonnet is roughly $90 in model tokens plus a few do
 | Fewer corrections than the rules | override rate 6.0% vs 7.2% for the threshold rules | same |
 | Numbers and facts in reports are real | 99.7% of 3,976 numbers trace to a tool output (the eleven that do not are derived from tool outputs); 589 of 589 categorical claims (roles, desks, order types, registration) match the tool outputs | `evals/faithfulness.py` |
 | Cost halves without touching the decision | $0.187 -> $0.091 per alert, gate and faithfulness unchanged | `compare-v3-v4.md` |
-| Holds on alerts nothing was tuned against | second dataset (seed 8, K = 4, 100 alerts): gate 0 of 24, the ten defined scenarios 76 of 76, 86.8% safe close on a mix with twice the boundary cases (92.7% on seed7's mix) | run `20261111T1326-seed8-generalisation` (Runtime v14; not re-run on v17) |
+| Holds on alerts nothing was tuned against | second dataset (seed 8, K = 4, 100 alerts): gate 0 of 24, the ten defined scenarios 77 of 77, 88.2% safe close on a mix with twice the boundary cases (94.0% on seed7's mix) | run `20261116T2028-seed8-v17`, the released version; 86.8% on the first run, `20261111T1326-seed8-generalisation` (Runtime v14) |
 | Procedure follows the standard every time | 100% trajectory match on 167 sessions | Builtin.TrajectoryInOrderMatch |
 | Improves in governed steps | 79.9% -> 88.5% -> 93.5% safe close across three runs, gate held each time, each step a dated decision | decision log |
 | Memory helps and does not bias | +0.7 points; clean-history spoofer caught with and without | `compare-v3-memory.md` |
