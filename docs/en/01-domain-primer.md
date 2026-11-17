@@ -49,6 +49,8 @@ This is the heart of the project. A detector that only sees "big order, opposite
 
 Each row is a scenario in our synthetic dataset (`04-synthetic-data-and-evaluation.md`).
 
+**Being a market maker is a reason to look at the order, not a reason to close.** In 2017 the FCA fined a government-bond market maker, Paul Walter of Bank of America Merrill Lynch, £60,090 for market abuse. On twelve occasions in July and August 2014 he posted quotes on the BrokerTec platform that became the best bid, waited for the algorithms that tracked the best bid to raise theirs, sold into them and cancelled his quote (once the same in the other direction) [verified 2026-11-17, FCA Final Notice of 22 November 2017]. His firm had no formal quoting obligation in those bonds; the firms he misled did. Scenario S-SPOOF-6 (`04-synthetic-data-and-evaluation.md`) is the simulator's version of the question that case raises. It is cruder than the real pattern, which was hidden inside ordinary quoting.
+
 ### 2.4 Other abuse types (out of scope, for orientation)
 
 - **Wash trading**: trading with oneself or a collaborator to inflate volume.
@@ -85,7 +87,7 @@ The honest summary for the presentation: false-positive rates vary by firm and b
 
 ### 3.3 The asymmetry
 
-Closing a false positive saves minutes. Missing a true positive can cost a firm a regulatory fine, a criminal case for the trader, and the firm's licence. Reference cases from US enforcement, all from background knowledge and to be verified before citing: Michael Coscia (first criminal spoofing conviction, 2015, Panther Energy); Navinder Sarao (spoofing in E-mini S&P futures, charged 2015); JPMorgan's 2020 settlement of about $920 million for precious-metals and Treasuries spoofing. These are why no compliance officer accepts a tool that optimises accuracy. They accept a tool that never closes a true case and saves time on the rest. That ordering defines our metric (`02-problem-statement.md`).
+Closing a false positive saves minutes. Missing a true positive can cost a firm a regulatory fine, a criminal case for the trader, and the firm's licence. Reference cases from US enforcement: Michael Coscia (first criminal spoofing conviction, 2015, Panther Energy) and Navinder Sarao (spoofing in E-mini S&P futures, charged 2015), both from background knowledge and to be verified before citing; JPMorgan's 2020 settlement of $920.2 million for spoofing by traders on its precious-metals and Treasuries desks, the heads of both desks among them, from at least 2008 to 2016 [verified 2026-11-17, CFTC release 8260-20]. These are why no compliance officer accepts a tool that optimises accuracy. They accept a tool that never closes a true case and saves time on the rest. That ordering defines our metric (`02-problem-statement.md`).
 
 ## 4. The regulation, with the articles that matter to this project
 

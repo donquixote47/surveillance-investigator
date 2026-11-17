@@ -45,7 +45,7 @@ Earlier text: Phase 5: `evals/run_dataset.py` over all 167 alerts with the gate 
 ## Open verification items (from the docs)
 
 - Exact article numbers in Delegated Regulation (EU) 2016/957 for human analysis and record-keeping (five years).
-- US references (FINRA 3110, Exchange Act 9(a)(2)/10(b), CEA 4c(a)(5)(C), Coscia/Sarao/JPMorgan cases).
+- US references (FINRA 3110, Exchange Act 9(a)(2)/10(b), CEA 4c(a)(5)(C), the Coscia and Sarao cases). The JPMorgan 2020 settlement was verified 2026-11-17 against CFTC release 8260-20.
 - Current vendor feature sets (agentic investigation features) before the presentation.
 - AgentCore Gateway, Policy and Optimization pricing.
 - Live behaviour of temporal policies and of Lambda-target output schemas (Phase 4).

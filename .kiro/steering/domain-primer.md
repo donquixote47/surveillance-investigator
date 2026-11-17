@@ -29,7 +29,7 @@ Detector raises alert -> L1 analyst triages (minutes per alert) -> close as fals
 
 ## What makes a spoofing alert a false positive (the discriminators the agent must check)
 
-- Registered market maker with two-sided quoting obligations: constant cancel/replace is their job.
+- Registered market maker with two-sided quoting obligations: constant cancel/replace is their job. Not an exemption: FCA v Walter (2017, £60,090), a bond market maker who posted best-bid quotes to pull tracking algorithms up, sold into them and cancelled [verified 2026-11-17, FCA Final Notice of 22 November 2017].
 - Algorithmic re-pricing (pegged orders, VWAP slices): cancels follow mid-price moves, both sides, symmetrically.
 - Risk-limit or kill-switch cancellation: all orders pulled at once, no opposite-side fill.
 - Reaction to a news/event: cancellation coincides with a public event, many participants do the same.
