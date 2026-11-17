@@ -334,6 +334,10 @@ TOOLS: list[dict] = [
                     _obj({"ts": _i(""), "time": _s(""), "instrument": _s(""), "reason": _s("")}, ""), ""
                 ),
                 "risk_limit_events_total": _i("all recorded risk events for the trader"),
+                "alert_id": _s(
+                    "the alert this profile was read for; present only when the call named the alert and the "
+                    "trader is the alert's own (Gateway policy 03b allows a proposal only after it)"
+                ),
             },
             "",
             ["trader_id", "role"],
@@ -379,6 +383,10 @@ TOOLS: list[dict] = [
                 ),
                 "count": _i(""),
                 "excluded_current_alert": _i("1 when the alert under investigation had a recorded decision left out"),
+                "alert_id": _s(
+                    "the alert this history was read for; present only when the call named the alert and the "
+                    "trader is the alert's own (Gateway policy 04 allows a CLOSE_FP proposal only after it)"
+                ),
             },
             "",
             ["trader_id", "alerts"],

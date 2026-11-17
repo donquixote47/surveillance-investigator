@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -58,5 +59,18 @@ def test_logged_in_queue_and_case():
     at.run()
     assert not at.exception, at.exception
     assert any("level L1" in str(s.value) for s in at.success), "logged-in banner"
+    # The screen opens on today, whose queue may be empty (a weekend, a day after the dataset ends). The queue
+    # and the case are checked on a day of the evaluated set, picked the way an analyst picks it.
+    day = at.sidebar.selectbox[0]
+    assert day.value == date.today().isoformat(), "a login opens on today"
+
+    def iso(shown: str) -> str:  # the options are shown as DD-MM-YYYY, the first one with " (today)"
+        d, m, y = shown.split(" ")[0].split("-")
+        return f"{y}-{m}-{d}"
+
+    assert max(iso(o) for o in day.options) == date.today().isoformat(), "no day after today is offered"
+    day.set_value("2026-10-06")
+    at.run()
+    assert not at.exception, at.exception
     assert at.dataframe, "queue table rendered"
     assert any("Detector:" in str(m.value) for m in at.markdown), "a case opened"

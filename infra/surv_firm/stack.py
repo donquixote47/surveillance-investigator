@@ -279,9 +279,28 @@ class SurvFirmStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
             feature_plan=cognito.FeaturePlan.ESSENTIALS,
         )
+        # Two app clients, so that the token the agent holds cannot record a decision (2026-11-17).
+        #   agent session    the access token the UI passes to the AgentCore Runtime, which forwards it to the
+        #                    Gateway. Runtime and Gateway accept this client only (`allowedClients`, agentcore.json).
+        #   analyst records  the access token the UI keeps for itself and sends to the recording API. The HTTP
+        #                    API's JWT authorizer accepts this client only (it checks `client_id` against its
+        #                    audience when the token has no `aud`, which is a Cognito access token's case).
+        # Same analyst, same groups, two tokens. Until this change one client served both, so the token inside the
+        # agent's session was also a valid credential for POST /cases/{id}/disposition, and "the agent cannot
+        # record" rested on the agent having no HTTP tool. The first client keeps its construct id ("AnalystUi"):
+        # it is the client id the deployed Runtime and Gateway already accept, and a new id there would be a new
+        # Runtime version.
         client = pool.add_client(
             "AnalystUi",
-            user_pool_client_name="surv-analyst-ui",
+            user_pool_client_name="surv-agent-session",
+            generate_secret=False,
+            auth_flows=cognito.AuthFlow(user_password=True, user_srp=True),
+            id_token_validity=Duration.hours(8),
+            access_token_validity=Duration.hours(8),
+        )
+        records_client = pool.add_client(
+            "AnalystRecords",
+            user_pool_client_name="surv-analyst-records",
             generate_secret=False,
             auth_flows=cognito.AuthFlow(user_password=True, user_srp=True),
             id_token_validity=Duration.hours(8),
@@ -309,7 +328,7 @@ class SurvFirmStack(Stack):
             self,
             "AnalystApi",
             api_name="surv-analyst-api",
-            default_authorizer=authz.HttpUserPoolAuthorizer("Jwt", pool, user_pool_clients=[client]),
+            default_authorizer=authz.HttpUserPoolAuthorizer("Jwt", pool, user_pool_clients=[records_client]),
             cors_preflight=apigw.CorsPreflightOptions(
                 allow_origins=["http://localhost:8501"],
                 allow_methods=[apigw.CorsHttpMethod.GET, apigw.CorsHttpMethod.POST, apigw.CorsHttpMethod.OPTIONS],
@@ -337,7 +356,8 @@ class SurvFirmStack(Stack):
         CfnOutput(self, "GatewayToolsFunctionArn", value=tools_fn.function_arn)
         CfnOutput(self, "GatewayToolsFunctionName", value=tools_fn.function_name)
         CfnOutput(self, "UserPoolId", value=pool.user_pool_id)
-        CfnOutput(self, "UserPoolClientId", value=client.user_pool_client_id)
+        CfnOutput(self, "UserPoolClientId", value=client.user_pool_client_id)  # the agent-session client
+        CfnOutput(self, "RecordsClientId", value=records_client.user_pool_client_id)
         CfnOutput(
             self,
             "UserPoolDiscoveryUrl",

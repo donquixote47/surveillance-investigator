@@ -14,14 +14,14 @@ All twelve sit behind one Gateway target, `surv`, so the agent sees them as `sur
 | 4 | `get_order_events` | read | Returns the trader's raw orders in the window: placed, changed, cancelled, executed. |
 | 5 | `reconstruct_book` | read | Shows what the market looked like at a moment: the best prices and the resting depth, with the trader's orders apart from everyone else's. |
 | 6 | `compute_discriminators` | read | Computes the numbers that tell a trick from a job: size against the market, distance from the best price, cancel timing, price move. Each large order is also measured on its own (`large_orders`). |
-| 7 | `get_trader_profile` | read | Returns who the trader is: role, desk, market-making registrations, typical order size, risk-system events in the window. |
-| 8 | `get_trader_alert_history` | read | Returns the trader's earlier alerts and how analysts decided them. Prior alerts only. |
+| 7 | `get_trader_profile` | read | Returns who the trader is: role, desk, market-making registrations, typical order size, risk-system events in the window. Asked with the alert's id, it answers only for the alert's own trader. |
+| 8 | `get_trader_alert_history` | read | Returns the trader's earlier alerts and how analysts decided them. Prior alerts only. Asked with the alert's id, it answers only for the alert's own trader. |
 | 9 | `get_market_events` | read | Returns public events around the window: news, scheduled data releases, halts, auctions. |
 | 10 | `get_instrument_stats` | read | Returns what "large" and "far" mean for this share on this day: average volume, spread and depth. |
 | 11 | `propose_disposition` | write | Stores the agent's proposal and its report on the case. Closes nothing. Refused on an alert a person has already decided. |
 | 12 | `draft_stor_narrative` | write | Drafts the text of a Suspicious Transaction and Order Report from a recorded proposal, for Level 2 to edit, sign or discard. Nothing is sent. |
 
-There is no tool that records a decision. Recording is a separate API that takes a person's login. A Level-1 login sees eleven of the twelve tools, because policy 07 hides `draft_stor_narrative` from it; a Level-2 login sees all twelve.
+There is no tool that records a decision. Recording is a separate API that takes a person's login, and since 2026-11-17 a login the agent never holds: the token the agent works under is refused there. A Level-1 login sees eleven of the twelve tools, because policy 07 hides `draft_stor_narrative` from it; a Level-2 login sees all twelve.
 
 ## 2. AgentCore policies (9)
 
@@ -33,15 +33,15 @@ Two kinds. A plain policy looks at who is calling and which tool. A policy over 
 |---|---|---|---|
 | 01 | `01-permit-read-tools.cedar` | plain | Any logged-in analyst may call the ten read tools. |
 | 02 | `02-forbid-unknown-tools.cedar` | plain | Any tool outside the twelve is forbidden for everyone. A tool that records a decision would be denied even if someone added it. |
-| 03a | `03a-evidence-before-proposal.dw` | over the session | A proposal is allowed only after the alert was read, its orders pulled and its numbers computed, all for that same alert. |
-| 03b | `03b-profile-and-market-before-proposal.dw` | over the session | A proposal is refused until the trader's profile and the market events were looked up. |
-| 04 | `04-history-before-close.dw` | over the session | A proposal to close is refused until the trader's alert history was looked up. |
+| 03a | `03a-evidence-before-proposal.dw` | over the session | A proposal is allowed only after the alert was read, its orders pulled and its numbers computed, and each of the three answered for that same alert. |
+| 03b | `03b-profile-and-market-before-proposal.dw` | over the session | A proposal is refused until the trader's profile and the market events came back for that alert. A lookup that failed does not count. |
+| 04 | `04-history-before-close.dw` | over the session | A proposal to close is refused until the trader's alert history came back for that alert. |
 | 05 | `05-stor-after-proposal.dw` | over the session | A report may be drafted only after a proposal to draft one, for the same alert. |
 | 06 | `06-one-proposal-per-alert.dw` | over the session | A second proposal for the same alert in the same session is refused. |
 | 07 | `07-stor-drafting-requires-l2.cedar` | plain | Only Level 2 may draft a report. |
 | 08 | `08-cap-event-pulls.dw` | over the session | At most six pulls of order events in a session, to bound cost and loops. |
 
-Policies 03a, 03b and 04 are the platform's form of "look before you propose". Policies 06 and 08 count within one session, and the caller names the session, so a new session starts the count again: they shape behaviour and are not a security boundary on their own.
+Policies 03a, 03b and 04 are the platform's form of "look before you propose". Since 2026-11-17 they match what each tool returned, not that it was called: a lookup that answered with an error, a lookup made without the alert, and a lookup for another alert or another trader do not count (verified on the live Gateway that day). Policies 06 and 08 count within one session, and the caller names the session, so a new session starts the count again: they shape behaviour and are not a security boundary on their own.
 
 ## 3. Controls that are not on these lists
 
@@ -49,5 +49,5 @@ The policies are one layer. Four others matter when someone asks what stops the 
 
 - **The Gateway's rate limits.** 60 requests a minute per analyst, and 3 writes a minute per analyst on the two write tools (`STATUS.md`, deployed resources).
 - **The tools Lambda's access rights.** The function behind the tools may update only the proposal fields of a case. It cannot write a decision, and it cannot replace or delete a case (`08-broker-brief.md`, section 2b).
-- **The recording API.** A decision is recorded once, by a person; only Level 2 can supersede it, and the earlier decision stays on the case.
-- **The agent's own guard.** It holds a proposal back until the evidence tools returned a result for this alert. This matters because a tool call that returns an error still counts as a completed call for policies 03a, 03b and 04 (`10-operations.md`, section 5).
+- **The recording API.** A decision is recorded once, by a person; only Level 2 can supersede it, and the earlier decision stays on the case. It accepts only the analyst's recording login. The token the agent holds during an investigation is a different one and is refused there (401, verified 2026-11-17).
+- **The agent's own guard.** It holds a proposal back until the evidence tools returned a result for this alert. Until 2026-11-17 it was the only control that did: a tool call that returned an error counted as a completed call for policies 03a, 03b and 04. The policies now check the same thing, so the guard is the first of two (`10-operations.md`, section 5).

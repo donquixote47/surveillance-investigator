@@ -5,9 +5,14 @@ run's spans from CloudWatch so the UI can show the trace next to the report.
 No Streamlit here, so these can be tested and reused by a CLI.
 
 Configuration (environment first, then ~/.config/surv-investigator/analyst-credentials.env; passwords are never read
-by the UI, the analyst types them): SURV_USER_POOL_ID, SURV_CLIENT_ID, SURV_API_URL, SURV_RUNTIME_ARN,
-SURV_RUNTIME_ENDPOINT (optional, default DEFAULT; `demo` is pinned to the evaluated version),
+by the UI, the analyst types them): SURV_USER_POOL_ID, SURV_CLIENT_ID, SURV_RECORDS_CLIENT_ID, SURV_API_URL,
+SURV_RUNTIME_ARN, SURV_RUNTIME_ENDPOINT (optional, default DEFAULT; `demo` is pinned to the evaluated version),
 SURV_RUNTIME_LOG_GROUP, SURV_REGION.
+
+Two tokens for one login (2026-11-17). `SURV_CLIENT_ID` is the agent-session app client: its access token goes to
+the Runtime, which forwards it to the Gateway, and it is the only client those two accept. `SURV_RECORDS_CLIENT_ID`
+is the analyst-records app client: its access token stays in this process and is the only one the recording API
+accepts. The token the agent holds is therefore not a credential for recording a decision.
 """
 
 from __future__ import annotations
@@ -26,7 +31,7 @@ import boto3
 import httpx
 
 CONFIG_FILE = Path.home() / ".config" / "surv-investigator" / "analyst-credentials.env"
-NEEDED = ("SURV_USER_POOL_ID", "SURV_CLIENT_ID", "SURV_API_URL", "SURV_RUNTIME_ARN")
+NEEDED = ("SURV_USER_POOL_ID", "SURV_CLIENT_ID", "SURV_RECORDS_CLIENT_ID", "SURV_API_URL", "SURV_RUNTIME_ARN")
 
 
 def _log_group(configured: str | None, endpoint: str) -> str | None:
@@ -41,7 +46,8 @@ def _log_group(configured: str | None, endpoint: str) -> str | None:
 class Config:
     region: str
     user_pool_id: str
-    client_id: str
+    client_id: str  # agent-session client: the token for the Runtime and, through it, the Gateway
+    records_client_id: str  # analyst-records client: the token for the recording API, never sent to the agent
     api_url: str
     runtime_arn: str
     runtime_log_group: str | None
@@ -64,6 +70,7 @@ class Config:
             region=values.get("SURV_REGION", "eu-west-2"),
             user_pool_id=values["SURV_USER_POOL_ID"],
             client_id=values["SURV_CLIENT_ID"],
+            records_client_id=values["SURV_RECORDS_CLIENT_ID"],
             api_url=values["SURV_API_URL"].rstrip("/"),
             runtime_arn=values["SURV_RUNTIME_ARN"],
             runtime_log_group=_log_group(
@@ -80,9 +87,10 @@ class Config:
 class Session:
     username: str
     groups: list[str]
-    access_token: str
+    access_token: str  # agent-session client; sent to the Runtime
     id_token: str
     expires_at: float
+    records_token: str = ""  # analyst-records client; sent to the recording API only
 
     @property
     def level(self) -> str:
@@ -101,20 +109,28 @@ def jwt_claims(token: str) -> dict:
 
 
 def login(cfg: Config, username: str, password: str) -> Session:
+    """One set of credentials, two tokens: one issued to the agent-session client, one to the analyst-records
+    client. Neither service accepts the other's."""
     idp = boto3.client("cognito-idp", region_name=cfg.region)
-    r = idp.initiate_auth(
-        ClientId=cfg.client_id,
-        AuthFlow="USER_PASSWORD_AUTH",
-        AuthParameters={"USERNAME": username, "PASSWORD": password},
-    )
-    auth = r["AuthenticationResult"]
+
+    def token_for(client_id: str) -> dict:
+        r = idp.initiate_auth(
+            ClientId=client_id,
+            AuthFlow="USER_PASSWORD_AUTH",
+            AuthParameters={"USERNAME": username, "PASSWORD": password},
+        )
+        return r["AuthenticationResult"]
+
+    auth = token_for(cfg.client_id)
+    records = token_for(cfg.records_client_id)
     claims = jwt_claims(auth["AccessToken"])
     return Session(
         username=claims.get("username", username),
         groups=list(claims.get("cognito:groups") or []),
         access_token=auth["AccessToken"],
         id_token=auth["IdToken"],
-        expires_at=time.time() + int(auth.get("ExpiresIn", 3600)),
+        expires_at=time.time() + min(int(auth.get("ExpiresIn", 3600)), int(records.get("ExpiresIn", 3600))),
+        records_token=records["AccessToken"],
     )
 
 
@@ -124,7 +140,8 @@ def login(cfg: Config, username: str, password: str) -> Session:
 class HumanPath:
     def __init__(self, cfg: Config, session: Session):
         self._base = cfg.api_url
-        self._headers = {"Authorization": f"Bearer {session.access_token}"}
+        # the analyst-records token: the recording API accepts no other, and the agent never sees this one
+        self._headers = {"Authorization": f"Bearer {session.records_token}"}
 
     def _call(self, method: str, path: str, **kwargs) -> dict:
         with httpx.Client(timeout=30.0) as c:
@@ -173,7 +190,8 @@ def invoke_runtime(
     session_id: str | None = None,
     timeout_s: float = 600.0,
 ) -> tuple[dict, str, float]:
-    """POST to the Runtime with the analyst's token. Returns (result, session id, wall seconds)."""
+    """POST to the Runtime with the analyst's agent-session token (never the records token). Returns
+    (result, session id, wall seconds)."""
     session_id = session_id or new_session_id(alert_id)
     url = f"https://bedrock-agentcore.{cfg.region}.amazonaws.com/runtimes/{quote(cfg.runtime_arn, safe='')}/invocations"
     payload: dict = {"alert_id": alert_id, "mode": mode}

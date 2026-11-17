@@ -38,6 +38,22 @@ PROVENANCE_MAX_CHARS = 2000
 # ----------------------------------------------------------------------------------------------
 
 
+# The six lookups a proposal rests on. The Gateway's policies 03a, 03b and 04 allow a proposal only after each of
+# them RETURNED the alert's id (`output.alert_id` of the recorded response; a policy can match on what a tool
+# answered, not only on what was asked: devguide, "Authoring temporal policies"). So `alert_id` in the answer of
+# one of these tools is the firm's statement that the lookup answered for that alert. An answer that is an error
+# never carries it: a Lambda that RETURNS `{"error": ...}` has returned successfully as far as the Gateway knows,
+# and until 2026-11-17 a failed lookup therefore satisfied the "look before you propose" rules.
+EVIDENCE_TOOLS = (
+    "get_alert",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_trader_alert_history",
+)
+
+
 def handler(event: dict, context) -> dict:
     tool = _tool_name(context, event)
     if tool not in TOOL_NAMES:
@@ -46,10 +62,13 @@ def handler(event: dict, context) -> dict:
     if missing:
         return {"error": f"{tool}: missing required input(s) {missing}"}
     try:
-        return TOOL_IMPL[tool](event)
+        out = TOOL_IMPL[tool](event)
     except Exception as exc:  # the agent needs the reason, not a stack dump
         print(traceback.format_exc())
         return {"error": f"{tool} failed: {type(exc).__name__}: {exc}"}
+    if tool in EVIDENCE_TOOLS and isinstance(out, dict) and "error" in out:
+        out.pop("alert_id", None)  # whatever the tool built before it failed, a failure names no alert
+    return out
 
 
 def _tool_name(context, event: dict) -> str:
@@ -330,12 +349,24 @@ def get_trader_profile(ev: dict) -> dict:
         else (tr.get("registered_mm_instruments") or [])
     )
     in_window = risk
+    alert = None
     if ev.get("alert_id"):
-        alert = da.get_alert(ev["alert_id"])
-        if alert:
-            w0, w1 = int(alert["window_start"]) - 5 * NS_PER_S, int(alert["window_end"]) + 5 * NS_PER_S
-            in_window = [r for r in risk if w0 <= int(r["ts"]) <= w1]
-    return {
+        # With `alert_id` this is the profile of THAT alert's trader, and the answer says so by returning the
+        # alert's id (policy 03b needs it). An unknown alert was silently ignored until 2026-11-17, and any trader
+        # was accepted, so a profile read for somebody else counted as evidence for the alert.
+        alert, err = _alert_or_error(ev["alert_id"])
+        if err:
+            return err
+        if alert["trader_id"] != ev["trader_id"]:
+            return {
+                "error": (
+                    f"alert {alert['alert_id']} is on trader {alert['trader_id']}, not {ev['trader_id']}; "
+                    "pass the alert's own trader_id"
+                )
+            }
+        w0, w1 = int(alert["window_start"]) - 5 * NS_PER_S, int(alert["window_end"]) + 5 * NS_PER_S
+        in_window = [r for r in risk if w0 <= int(r["ts"]) <= w1]
+    out = {
         "trader_id": tr["trader_id"],
         "name": tr.get("name"),
         "desk": tr.get("desk"),
@@ -346,6 +377,9 @@ def get_trader_profile(ev: dict) -> dict:
         "risk_limit_events_in_window": [{**r, "time": da.hhmmss(r["ts"])} for r in in_window],
         "risk_limit_events_total": len(risk),
     }
+    if alert:
+        out["alert_id"] = alert["alert_id"]
+    return out
 
 
 def get_trader_alert_history(ev: dict) -> dict:
@@ -406,7 +440,7 @@ def get_trader_alert_history(ev: dict) -> dict:
         }
         for r in rows
     ]
-    return {
+    result = {
         "trader_id": ev["trader_id"],
         "lookback_days": lookback,
         "before_date": before,
@@ -414,6 +448,9 @@ def get_trader_alert_history(ev: dict) -> dict:
         "count": len(out),
         "excluded_current_alert": excluded,
     }
+    if current:
+        result["alert_id"] = current["alert_id"]  # the history was read for this alert (policy 04 needs it)
+    return result
 
 
 def get_market_events(ev: dict) -> dict:

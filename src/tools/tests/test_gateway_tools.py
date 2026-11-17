@@ -628,3 +628,80 @@ def test_missing_depth_is_an_error_and_other_instruments_are_left_out(world, mon
     monkeypatch.setattr(gt.da, "instrument_stats", lambda instrument, date: None)
     out = call("compute_discriminators", alert_id=alert["alert_id"])
     assert "avg_depth_top5" in out["error"] and "max_resting_size_vs_depth" not in out
+
+
+# ----------------------------------------------------------------------------------------------
+# an evidence lookup answers with the alert's id, and only when it answered for that alert (2026-11-17)
+# ----------------------------------------------------------------------------------------------
+
+
+def test_every_evidence_tool_returns_the_alert_id_when_it_answered_for_the_alert(world):
+    """Policies 03a, 03b and 04 allow a proposal only after each of these tools RETURNED the alert's id. So every
+    one of them must return it for a lookup that named the alert, and the profile and history tools must return
+    it only for the alert's own trader."""
+    from tools.lambda_handlers.gateway_tools import EVIDENCE_TOOLS
+
+    alert, _ = world
+    aid, tid = alert["alert_id"], alert["trader_id"]
+    inputs = {
+        "get_alert": {"alert_id": aid},
+        "get_order_events": {"alert_id": aid},
+        "compute_discriminators": {"alert_id": aid},
+        "get_trader_profile": {"alert_id": aid, "trader_id": tid},
+        "get_market_events": {"alert_id": aid},
+        "get_trader_alert_history": {"alert_id": aid, "trader_id": tid},
+    }
+    assert set(inputs) == set(EVIDENCE_TOOLS)
+    for tool, args in inputs.items():
+        out = call(tool, **args)
+        assert "error" not in out and out["alert_id"] == aid, tool
+
+    # without the alert the profile, the market events and the history still answer, and name no alert:
+    # a lookup that was not made for the alert is not evidence for it
+    assert "alert_id" not in call("get_trader_profile", trader_id=tid)
+    assert "alert_id" not in call("get_trader_alert_history", trader_id=tid)
+    explicit = call(
+        "get_market_events",
+        instrument=alert["instrument"],
+        window_start=int(alert["window_start"]),
+        window_end=int(alert["window_end"]),
+    )
+    assert "error" not in explicit and "alert_id" not in explicit
+
+
+def test_a_failed_evidence_lookup_never_names_the_alert(world, monkeypatch):
+    """The gap this closes: a tool that RETURNS {"error": ...} has returned successfully as far as the Gateway
+    knows, so the response is recorded and used to satisfy "look before you propose". With the policies matching
+    on output.alert_id, the guarantee is that an answer which is an error carries no alert id."""
+    from tools.lambda_handlers import gateway_tools
+
+    alert, _ = world
+    aid, tid = alert["alert_id"], alert["trader_id"]
+    other = "T-MM-01" if tid != "T-MM-01" else "T-MM-02"
+    failures = [
+        ("get_alert", {"alert_id": "A-000000-0000"}),
+        ("get_order_events", {"alert_id": "A-000000-0000"}),
+        ("compute_discriminators", {"alert_id": "A-000000-0000"}),
+        ("get_trader_profile", {"alert_id": aid, "trader_id": "T-NOBODY"}),  # the trader does not exist
+        ("get_trader_profile", {"alert_id": aid, "trader_id": other}),  # a real trader, not this alert's
+        ("get_trader_profile", {"alert_id": "A-000000-0000", "trader_id": tid}),  # the alert does not exist
+        ("get_market_events", {"alert_id": "A-000000-0000"}),
+        ("get_market_events", {}),  # neither the alert nor a window
+        ("get_trader_alert_history", {"alert_id": aid, "trader_id": other}),
+        ("get_trader_alert_history", {"alert_id": "A-000000-0000", "trader_id": tid}),
+    ]
+    for tool, args in failures:
+        out = call(tool, **args)
+        assert "error" in out and "alert_id" not in out, (tool, args, out)
+
+    # and the rule holds for a tool that builds its answer before it fails: the dispatcher strips the id
+    monkeypatch.setitem(gateway_tools.TOOL_IMPL, "get_alert", lambda ev: {"alert_id": ev["alert_id"], "error": "boom"})
+    out = call("get_alert", alert_id=aid)
+    assert out == {"error": "boom"}
+
+    # other tools keep what they return: the refusal on a decided case names the alert it refused
+    monkeypatch.setitem(
+        gateway_tools.TOOL_IMPL, "propose_disposition", lambda ev: {"alert_id": ev["alert_id"], "error": "decided"}
+    )
+    out = call("propose_disposition", alert_id=aid, disposition="ESCALATE", confidence=0.5, report={})
+    assert out["alert_id"] == aid

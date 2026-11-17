@@ -18,6 +18,7 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from session_days import offered_days
 from surv_client import (
     Config,
     HumanPath,
@@ -31,20 +32,6 @@ from surv_client import (
 )
 
 st.set_page_config(page_title="Surveillance investigator", page_icon="🔎", layout="wide")
-
-# Session days in the firm's tables, newest first (the way a queue reads): seed8 (November, the generalisation set,
-# loaded 2026-11-11) then seed7 (October, the evaluated set). The demo script's alerts are on the October days.
-DATASET_DATES = [
-    "2026-11-27", "2026-11-26", "2026-11-25", "2026-11-24", "2026-11-23",
-    "2026-11-20", "2026-11-19", "2026-11-18", "2026-11-17", "2026-11-16",
-    "2026-11-13", "2026-11-12", "2026-11-11", "2026-11-10", "2026-11-09",
-    "2026-11-06", "2026-11-05", "2026-11-04", "2026-11-03", "2026-11-02",
-    "2026-10-30", "2026-10-29", "2026-10-28", "2026-10-27", "2026-10-26",
-    "2026-10-23", "2026-10-22", "2026-10-21", "2026-10-20", "2026-10-19",
-    "2026-10-16", "2026-10-15", "2026-10-14", "2026-10-13", "2026-10-12",
-    "2026-10-09", "2026-10-08", "2026-10-07", "2026-10-06", "2026-10-05",
-]  # fmt: skip
-DEFAULT_DATE = DATASET_DATES[0]
 
 
 def show_date(iso: str) -> str:
@@ -87,7 +74,7 @@ def restore_from_url() -> None:
         else:
             session_store().pop(sid, None)
             qp.pop("s", None)
-    if "date" not in ss() and qp.get("d") in DATASET_DATES:
+    if "date" not in ss() and qp.get("d") in offered_days():
         ss()["date"] = qp["d"]
     if "alert_id" not in ss() and qp.get("a"):
         ss()["alert_id"] = qp["a"]
@@ -128,7 +115,11 @@ def sidebar() -> Session | None:
                         sid = secrets.token_urlsafe(16)
                         session_store()[sid] = sess
                         ss()["session"], ss()["sid"] = sess, sid
-                        remember_in_url(s=sid)
+                        # A login opens on today's queue: the day, alert and run an earlier visit left in this
+                        # tab or in its URL belong to that visit.
+                        for k in ("date", "alert_id", "run", "run_session_id", "draft"):
+                            ss().pop(k, None)
+                        remember_in_url(s=sid, d=None, a=None, r=None)
                         st.rerun()
                     except Exception as exc:
                         st.error(f"login failed: {type(exc).__name__}")
@@ -140,17 +131,18 @@ def sidebar() -> Session | None:
         )
         if st.button("Log out", width="stretch"):
             session_store().pop(ss().get("sid", ""), None)
-            for k in ("session", "sid", "run", "run_session_id", "alert_id", "draft"):
+            for k in ("session", "sid", "date", "run", "run_session_id", "alert_id", "draft"):
                 ss().pop(k, None)
-            remember_in_url(s=None, a=None, r=None)
+            remember_in_url(s=None, d=None, a=None, r=None)
             st.rerun()
         st.divider()
-        saved = ss().get("date", DEFAULT_DATE)
+        days = offered_days()  # today first, then the session days before it; nothing after today
+        saved = ss().get("date", days[0])
         new_date = st.selectbox(
             "Session day",
-            DATASET_DATES,
-            index=DATASET_DATES.index(saved if saved in DATASET_DATES else DEFAULT_DATE),
-            format_func=show_date,
+            days,
+            index=days.index(saved if saved in days else days[0]),
+            format_func=lambda d: show_date(d) + (" (today)" if d == days[0] else ""),
         )
         if new_date != saved:  # a new day: the selected alert and any run belong to the old one
             for k in ("alert_id", "run", "run_session_id", "draft"):

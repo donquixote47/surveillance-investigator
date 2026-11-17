@@ -23,6 +23,7 @@ def _panel(ui_dir: str, level: str, decided: bool, record_calls: list):
     for k, v in {
         "SURV_USER_POOL_ID": "eu-west-2_test",
         "SURV_CLIENT_ID": "client",
+        "SURV_RECORDS_CLIENT_ID": "records-client",
         "SURV_API_URL": "https://api.example.invalid",
         "SURV_RUNTIME_ARN": "arn:aws:bedrock-agentcore:eu-west-2:000000000000:runtime/test",
         "SURV_RUNTIME_LOG_GROUP": "/aws/bedrock-agentcore/runtimes/test-DEFAULT",
