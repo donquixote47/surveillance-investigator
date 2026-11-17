@@ -10,8 +10,8 @@ The docs are the project deliverable as much as the code: the mentor reads them,
 
 | Change | Update (en and el) |
 |---|---|
-| New or changed tool in the mock back end (`src/tools/`, `infra/`) | `03-solution-design.md` tool contract table; README capability table if a new AgentCore feature is exercised |
-| New or changed policy (`policies/`) | `03-solution-design.md` policy set table (control, rule type, file); demo script if it creates a demo moment |
+| New or changed tool in the mock back end (`src/tools/`, `infra/`) | `03-solution-design.md` tool contract table; the tool list in `13-tools-and-policies.md`; README capability table if a new AgentCore feature is exercised |
+| New or changed policy (`policies/`) | `03-solution-design.md` policy set table (control, rule type, file); the policy list in `13-tools-and-policies.md`; demo script if it creates a demo moment |
 | New or changed scenario in the simulator (`src/market_sim/`) | `04-synthetic-data-and-evaluation.md` scenario catalogue; label definitions if they change |
 | AgentCore resource created, updated, or deleted | `STATUS.md` deployed-resources table (name, id or ARN, region, created, cost note) |
 | Phase started or finished | `STATUS.md` phase line and "next step"; README status table; tick the milestone in `05-build-plan.md` |

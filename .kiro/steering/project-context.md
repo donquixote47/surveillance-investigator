@@ -54,6 +54,7 @@ George is a TAM at AWS whose customers are brokers, traders and some HFT firms. 
 - `docs/en/06-learning-resources.md` reading path for the domain and for AgentCore
 - `docs/en/07-resume.md` how to resume in a new session or machine: prerequisites, secrets location, deployed stacks, everyday commands, teardown
 - `docs/en/12-presenter-guide.md` the speaker's guide: plain-language story, the domain in seven ideas, what to say at each demo step, numbers, hard questions, what not to claim (George is not a domain expert and presents from this)
+- `docs/en/13-tools-and-policies.md` one page: the twelve Gateway tools and the nine AgentCore policies in plain words, and the controls that are not policies (the contracts stay in `03-solution-design.md` sections 4 and 6)
 - `docs/en/glossary.md`, `docs/en/decision-log.md`, `docs/en/STATUS.md`
 - `docs/el/` Greek twins of all of the above
 - `.kiro/steering/domain-primer.md` compact domain knowledge for Kiro

@@ -107,4 +107,5 @@ The same standing instructions load from `.claude/rules/` (five files, byte-iden
 - `docs/en/10-operations.md` how the product is run after the alpha: release cycle, what to watch, measured time and token breakdown, ranked backlog
 - `docs/en/11-market-landscape.md` who else puts AI on surveillance alerts (Robinhood, Nasdaq, NICE, Eventus, eflow, SteelEye, Solidus, FIS, AWS samples), whether there is a direct competitor, who the customer is, the prospect checklist, what to borrow
 - `docs/en/12-presenter-guide.md` for the speaker: the story in plain words, the seven domain ideas needed to tell it, what to say at each demo step, the numbers to know, hard questions with honest answers, what not to claim
+- `docs/en/13-tools-and-policies.md` one page in plain words: the twelve Gateway tools, the nine AgentCore policies, and the controls that are not policies
 - `docs/en/glossary.md`, `docs/en/decision-log.md`, `docs/en/STATUS.md`
