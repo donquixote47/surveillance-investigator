@@ -1,0 +1,440 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "repeat": 2,
+  "session_id": "surv-eval-20261117T1454-seed9-variance-A-260928-0004-r2-005c12c8",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-17T15:31:08+00:00",
+  "wall_s": 32.1
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-260928-0004",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.75,
+   "report": {
+    "alert_id": "A-260928-0004",
+    "scenario": "SPOOFING",
+    "summary": "The detector fired on the trader's two-sided quoting, which looks like registered market making. Those quotes are not the issue. At 15:44:59.282 the trader placed a single BUY of 18989, which is 7.85x depth, 2 ticks below the touch, with nothing resting on the other side. It had no executions. 2.8s later the trader sent a MARKET SELL of 1139. The book moved +1 tick in the trader's favour, and the BUY was cancelled 156ms after the sell. The price then reverted by 1 tick. The market-making explanation does not account for this order, so I escalate to Level 2.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "compute_discriminators",
+      "fact": "large_orders: O-00033104 BUY 18989 at 9995, size_vs_depth 7.85, distance_from_touch_ticks 2.0, other_side_resting_vs_depth 0.0"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "O-00033104 executed_qty_before_opposite_trade 0, executed_qty_after_opposite_trade 0, cancelled_qty 18989, final_state CANCELLED"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "O-00033104 opposite_trade_qty 1139 at 15:45:02.090; ms_from_opposite_trade_to_first_withdrawal 156.5; price_move_ticks 1.0, reversion_ticks 1.0"
+     },
+     {
+      "id": "E4",
+      "source": "get_order_events",
+      "fact": "MARKET SELL O-00033112 1139 filled at 9999, 9999, 9999, 9997, 9996 and 9995; the BUY O-00033104 was cancelled at 15:45:02.247. The best bid was 9997 when the BUY was placed and 9999 before the sell."
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "Role MARKET_MAKER, registered on SYN.A, typical_order_size 2734, no risk events in the window"
+     },
+     {
+      "id": "E6",
+      "source": "get_order_events",
+      "fact": "The ~40 earlier quotes are 2734 on both sides, cancelled in pairs. The large BUY is 18989, about 7x typical size."
+     },
+     {
+      "id": "E7",
+      "source": "get_market_events",
+      "fact": "No market events in the window"
+     },
+     {
+      "id": "E8",
+      "source": "compute_discriminators",
+      "fact": "market_wide_cancels_1s_before_first_cancel 2; window cancel_symmetry 0.82; repetitions_in_session 1; round_trip_ticks 0.31"
+     },
+     {
+      "id": "E9",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts for this trader"
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "opposite-side execution before the cancel",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "price moved in the trader's favour before the execution and reverted after the cancel"
+    ],
+    "indicators_not_matched": [
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)",
+     "high order-to-trade ratio (OTR 3.0 vs typical 40)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E1",
+       "E6"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "genuine execution of the resting order / modification after partial fill",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E7"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "undetermined"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.75,
+    "what_would_change_my_mind": "Evidence that O-00033104 was a genuine client or hedge order. Evidence that the 1 tick of upward bid movement before the sell came from other participants and not from the displayed size. Evidence that the sell swept to 9995 only because of thin depth.",
+    "memory_used": [
+     "Desk ETF-MM prior CLOSE_FP records (e.g. A-261009-0003, 'Registered market maker on SYN.A quoting both sides at desk-typical size') were read as context only. Those explanations cover quotes at desk size, not a one-sided 7.85x-depth order, so they do not carry over to today's tape."
+    ],
+    "window_used": "Detector window 15:43:22.600 to 15:45:09.282 (1790610202600076795 to 1790610309282445387), with 5s padding on the order events. I did not look beyond it.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-260928-0004",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-260928-0004",
+   "proposed_at": "2026-11-17T15:31:37+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-260928-0004"
+    },
+    "ms": 243,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 200,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-260928-0004",
+     "instrument": "SYN.A",
+     "trader_id": "T-X0928-04"
+    },
+    "ms": 1193,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-260928-0004",
+     "pad_seconds": 5
+    },
+    "ms": 215,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-260928-0004"
+    },
+    "ms": 412,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X0928-04",
+     "alert_id": "A-260928-0004"
+    },
+    "ms": 220,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "alert_id": "A-260928-0004"
+    },
+    "ms": 193,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-09-28",
+     "instrument": "SYN.A"
+    },
+    "ms": 195,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X0928-04",
+     "alert_id": "A-260928-0004"
+    },
+    "ms": 173,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-260928-0004",
+     "disposition": "ESCALATE",
+     "confidence": 0.75,
+     "report": "<report>"
+    },
+    "ms": 191,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Disposition:** ESCALATE, confidence 0.75. The proposal is on file as case C-A-260928-0004, awaiting a human decision.\n\n**Facts that drove it:**\n1. **Large one-sided order:** The trader placed a single BUY of 18,989 (O-00033104) at 15:44:59. That is 7.85 times average depth and 2 ticks off the touch, with nothing resting on the other side. It had no executions before or after the trader's opposite-side trade.\n2. **Opposite-side trade, then cancel:** The trader sent a MARKET SELL of 1,139 at 15:45:02.090, and the BUY was cancelled 156 ms later.\n3. **Favourable move and reversion:** The book moved 1 tick in the trader's favour, and the price then reverted by 1 tick.\n\nThe trader is a registered market maker on SYN.A, and the earlier two-sided quotes of 2,734 look like normal quoting. That does not explain this order, which is about seven times the desk's typical size and one-sided. The trader has no prior alerts, there were no market events or risk events, and the pattern happened once (repetitions_in_session = 1). I therefore did not propose a STOR draft.\n\n**What would change my mind:** Evidence that O-00033104 was a genuine client or hedge order, or that the 1-tick bid move came from other participants and not from the displayed size.",
+  "usage": {
+   "input_tokens": 10,
+   "output_tokens": 3479,
+   "total_tokens": 80895,
+   "cache_read_tokens": 52563,
+   "cache_write_tokens": 24843,
+   "model_calls": 4
+  },
+  "duration_s": 25.4,
+  "session_id": "surv-eval-20261117T1454-seed9-variance-A-260928-0004-r2-005c12c8",
+  "error": null,
+  "bundle": "none",
+  "decided": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-260928-0004",
+  "case_id": "C-A-260928-0004",
+  "confidence": "0.75",
+  "date": "2026-09-28",
+  "proposal_count": "4",
+  "proposal_history": [
+   {
+    "confidence": "0.75",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-17T13:18:20+00:00",
+    "replaced_at": "2026-11-17T15:06:19+00:00",
+    "session_id": "surv-eval-20261117T1255-seed9-mm-A-260928-0004-f467f7bc"
+   },
+   {
+    "confidence": "0.8",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-17T15:06:19+00:00",
+    "replaced_at": "2026-11-17T15:18:56+00:00",
+    "session_id": "surv-eval-20261117T1454-seed9-variance-A-260928-0004-r0-8c2e17e0"
+   },
+   {
+    "confidence": "0.75",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-17T15:18:56+00:00",
+    "replaced_at": "2026-11-17T15:31:37+00:00",
+    "session_id": "surv-eval-20261117T1454-seed9-variance-A-260928-0004-r1-41005f98"
+   }
+  ],
+  "proposal_provenance": "{\"session_id\": \"surv-eval-20261117T1454-seed9-variance-A-260928-0004-r2-005c12c8\", \"analyst\": \"l1.analyst\", \"model_id\": \"eu.anthropic.claude-sonnet-5-5\", \"bundle\": \"none\", \"mode\": \"investigate\", \"memory\": \"on\"}",
+  "proposed_at": "2026-11-17T15:31:37+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "The detector fired on the trader's two-sided quoting, which looks like registered market making. Those quotes are not the issue. At 15:44:59.282 the trader placed a single BUY of 18989, which is 7.85x depth, 2 ticks below the touch, with nothing resting on the other side. It had no executions. 2.8s later the trader sent a MARKET SELL of 1139. The book moved +1 tick in the trader's favour, and the BUY was cancelled 156ms after the sell. The price then reverted by 1 tick. The market-making explanation does not account for this order, so I escalate to Level 2.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "compute_discriminators",
+     "fact": "large_orders: O-00033104 BUY 18989 at 9995, size_vs_depth 7.85, distance_from_touch_ticks 2.0, other_side_resting_vs_depth 0.0"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "O-00033104 executed_qty_before_opposite_trade 0, executed_qty_after_opposite_trade 0, cancelled_qty 18989, final_state CANCELLED"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "O-00033104 opposite_trade_qty 1139 at 15:45:02.090; ms_from_opposite_trade_to_first_withdrawal 156.5; price_move_ticks 1.0, reversion_ticks 1.0"
+    },
+    {
+     "id": "E4",
+     "source": "get_order_events",
+     "fact": "MARKET SELL O-00033112 1139 filled at 9999, 9999, 9999, 9997, 9996 and 9995; the BUY O-00033104 was cancelled at 15:45:02.247. The best bid was 9997 when the BUY was placed and 9999 before the sell."
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "Role MARKET_MAKER, registered on SYN.A, typical_order_size 2734, no risk events in the window"
+    },
+    {
+     "id": "E6",
+     "source": "get_order_events",
+     "fact": "The ~40 earlier quotes are 2734 on both sides, cancelled in pairs. The large BUY is 18989, about 7x typical size."
+    },
+    {
+     "id": "E7",
+     "source": "get_market_events",
+     "fact": "No market events in the window"
+    },
+    {
+     "id": "E8",
+     "source": "compute_discriminators",
+     "fact": "market_wide_cancels_1s_before_first_cancel 2; window cancel_symmetry 0.82; repetitions_in_session 1; round_trip_ticks 0.31"
+    },
+    {
+     "id": "E9",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts for this trader"
+    }
+   ],
+   "indicators_not_matched": [
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)",
+    "high order-to-trade ratio (OTR 3.0 vs typical 40)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "opposite-side execution before the cancel",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "price moved in the trader's favour before the execution and reverted after the cancel"
+   ],
+   "alert_id": "A-260928-0004",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E1",
+      "E6"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "genuine execution of the resting order / modification after partial fill",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E7"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "undetermined"
+    }
+   ],
+   "memory_used": [
+    "Desk ETF-MM prior CLOSE_FP records (e.g. A-261009-0003, 'Registered market maker on SYN.A quoting both sides at desk-typical size') were read as context only. Those explanations cover quotes at desk size, not a one-sided 7.85x-depth order, so they do not carry over to today's tape."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 15:43:22.600 to 15:45:09.282 (1790610202600076795 to 1790610309282445387), with 5s padding on the order events. I did not look beyond it.",
+   "what_would_change_my_mind": "Evidence that O-00033104 was a genuine client or hedge order. Evidence that the 1 tick of upward bid movement before the sell came from other participants and not from the displayed size. Evidence that the sell swept to 9995 only because of thin depth."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X0928-04"
+ }
+}
