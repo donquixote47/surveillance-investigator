@@ -10,7 +10,7 @@ Repository: `https://github.com/donquixote47/surveillance-investigator` (private
 
 | Item | Value |
 |---|---|
-| Phase | 5 complete (2026-11-07) with iterations 3 and 4, the variance run and the seed8 generalisation run (2026-11-10/11); the review hardening released 2026-11-16 as `v0.3.0-alpha` (record integrity, IAM limit on the agent's write, proposal provenance, per-order facts for large orders): Runtime v17 on `demo`, run `20261116T1828-sonnet-v5` passes the promotion rule (gate 0 of 28, safe close 94.2%). Next: Phase 6 (slides, rehearsal). Measured 2026-11-17 on the focused dataset `seed9` (48 alerts): the registered market maker who spoofs (S-SPOOF-6) escalated 12 of 12, his innocent twin (F-MM-LARGE-1) closed 12 of 12, and both the same on three repetitions. Two control gaps closed on the live system 2026-11-17: the look-before-you-propose policies match what each tool returned for the alert, and the token the agent holds cannot record a decision; `DEFAULT` is on Runtime v18 since then (same agent code), `demo` on v17. See `docs/en/STATUS.md` and `docs/en/05-build-plan.md` |
+| Phase | 5 complete (2026-11-07) with iterations 3 and 4, the variance run and the seed8 generalisation run (2026-11-10/11); the review hardening released 2026-11-16 as `v0.3.0-alpha` (record integrity, IAM limit on the agent's write, proposal provenance, per-order facts for large orders): Runtime v17 on `demo`, run `20261116T1828-sonnet-v5` passes the promotion rule (gate 0 of 28, safe close 94.2%). Next: Phase 6 (slides, rehearsal). Measured 2026-11-17 on the focused dataset `seed9` (48 alerts): the registered market maker who spoofs (S-SPOOF-6) escalated 12 of 12, his innocent twin (F-MM-LARGE-1) closed 12 of 12, and both the same on three repetitions. Two control gaps closed on the live system 2026-11-17: the look-before-you-propose policies match what each tool returned for the alert, and the token the agent holds cannot record a decision; Released 2026-11-18 as `v0.4.0-alpha`: Runtime v20 on `demo` and `DEFAULT`, a locked and reproducible bundle with the packages of v17 and an agent that waits for the Gateway's rate limit instead of failing; run `20261118T1204-sonnet-v7` passes the promotion rule (gate 0 of 28, safe close 95.7%); evaluation runs use one analyst per worker. See `docs/en/STATUS.md` and `docs/en/05-build-plan.md` |
 | Region | eu-west-2 |
 | Stack | Python 3.14 (uv), Strands Agents 1.63, Claude Sonnet 5.5 (eu. inference profile), AgentCore CLI 1.0.2 (`agentcore.json` for AgentCore resources), AWS CDK (Python) for the mock back end |
 | Cost rule | Zero third-party cost. AWS cost is not a constraint but is announced before every deploy and tracked in STATUS; every resource carries `Project` and `auto-delete=no` tags (`scripts/check_tags.py`) |
@@ -55,7 +55,8 @@ docs/el/            Greek twins of the above
 src/market_sim/     Limit-order-book simulator with scenario injection
 src/detector/       The deliberately noisy spoofing/layering detector
 src/tools/          Tool implementations (Lambda handlers and the pure discriminator functions)
-app/surv_investigator_l1/  The agent: report model, system prompt, Strands agent + guard, Runtime entrypoint, tests
+app/surv_investigator_l1/  The agent: report model, system prompt, Strands agent + guard, Runtime entrypoint. This folder, whole, is the Runtime bundle
+app/tests/          The agent's tests, beside its folder and not inside it
 agentcore/          AgentCore CLI project: agentcore.json, deployed state, CDK stack with the Gateway rate limits
 infra/              CDK app for the mock back end (Lambda, DynamoDB, S3, Cognito, HTTP API)
 policies/           Cedar/Dogwood policy files, one rule each (Phase 4)
@@ -70,7 +71,7 @@ ui/                 Analyst UI (Streamlit, loopback) and its clients: Cognito lo
 
 ```
 uv sync --all-groups
-uv run pytest                                                  # 107 tests: book, detector, scenarios, discriminators, tools on moto DynamoDB, report guard, metrics
+uv run pytest                                                  # 142 tests: book, detector, scenarios, discriminators, tools on moto DynamoDB, policies, report guard, Runtime bundle, metrics, throttling report, analyst screen
 uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # ~30 s; regenerates data/synthetic/seed7 exactly (catalogue 1 = the scenarios it was built from)
 uv run scripts/replay_alert.py data/synthetic/seed7 --random 3 --reveal
 ```

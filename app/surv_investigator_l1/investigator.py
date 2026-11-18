@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import os
+import random
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -52,8 +53,10 @@ DRAFT_STOR = f"{TOOL_PREFIX}draft_stor_narrative"
 # `draft_stor`: a second run in the same session, after the proposal, that only drafts (the UI's L2 button; the
 # Gateway's policy 05 needs the DRAFT_STOR proposal in the same policy session, so the session id is reused).
 DRAFTING_MODES = ("stor_drafting", "draft_stor")
-# The evidence a proposal rests on: the same tools the Gateway's rules 03a and 03b ask for, and 04 for a closure.
-# The rules check that the call COMPLETED; the guard checks that it returned a result and not an error.
+# The evidence a proposal rests on: the same tools the Gateway's rules 03a and 03b ask for, and 04 for a closure,
+# held to the same test as those rules (since 2026-11-18): the tool's ANSWER names this alert (`output.alert_id`).
+# An answer that is an error carries no alert id, and neither does a lookup made without one. The guard refuses
+# first, with a message that says what to run; the Gateway's rule is what holds if the guard is ever wrong.
 REQUIRED_EVIDENCE = (
     "get_alert",
     "get_order_events",
@@ -88,11 +91,18 @@ class RetryOn429(_httpx.AsyncHTTPTransport):
     """The Gateway's per-analyst rate limit answers 429 and the MCP client treats that as a dead connection, which
     ends the investigation with "Connection to the MCP server was closed" (6 of 167 runs on 2026-11-06). A tool
     call is idempotent at the Gateway (the policy session records the *response*, so a throttled request leaves no
-    trace), so a short back-off and a retry is the right reaction. Honours Retry-After; 2, 4, 8 s otherwise."""
+    trace), so waiting and asking again is the right reaction.
+
+    The limit is counted per minute, so the wait has to be able to outlast a minute. Until 2026-11-18 it was 2, 4
+    and 8 s, 14 s in all, and an investigation that met a full bucket still died (2 of 167 in run v6). Now 2, 4, 8,
+    16 and 32 s, 62 s in all, each with up to a second of jitter so that two investigations of one analyst do not
+    ask again at the same instant. Retry-After is honoured when the Gateway sends it, up to MAX_DELAY. A throttled
+    investigation is slower; it does not fail."""
 
     RETRY_STATUS = (429, 503)
+    MAX_DELAY = 60.0
 
-    def __init__(self, *args: Any, max_retries: int = 3, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, max_retries: int = 5, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.max_retries = max_retries
 
@@ -104,7 +114,10 @@ class RetryOn429(_httpx.AsyncHTTPTransport):
                 return response
             await response.aclose()
             retry_after = response.headers.get("retry-after")
-            delay = float(retry_after) if retry_after and retry_after.isdigit() else 2.0 * (2**attempt)
+            if retry_after and retry_after.isdigit():
+                delay = min(float(retry_after), self.MAX_DELAY)
+            else:
+                delay = 2.0 * (2**attempt) + random.random()
             log.warning(
                 "gateway answered %s; retry %d/%d in %.0fs", response.status_code, attempt + 1, self.max_retries, delay
             )
@@ -168,6 +181,14 @@ class InvestigationGuard(HookProvider):
         registry.add_callback(BeforeToolCallEvent, self.before_tool)
         registry.add_callback(AfterToolCallEvent, self.after_tool)
 
+    def _answered_for_this_alert(self, tool: str, inputs: dict[str, Any], body: Any) -> bool:
+        """An evidence tool counts when its answer names this alert: what policies 03a, 03b and 04 match. A result
+        for another alert, or one that names no alert, is not evidence for this one. Any other tool counts unless
+        it was asked about another alert."""
+        if tool in REQUIRED_EVIDENCE + CLOSE_EVIDENCE:
+            return isinstance(body, dict) and body.get("alert_id") == self.alert_id
+        return inputs.get("alert_id") in (None, self.alert_id)
+
     # -- before: validate what is about to leave ------------------------------------------------------
     def before_tool(self, event: BeforeToolCallEvent) -> None:
         name = event.tool_use["name"]
@@ -218,10 +239,10 @@ class InvestigationGuard(HookProvider):
         missing = [t for t in needed if t not in self.ok_tools]
         if missing:
             msg = (
-                "proposal held back before it reached the Gateway: these evidence tools have not returned a result "
-                f"for alert {self.alert_id} in this investigation: {', '.join(missing)}. A call that answered with "
-                "an error is not evidence. Run them; if one keeps failing, say what failed and stop instead of "
-                "proposing."
+                "proposal held back before it reached the Gateway: these evidence tools have not answered for alert "
+                f"{self.alert_id} in this investigation: {', '.join(missing)}. A call that answered with an error, "
+                "or that was made without the alert_id, is not evidence. Run them with alert_id set to this alert; "
+                "if one keeps failing, say what failed and stop instead of proposing."
             )
             self.rejections.append(msg)
             event.cancel_tool = msg
@@ -289,9 +310,9 @@ class InvestigationGuard(HookProvider):
             self.calls[-1]["ms"] = int((time.time() - self.calls[-1].pop("t", time.time())) * 1000)
             self.calls[-1]["status"] = "error" if failed else "ok"
         inputs = event.tool_use.get("input") or {}
-        if not failed and inputs.get("alert_id") in (None, self.alert_id):
-            # a result for another alert is not evidence for this one
-            self.ok_tools.add(name.removeprefix(TOOL_PREFIX))
+        tool = name.removeprefix(TOOL_PREFIX)
+        if not failed and self._answered_for_this_alert(tool, inputs, body):
+            self.ok_tools.add(tool)
             if (
                 name == f"{TOOL_PREFIX}get_alert"
                 and self.mode != "draft_stor"  # Level 2 may draft the STOR after recording DRAFT_STOR

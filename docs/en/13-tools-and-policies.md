@@ -47,7 +47,7 @@ Policies 03a, 03b and 04 are the platform's form of "look before you propose". S
 
 The policies are one layer. Four others matter when someone asks what stops the agent.
 
-- **The Gateway's rate limits.** 60 requests a minute per analyst, and 3 writes a minute per analyst on the two write tools (`STATUS.md`, deployed resources).
+- **The Gateway's rate limits.** 60 requests a minute per analyst, and 3 writes a minute per analyst on the two write tools (`STATUS.md`, deployed resources). The write limit is the one that pushes back in practice: an analyst who runs two investigations at once is slowed down, and the agent waits for the limit instead of failing (2026-11-18).
 - **The tools Lambda's access rights.** The function behind the tools may update only the proposal fields of a case. It cannot write a decision, and it cannot replace or delete a case (`08-broker-brief.md`, section 2b).
 - **The recording API.** A decision is recorded once, by a person; only Level 2 can supersede it, and the earlier decision stays on the case. It accepts only the analyst's recording login. The token the agent holds during an investigation is a different one and is refused there (401, verified 2026-11-17).
 - **The agent's own guard.** It holds a proposal back until the evidence tools returned a result for this alert. Until 2026-11-17 it was the only control that did: a tool call that returned an error counted as a completed call for policies 03a, 03b and 04. The policies now check the same thing, so the guard is the first of two (`10-operations.md`, section 5).

@@ -314,12 +314,16 @@ class SurvFirmStack(Stack):
                 group_name=g,
                 description=f"Level {g[1]} surveillance analysts",
             )
-        for user, group in (("l1.analyst", "L1"), ("l2.reviewer", "L2")):
+        # The third column is the construct id suffix: the first two keep the ids they were created with.
+        # `l1.analyst2` (2026-11-18) exists for evaluation runs: the Gateway's write limit is 3 proposals a minute
+        # PER ANALYST, so two investigations in parallel under one analyst sit on it. A run gives each worker its
+        # own analyst, the way a firm's desk has several, instead of the limit being raised for the harness.
+        for user, group, cid in (("l1.analyst", "L1", "L1"), ("l2.reviewer", "L2", "L2"), ("l1.analyst2", "L1", "L1B")):
             u = cognito.CfnUserPoolUser(
-                self, f"User{group}", user_pool_id=pool.user_pool_id, username=user, message_action="SUPPRESS"
+                self, f"User{cid}", user_pool_id=pool.user_pool_id, username=user, message_action="SUPPRESS"
             )
             att = cognito.CfnUserPoolUserToGroupAttachment(
-                self, f"Attach{group}", user_pool_id=pool.user_pool_id, group_name=group, username=user
+                self, f"Attach{cid}", user_pool_id=pool.user_pool_id, group_name=group, username=user
             )
             att.add_resource_dependency(u)
 

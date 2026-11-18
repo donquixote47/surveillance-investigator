@@ -28,7 +28,7 @@ George is a TAM at AWS whose customers are brokers, traders and some HFT firms. 
 - Gateway target name is `surv`; tools are therefore `surv___<tool>` in MCP and `AgentCore::Action::"surv___<tool>"` in policies.
 - AgentCore resource names use the prefix `surv_investigator` (Runtime, Memory, Policy Engine) or `surv-investigator` (Gateway). Tag everything `Project=agentcore-surveillance-investigator`.
 - Policies live in `policies/` as `.cedar` (stateless) and `.dw` (temporal) files, one rule per file, named `NN-<what-it-enforces>.cedar`, each with a header comment stating the business control it implements.
-- Synthetic data generator and detector live in `src/market_sim/` and `src/detector/`; agent in `app/surv_investigator_l1/` (decision log 2026-11-03); tool Lambdas in `src/tools/`.
+- Synthetic data generator and detector live in `src/market_sim/` and `src/detector/`; agent in `app/surv_investigator_l1/` (decision log 2026-11-03), a folder that is zipped whole into the Runtime bundle, so its tests live beside it in `app/tests/` and its packages are locked in its `pyproject.toml` (decision log 2026-11-18); tool Lambdas in `src/tools/`.
 
 ## Documentation is bilingual
 

@@ -100,6 +100,11 @@ export class AgentCoreStack extends Stack {
     const runtime = this.application.runtime('surv_investigator_l1');
     runtime.addToRolePolicy(bundleRead('ReadConfigurationBundles'));
     gateway.addToRolePolicy(bundleRead('GatewayReadsConfigurationBundles'));
+    // 60 requests a minute per analyst. Measured 2026-11-18: one investigation makes about 13 Gateway requests in
+    // about 25 s, so one analyst working one alert at a time stays near 30 a minute and two investigations in
+    // parallel near 50. This limit has not been seen to answer: in run v6 every throttled request that was traced,
+    // 78 of them, was `propose_disposition`, which is the write limit below. It was raised to 120 for an hour on
+    // 2026-11-18 on that wrong diagnosis and put back. A brake on volume, not a security boundary.
     new bedrockagentcore.CfnGatewayRateLimit(this, 'PerAnalystRequests', {
       gatewayIdentifier: gateway.gatewayId,
       rateLimitId: 'per-analyst-requests',
@@ -107,6 +112,10 @@ export class AgentCoreStack extends Stack {
       dimensionKeys: [analyst],
       entries: [{ dimensions: { [analyst]: '*' }, requests: [{ rate: 60, period: 'minute' }] }],
     });
+    // 3 proposals and 3 drafts a minute per analyst: one alert at a time fits (an investigation takes about 25 s),
+    // two in parallel sit on it. This is the limit evaluation runs meet at concurrency 2: 79 of 169 invocations
+    // of run v6 got a 429 on their proposal. It is meant to push back; the agent waits it out (RetryOn429, up to
+    // about a minute since Runtime v20) instead of failing.
     new bedrockagentcore.CfnGatewayRateLimit(this, 'PerAnalystWrites', {
       gatewayIdentifier: gateway.gatewayId,
       rateLimitId: 'per-analyst-writes',

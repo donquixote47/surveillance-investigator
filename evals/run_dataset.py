@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import random
+import re
 import sys
 import threading
 import time
@@ -69,19 +70,47 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-class Tokens:
-    """One analyst token, refreshed before Cognito's 60-minute expiry."""
+def analysts_of(env: dict[str, str], level: str) -> list[str]:
+    """The analysts of one level in the local credentials file, the first one first: `L1`, then `L1B`, `L1C`...
+    (`SURV_L1_USER`, `SURV_L1B_USER`). Each needs its `_PASSWORD` next to it."""
+    found = [k[len("SURV_") : -len("_USER")] for k in env if re.fullmatch(rf"SURV_{level}[A-Z]?_USER", k)]
+    return sorted(u for u in found if env.get(f"SURV_{u}_PASSWORD"))
 
-    def __init__(self, env: dict[str, str], user: str):
-        self.env, self.user = env, user
-        self._tok, self._at = None, 0.0
+
+class Tokens:
+    """Analyst tokens, refreshed before Cognito's 60-minute expiry, one analyst per worker thread.
+
+    The Gateway's limits are counted per analyst, and the write limit is 3 proposals a minute. Two investigations
+    in parallel under ONE analyst ask for nearly four a minute and sit on that limit for the whole run: 79 of 169
+    invocations of run v6 met a 429 on their proposal, and with the agent waiting a minute (Runtime v20) 4 of 167
+    in run v7 still gave up. A firm's desk has several analysts, each with a limit of their own, so each worker
+    thread takes its own analyst, round-robin, and keeps it."""
+
+    def __init__(self, env: dict[str, str], users: str | list[str]):
+        self.env = env
+        self.users = [users] if isinstance(users, str) else list(users)
+        self.user = self.users[0]
+        self._tokens: dict[str, tuple[str, float]] = {}
         self._lock = threading.Lock()
+        self._worker = threading.local()
+        self._assigned = 0
+
+    def analyst(self) -> str:
+        """The analyst of the calling thread, assigned the first time the thread asks."""
+        if not hasattr(self._worker, "user"):
+            with self._lock:
+                self._worker.user = self.users[self._assigned % len(self.users)]
+                self._assigned += 1
+        return self._worker.user
 
     def get(self) -> str:
+        user = self.analyst()
         with self._lock:
-            if self._tok is None or time.time() - self._at > TOKEN_TTL_S:
-                self._tok, self._at = access_token(self.env, self.user), time.time()
-            return self._tok
+            token, at = self._tokens.get(user, ("", 0.0))
+            if not token or time.time() - at > TOKEN_TTL_S:
+                token, at = access_token(self.env, user), time.time()
+                self._tokens[user] = (token, at)
+            return token
 
 
 class Cases:
@@ -593,7 +622,20 @@ def main() -> int:
         (out_dir / "run.json").write_text(json.dumps(run, indent=1))
 
     env = load_env(CREDS)
-    tokens = Tokens(env, args.user)
+    # one analyst per worker, as far as the credentials file has them (see Tokens)
+    analysts = (analysts_of(env, args.user) or [args.user])[: max(1, args.concurrency)]
+    tokens = Tokens(env, analysts)
+    names = [env[f"SURV_{u}_USER"] for u in analysts]
+    if run.get("analysts", names) == names:
+        run["analysts"] = names
+    else:  # a resumed run keeps the record of who started it
+        run["analysts_on_resume"] = names
+    (out_dir / "run.json").write_text(json.dumps(run, indent=1))
+    if args.concurrency > len(analysts):
+        print(
+            f"note: {args.concurrency} workers share {len(analysts)} analyst(s); the Gateway allows each analyst 3 "
+            "proposals a minute, so proposals will be throttled (scripts/gateway_throttling.py shows how often)"
+        )
     bundle = args.bundle
     if bundle and ":" not in bundle:  # a name from the local registry
         reg_path = ROOT / "evals" / "bundles.json"
@@ -613,8 +655,8 @@ def main() -> int:
 
     rep_note = f" x {len(repeats)} repetitions = {len(work)} investigations" if len(repeats) > 1 else ""
     print(
-        f"run {run_id}: {len(selection)} alerts{rep_note}, backend={args.backend}, user={args.user}, "
-        f"concurrency={args.concurrency}"
+        f"run {run_id}: {len(selection)} alerts{rep_note}, backend={args.backend}, user={args.user} "
+        f"({', '.join(names)}), concurrency={args.concurrency}"
     )
     print(f"outputs: {out_dir}")
     t_run = time.time()

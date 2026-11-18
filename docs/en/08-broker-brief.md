@@ -48,7 +48,7 @@ Every alert ends in exactly one disposition.
 | **ESCALATE** | Cannot be closed in good conscience, but not clear-cut abuse either: the features are present with no supported explanation, or the evidence is mixed. A Level-2 analyst takes it further. This is the *safe* outcome: an ESCALATE on a false positive costs analyst time; a CLOSE_FP on a spoofer costs a fine. The gate counts only the second mistake. | the agent | L1 or L2 |
 | **DRAFT_STOR** | Clear enough to report to the regulator. STOR = Suspicious Transaction and Order Report, the filing MAR Art. 16(2) requires when a firm has reasonable suspicion; it has fixed fields (who, what, when, why suspicious, which Annex II indicators). Needs both features, a clear benefit, and repetition or scale that leaves no reasonable alternative. | the agent (Level 1 may propose it) | **L2 only**; only L2 may ask the agent to draft the STOR fields; nothing is filed by the system |
 
-In the evaluation set, 139 alerts have ground truth CLOSE_FP, 25 ESCALATE and 3 DRAFT_STOR (the spoofer who repeats the cycle three to six times in ten minutes). The promoted run proposed 130 / 36 / 1: it under-called two of the three STOR cases as ESCALATE, which is safe (Level 2 sees them) but counts as an override.
+In the evaluation set, 139 alerts have ground truth CLOSE_FP, 25 ESCALATE and 3 DRAFT_STOR (the spoofer who repeats the cycle three to six times in ten minutes). The promoted run proposed 133 / 33 / 1: it under-called two of the three STOR cases as ESCALATE, which is safe (Level 2 sees them) but counts as an override.
 
 **Can the agent close an alert by itself? No.** When the agent "closes", it calls `propose_disposition` with CLOSE_FP, and the case gets `proposed_disposition`, `proposed_at`, `confidence`, `report` and the status *PROPOSED*. The alert is still open. Closing is the analyst pressing "record", writing the mandatory note, and the human path writing `recorded_disposition`, `recorded_by`, `recorded_at` and the status *CLOSED*. Five layers keep the agent on the proposing side:
 
@@ -185,11 +185,11 @@ On a synthetic dataset of 167 alerts over 20 trading days (28 true spoofing or l
 | | threshold rules | investigator (promoted run) |
 |---|---|---|
 | True-abuse alerts proposed as "close" | **6 of 28** (partially executed spoofs) | **0 of 28** |
-| False positives closed | 95.7% | 94.2% |
-| Share of alerts the analyst would have to override | 7.2% | **6.0%** |
-| Share of escalations that are real abuse | 78.6% | 77.8% |
+| False positives closed | 95.7% | 95.7% |
+| Share of alerts the analyst would have to override | 7.2% | **4.8%** |
+| Share of escalations that are real abuse | 78.6% | 82.4% |
 
-Read it this way: the rules close more, but they close six real spoofers, which no compliance function can accept. The investigator closes nearly as many, closes no spoofer, and needs fewer corrections from the analyst. The run before the last two procedure clarifications closed 79.9% with 18.6% overrides; the gain came from the firm's written standard being made precise, which is how a compliance team would want it to come. The promoted run (2026-11-10) is the one before it with the model's prompt cached and a report-format slip removed: same decisions within the measured noise, half the model cost ($0.09 per alert).
+Read it this way: the rules close as many false positives, and with them six real spoofers, which no compliance function can accept. The investigator closes the same number, closes no spoofer, and needs fewer corrections from the analyst. The run before the last two procedure clarifications closed 79.9% with 18.6% overrides; the gain came from the firm's written standard being made precise, which is how a compliance team would want it to come. The promoted run (2026-11-10) is the one before it with the model's prompt cached and a report-format slip removed: same decisions within the measured noise, half the model cost ($0.09 per alert).
 
 The numbers move a little between two identical runs, because the model is not deterministic. That was measured by investigating 21 alerts five times each: 18 came out the same every time, no real abuse was ever closed, and the three that varied were two boundary false positives (a fat finger, a news reaction, closed 4 and 3 times out of 5) and the escalation level on one layering case. On the full set this is about one point of the "false positives closed" figure; a difference under two points between two runs is not treated as a change.
 

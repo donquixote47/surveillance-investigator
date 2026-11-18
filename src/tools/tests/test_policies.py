@@ -62,3 +62,14 @@ def test_every_evidence_tool_declares_the_alert_id_it_returns() -> None:
     for tool in EVIDENCE_TOOLS:
         for source in (next(t for t in schema.TOOLS if t["name"] == tool), exported[tool]):
             assert source["outputSchema"]["properties"]["alert_id"]["type"] == "string", tool
+
+
+def test_the_project_file_fits_the_cli_limits() -> None:
+    """The AgentCore CLI rejects the whole project file when an endpoint description is longer than 200
+    characters, and says so only at deploy time (2026-11-18: the move of `demo` to v20 failed on a 250-character
+    description before anything was deployed)."""
+    project = json.loads((ROOT / "agentcore" / "agentcore.json").read_text())
+    for runtime in project["runtimes"]:
+        for name, endpoint in runtime.get("endpoints", {}).items():
+            assert len(endpoint.get("description", "")) <= 200, f"{runtime['name']}.{name}"
+            assert isinstance(endpoint["version"], int), f"{runtime['name']}.{name}"
