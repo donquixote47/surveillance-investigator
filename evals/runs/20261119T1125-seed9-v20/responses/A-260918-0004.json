@@ -1,0 +1,392 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "repeat": null,
+  "session_id": "surv-eval-20261119T1125-seed9-v20-A-260918-0004-ac5eff26",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-19T11:30:19+00:00",
+  "wall_s": 29.5
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-260918-0004",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.8,
+   "report": {
+    "alert_id": "A-260918-0004",
+    "scenario": "SPOOFING",
+    "summary": "Registered ETF-MM market maker on SYN.A, quoting a SELL of 4311 (its typical size) and a BUY of 862 together and cancelling and re-quoting both every ~3s, following the touch down from 10001 to 9993 ticks. The SELL quotes were executing: 19282 filled before any opposite-side trade. There was no opposite-side execution at all, so no benefit. No order reached 3x depth. The detector's 'SELL execution' is a fill on the trader's own resting SELL quote, not an opposite-side trade. Both core features are absent and market making is supported.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_trader_profile",
+      "fact": "role MARKET_MAKER, desk ETF-MM, registered_mm_instruments ['SYN.A'], typical_order_size 4311, no risk events in window"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "opposite_side_fill_qty 0; same_side_fill_qty 19282, all before any opposite trade (same_side_fill_share 0.1491); notes: 'the resting order was trading'"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 1.694; large_orders empty; distance_from_touch_ticks -0.8; round_trip_ticks null; price_move_ticks null; repetitions_in_session 0"
+     },
+     {
+      "id": "E4",
+      "source": "get_order_events",
+      "fact": "SELL 4311 and BUY 862 are placed within milliseconds of each other and cancelled together at the same timestamp (e.g. 16:10:26.728, 16:10:29.728), then re-quoted 1 tick lower as the touch fell. Orders are LIMIT, with no parent ids. SELL quotes had many partial fills (e.g. O-00035496 filled 3,000+ in total)."
+     },
+     {
+      "id": "E5",
+      "source": "compute_discriminators",
+      "fact": "cancel_symmetry 0.38 (BUY sizes are 1/5 of SELL sizes, but cancels are paired in time); cancel_ratio 0.876; otr 2.35 vs typical daily OTR 35; market_wide_cancels_1s_before_first_cancel 2"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "no market events in the window"
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_alert_history",
+      "fact": "no prior alerts on this trader"
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2544; avg spread 2.29 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "high order-to-trade ratio (Annex II 4(f)): cancel_ratio 0.876 only; OTR 2.35 is well below the trader's typical 35",
+     "size large relative to visible depth (partial, 1.69x, below the 3x large-order threshold)"
+    ],
+    "indicators_not_matched": [
+     "opposite-side execution before the cancel",
+     "orders with no intention to execute",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)",
+     "orders away from the touch"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making (registered on SYN.A, two-sided quotes cancelled and re-quoted together, typical size)",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "genuine execution of the resting order",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.8,
+    "what_would_change_my_mind": "Evidence of an opposite-side (BUY) execution by this trader, or of the 862 BUY or the 4311 SELL quotes being used as a one-sided display with a favourable price move and reversion. Also, if the 0.38 cancel symmetry reflected genuinely one-sided cancelling rather than a size ratio.",
+    "memory_used": [
+     "Desk ETF-MM notes: prior SYN.A alerts on T-MM-01/T-MM-02 and A-261009-0003 were closed as registered market making with two-sided quotes and no opposite-side benefit. Context only. The same explanation holds on today's tape because of E1-E4."
+    ],
+    "window_used": "Detector window 16:10:04.728 to 16:11:56.998 (padded 5s on order events). No longer frame was examined.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-260918-0004",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-260918-0004",
+   "proposed_at": "2026-11-19T11:30:45+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-260918-0004"
+    },
+    "ms": 198,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 182,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-260918-0004",
+     "instrument": "SYN.A",
+     "trader_id": "T-X0918-04"
+    },
+    "ms": 921,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-260918-0004",
+     "pad_seconds": 5
+    },
+    "ms": 252,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-260918-0004"
+    },
+    "ms": 456,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X0918-04",
+     "alert_id": "A-260918-0004"
+    },
+    "ms": 235,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "alert_id": "A-260918-0004"
+    },
+    "ms": 231,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-09-18",
+     "instrument": "SYN.A"
+    },
+    "ms": 187,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X0918-04",
+     "alert_id": "A-260918-0004"
+    },
+    "ms": 224,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-260918-0004",
+     "disposition": "CLOSE_FP",
+     "confidence": 0.8,
+     "report": "<report>"
+    },
+    "ms": 229,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Disposition:** CLOSE_FP, proposed. Confidence 0.8. A human analyst still has to decide.\n\n**Facts that drove it:**\n1. T-X0918-04 is a registered market maker on SYN.A (ETF-MM desk). It quoted a SELL of 4311, its typical size, and a BUY of 862 together. It cancelled and re-quoted both every ~3 seconds as the touch fell.\n2. There was no opposite-side execution at all, so feature (b) is absent. The detector's \"SELL execution\" is a fill on the trader's own resting SELL quote. 19,282 filled on those quotes, so the orders were working and feature (a) is absent too.\n3. No order reached 3x depth (the peak was 1.69x). There were no market events or risk events in the window. The trader has no prior alerts, and the order-to-trade ratio of 2.35 is far below its typical 35.\n\n**What would change my mind:** An opposite-side BUY execution by this trader. A one-sided display with a favourable price move and reversion would do the same. One caveat: cancel symmetry is 0.38, which I read as the 5:1 size ratio between the two sides, since the cancels are paired in time. If it turned out to be genuinely one-sided cancelling, I would revisit.",
+  "usage": {
+   "input_tokens": 10,
+   "output_tokens": 3146,
+   "total_tokens": 89891,
+   "cache_read_tokens": 57389,
+   "cache_write_tokens": 29346,
+   "model_calls": 4
+  },
+  "duration_s": 23.9,
+  "session_id": "surv-eval-20261119T1125-seed9-v20-A-260918-0004-ac5eff26",
+  "error": null,
+  "bundle": "none",
+  "decided": null,
+  "analyst": "l1.analyst2",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-260918-0004",
+  "case_id": "C-A-260918-0004",
+  "confidence": "0.8",
+  "date": "2026-09-18",
+  "proposal_count": "2",
+  "proposal_history": [
+   {
+    "confidence": "0.8",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-17T13:00:46+00:00",
+    "replaced_at": "2026-11-19T11:30:45+00:00",
+    "session_id": "surv-eval-20261117T1255-seed9-mm-A-260918-0004-232723c0"
+   }
+  ],
+  "proposal_provenance": "{\"session_id\": \"surv-eval-20261119T1125-seed9-v20-A-260918-0004-ac5eff26\", \"analyst\": \"l1.analyst2\", \"model_id\": \"eu.anthropic.claude-sonnet-5-5\", \"bundle\": \"none\", \"mode\": \"investigate\", \"memory\": \"on\"}",
+  "proposed_at": "2026-11-19T11:30:45+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "Registered ETF-MM market maker on SYN.A, quoting a SELL of 4311 (its typical size) and a BUY of 862 together and cancelling and re-quoting both every ~3s, following the touch down from 10001 to 9993 ticks. The SELL quotes were executing: 19282 filled before any opposite-side trade. There was no opposite-side execution at all, so no benefit. No order reached 3x depth. The detector's 'SELL execution' is a fill on the trader's own resting SELL quote, not an opposite-side trade. Both core features are absent and market making is supported.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_trader_profile",
+     "fact": "role MARKET_MAKER, desk ETF-MM, registered_mm_instruments ['SYN.A'], typical_order_size 4311, no risk events in window"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "opposite_side_fill_qty 0; same_side_fill_qty 19282, all before any opposite trade (same_side_fill_share 0.1491); notes: 'the resting order was trading'"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 1.694; large_orders empty; distance_from_touch_ticks -0.8; round_trip_ticks null; price_move_ticks null; repetitions_in_session 0"
+    },
+    {
+     "id": "E4",
+     "source": "get_order_events",
+     "fact": "SELL 4311 and BUY 862 are placed within milliseconds of each other and cancelled together at the same timestamp (e.g. 16:10:26.728, 16:10:29.728), then re-quoted 1 tick lower as the touch fell. Orders are LIMIT, with no parent ids. SELL quotes had many partial fills (e.g. O-00035496 filled 3,000+ in total)."
+    },
+    {
+     "id": "E5",
+     "source": "compute_discriminators",
+     "fact": "cancel_symmetry 0.38 (BUY sizes are 1/5 of SELL sizes, but cancels are paired in time); cancel_ratio 0.876; otr 2.35 vs typical daily OTR 35; market_wide_cancels_1s_before_first_cancel 2"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "no market events in the window"
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_alert_history",
+     "fact": "no prior alerts on this trader"
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2544; avg spread 2.29 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "opposite-side execution before the cancel",
+    "orders with no intention to execute",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)",
+    "orders away from the touch"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "high order-to-trade ratio (Annex II 4(f)): cancel_ratio 0.876 only; OTR 2.35 is well below the trader's typical 35",
+    "size large relative to visible depth (partial, 1.69x, below the 3x large-order threshold)"
+   ],
+   "alert_id": "A-260918-0004",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making (registered on SYN.A, two-sided quotes cancelled and re-quoted together, typical size)",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "genuine execution of the resting order",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "Desk ETF-MM notes: prior SYN.A alerts on T-MM-01/T-MM-02 and A-261009-0003 were closed as registered market making with two-sided quotes and no opposite-side benefit. Context only. The same explanation holds on today's tape because of E1-E4."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 16:10:04.728 to 16:11:56.998 (padded 5s on order events). No longer frame was examined.",
+   "what_would_change_my_mind": "Evidence of an opposite-side (BUY) execution by this trader, or of the 862 BUY or the 4311 SELL quotes being used as a one-sided display with a favourable price move and reversion. Also, if the 0.38 cancel symmetry reflected genuinely one-sided cancelling rather than a size ratio."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X0918-04"
+ }
+}

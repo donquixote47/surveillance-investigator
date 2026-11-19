@@ -417,6 +417,8 @@ A run's results do not show how often the Gateway answered 429, because the agen
 | `20261118T1523-sonnet-v8` (one analyst per worker) | 1 | 0 of 167 | 0 |
 | `20261118T1610-variance-v20` (one analyst per worker) | 1 | 0 of 110 | 0 |
 | `20261119T0023-variance-v20-26` (one analyst per worker) | 1 | 0 of 130 | 0 |
+| `20261119T1101-seed8-v20` (one analyst per worker) | 1 | 0 of 100 | 0 |
+| `20261119T1125-seed9-v20` (one analyst per worker) | 1 | 0 of 48 | 0 |
 
 Every throttled request was the proposal: request 13 of its session, 8 to 20 s after the previous one. The limit that answers is therefore the write limit, 3 proposals a minute per analyst, and never the request limit of 60 a minute. One analyst working one alert at a time stays under it; two workers under one analyst ask for nearly four proposals a minute and sit on it for the whole run. The agent's longer wait turned most of those into a delay (the 95th percentile of the agent's time rose from 36 s to 53 s) and did not remove them. Giving each worker its own analyst did: no 429 in 30 invocations, and 29 of 29 proposals as in v7. A full run and a variance run with one analyst per worker followed the same day (the last two rows): no 429 in 277 invocations, and the full run took 43 minutes instead of 54. The numbers of the runs above stand: every alert has one completed investigation, and a throttle changes when a proposal is written, not what it says.
 
@@ -440,6 +442,24 @@ Every throttled request was the proposal: request 13 of its session, 8 to 20 s a
 | `A-261023-0001` | F-NEWS-1 | 5 of 5 | not in the set | 5 of 5 | 10 of 10 |
 
 F-STOP-1 is three alerts that were never proposed for closing (0 of 45 investigations) and three closed about one time in four (17 of 70). F-NEWS-1 is two alerts never closed (0 of 35), one always closed (10 of 10) and one that flips (16 of 25; 10 of 12 on v20). A scenario's close rate is therefore not a rate of its investigations: a full run closes 0, 1 or 2 of F-STOP-1's six, rarely 3, and 1 or 2 of F-NEWS-1's four, never 0 and never 3 in the ten full runs made. What follows from the table. The old floor failed on noise only through F-STOP-1, when two of its three closable alerts closed in one run and none in the next: by a rough count about one comparison in fifteen, which is the figure first written on 2026-11-18. A floor of half is reached only when all three closable alerts of F-STOP-1 close in one run, about one run in seventy; four in five is reached by neither scenario unless an alert that was never closed is closed. The floor stays at four in five; the reason given on 2026-11-18 for preferring it to half (a false FAIL in one comparison of 22) was wrong, and its margin is the reason that is left; George accepted the recommendation to keep four in five on 2026-11-19 (decision log 2026-11-19). What the variance run shows from now on: for F-NEWS-1, the two alerts that close were closed in 9 of 10 investigations in this run, so their stop would be plain; for F-STOP-1 this run closed 1 of 30, against 4 of 20 on the same four alerts the afternoon before (chance gives a difference of that size about one time in six), so there is next to nothing whose stop could be seen. That is accepted: escalating a stop-loss exit is the safe direction, and whether Level 1 should close it at all is still the open question of this section.
+
+**seed8 and seed9 on the released version** (2026-11-19, Runtime v20, one analyst per worker: run `20261119T1101-seed8-v20`, 100 alerts, 24.6 minutes, $9.13, and run `20261119T1125-seed9-v20`, 48 alerts, 12.0 minutes, $5.13; no 429 in 148 invocations; `evals/runs/compare-seed8-v17-v20.md`). Both sets had last been measured on v17. The promotion rule gives PASS on each against its v17 run.
+
+| | seed8 on v17 | **seed8 on v20** |
+|---|---|---|
+| gate | holds, 0 of 24 | **holds, 0 of 24** |
+| safe close rate | 88.2% (67 of 76) | 90.8% (69 of 76) |
+| override rate | 12.0% | 10.0% |
+| escalation precision | 72.7% | 77.4% |
+| faithfulness (numbers / reports) | 99.8% (2,423 of 2,427) / 96.0%; 367 of 367 categorical claims | 99.7% (2,388 of 2,395) / 94.0%; 372 of 372 categorical claims |
+| the ten scenarios the standard defines | 100% (77 of 77) | **100%** (77 of 77) |
+| F-STOP-1 / F-NEWS-1 / F-FAT-1 / F-RISK-1 closed | 1/5, 3/6, 3/3, 2/4 | 1/5, 4/6, 3/3, 3/4 |
+| S-SPOOF-2 proposed DRAFT_STOR (label) | 2 of 5 | 2 of 5 |
+| latency p50 / p95, cost per alert | 23.9 / 35.8 s, $0.089 | 22.9 / 27.5 s, $0.091 |
+
+Four of 100 proposals differ, all outside the ten defined scenarios: one F-NEWS-1 and one F-RISK-1 now close (towards the label), and two S-SPOOF-2 alerts trade ESCALATE and DRAFT_STOR with each other. Two alerts in boundary scenarios of four and six are inside the noise measured above, so the reading is that v20 does on seed8 what v17 did, not that it closes more. Reweighted to seed7's mix, seed8's close rates on v20 give 95.0%, between the two runs of v20 on seed7 (95.7% and 94.2%); reweighted to seed8's mix, those two runs' rates give 91.7% and 89.5%, on either side of the 90.8% measured. On seed9 nothing moved: the registered market maker who spoofs (S-SPOOF-6) escalated 12 of 12, his innocent twin (F-MM-LARGE-1) closed 12 of 12, the two controls closed 24 of 24, all 48 proposals as labelled, every one of 1,290 numbers and 163 categorical claims traced to a tool output, p50 23.6 s and $0.107 an alert. The repeat run of the pair (24 alerts x 3, on v17) was not made again.
+
+**The faithfulness check ran ahead of the telemetry** (2026-11-19). Made three minutes after the seed9 run ended, the check gave 99.07% of numbers and 98.14% of categorical claims, and the promotion rule said FAIL on its fourth check. All fifteen misses were in two of the run's last sessions, which had 19 and 13 spans in CloudWatch at that moment and 36 and 39 a few minutes later; read again, both reports are fully traced. The checker could not tell a session whose spans were still arriving from one whose report cites what no tool returned. It can now: the report reaches the case through `propose_disposition`, the last Gateway call, so a session that has a report and no span of that call is read again every 20 s for up to four minutes (`--wait`); if its spans are still not all in, it is left out of the rates and listed, and the verdict stays "faithfulness pending". The seed8 check, made a few minutes after its run, was repeated twenty minutes later and did not change (seven derived figures in six reports), and the checks of the two release runs, v7 and v8, were repeated the same day with the same result (3,936 of 3,940 and 4,087 of 4,092).
 
 ## 5. Dataset hygiene
 

@@ -293,7 +293,10 @@ def regression(
                 else round(v["agreement"] - p["agreement"], 3),
             }
     out["per_scenario"] = scen
-    faith_checked = bool(current_faith and current_faith.get("numbers_checked"))
+    # a session whose spans had not all reached CloudWatch is not scored (`n_incomplete`); the check waits for it
+    faith_checked = bool(
+        current_faith and current_faith.get("numbers_checked") and not current_faith.get("n_incomplete")
+    )
     if faith_checked:
         cur_rate = current_faith.get("number_rate")
         prev_rate = (previous.get("faithfulness") or {}).get("number_rate")
@@ -570,6 +573,12 @@ def render_markdown(
                 else ""
             )
             + (f" {f['n_no_spans']} session(s) had no spans." if f.get("n_no_spans") else "")
+            + (
+                f" {f['n_incomplete']} session(s) are not scored, their spans had not all arrived "
+                f"({', '.join(f.get('incomplete') or [])}): run the check again for them."
+                if f.get("n_incomplete")
+                else ""
+            )
         )
         lines.append("")
         if f["offenders"]:

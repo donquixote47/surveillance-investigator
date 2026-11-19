@@ -1,0 +1,442 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "repeat": null,
+  "session_id": "surv-eval-20261119T1125-seed9-v20-A-260923-0001-cff93dc6",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-19T11:32:31+00:00",
+  "wall_s": 31.7
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-260923-0001",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "CLOSE_FP",
+   "confidence": 0.75,
+   "report": {
+    "alert_id": "A-260923-0001",
+    "scenario": "SPOOFING",
+    "summary": "Registered SYN.A market maker (desk ETF-MM) quoting two-sided at its typical 4059 size, plus one large BUY O-00005963 (34241, 13.2x depth, 1 tick behind the touch). The large order was working: 16367 (47.8%) executed before the trader's only opposite-side trade (SELL 676 at 10:13:01.749), 17298 in total, and only the remainder (16943) was cancelled. A small opposite trade while the order was working and the later cancel of its remainder are ordinary order management under section 6.2. Feature (a) is absent. Feature (b) is also absent: the price move on that order was 0.5 tick with 0.5 tick reversion, and the opposite trade was 676 against 16367 already executed. There was no public event and no risk event. The detector triggers come from the quote refresh cycle (4059 BUY and SELL cancelled together), which is symmetric market making.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "compute_discriminators",
+      "fact": "large_orders O-00005963 BUY qty 34241, size_vs_depth 13.19, distance_from_touch_ticks -1.0, executed_qty_before_opposite_trade 16367, executed_share_before_opposite_trade 0.478, executed_qty_after_opposite_trade 931, cancelled_qty 16943"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "opposite_trade_qty 676 at 10:13:01.749, price_move_ticks 0.5, reversion_ticks 0.5 for the large order; ms_from_opposite_trade_to_first_withdrawal 3466.5"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "cancel_symmetry 0.9226, cancel_ratio 0.88, otr 2.43, repetitions_in_session 1, market_wide_cancels_1s_before_first_cancel 0, parent_order_ids empty, all order types LIMIT"
+     },
+     {
+      "id": "E4",
+      "source": "get_trader_profile",
+      "fact": "role MARKET_MAKER, registered_mm_instruments [SYN.A], typical_order_size 4059, typical_daily_otr 40.0, no risk_limit_events in window"
+     },
+     {
+      "id": "E5",
+      "source": "get_order_events",
+      "fact": "Repeated paired BUY/SELL 4059 quotes at 10001/10002 etc., cancelled together every ~2s; large BUY O-00005963 34241 at 10000 placed 10:12:52.407 with fills of 5206 repeatedly and cancel of 16943 at 10:13:05.216"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "No market events in the window"
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts for this trader in 90 days"
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2596.12, avg spread 2.71 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "size large relative to visible depth",
+     "high order-to-trade ratio (Annex II 4(f))"
+    ],
+    "indicators_not_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "opposite-side execution before the cancel (beneficial)",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)",
+     "orders away from the touch"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "genuine execution of the resting order (partial executions before the opposite trade)",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "market making (registered, two-sided quotes of typical size)",
+      "ruled_out_by": [],
+      "verdict": "supported"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1",
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [],
+      "verdict": "undetermined"
+     }
+    ],
+    "proposed_disposition": "CLOSE_FP",
+    "confidence": 0.75,
+    "what_would_change_my_mind": "Evidence that the large BUY was one-sided and unworking, for example no fills before the 676 SELL, or a material favourable move with reversion tied to its placement. Evidence that the 676 SELL was sized to profit from the large order's presence.",
+    "memory_used": [
+     "Desk ETF-MM prior CLOSE_FP records (e.g. H-T-MM-01-01, 'registered market maker; two-sided quotes re-priced on fair value moves; no opposite-side benefit') are context only. I did not rely on them. The closure rests on today's tape: the large order was working before the opposite trade."
+    ],
+    "window_used": "Detector window 10:11:06.900 to 10:13:06.749 (1790158266900424664 to 1790158386749611168); order events were read with 5s padding; no longer frame was examined.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-260923-0001",
+   "disposition": "CLOSE_FP",
+   "case_id": "C-A-260923-0001",
+   "proposed_at": "2026-11-19T11:32:59+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-260923-0001"
+    },
+    "ms": 184,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 164,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-260923-0001",
+     "instrument": "SYN.A",
+     "trader_id": "T-X0923-01",
+     "query": "prior dispositions and analyst notes on this trader and instrument"
+    },
+    "ms": 875,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-260923-0001",
+     "pad_seconds": 5
+    },
+    "ms": 217,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-260923-0001"
+    },
+    "ms": 568,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X0923-01",
+     "alert_id": "A-260923-0001"
+    },
+    "ms": 176,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "alert_id": "A-260923-0001"
+    },
+    "ms": 254,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-09-23",
+     "instrument": "SYN.A"
+    },
+    "ms": 191,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X0923-01",
+     "alert_id": "A-260923-0001"
+    },
+    "ms": 201,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-260923-0001",
+     "disposition": "CLOSE_FP",
+     "confidence": 0.75,
+     "report": "<report>"
+    },
+    "ms": 202,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** CLOSE_FP. Confidence is 0.75. The proposal is on file as case C-A-260923-0001 and is waiting for a human decision.\n\n**Three facts that drove it:**\n1. The large BUY order O-00005963 (34,241, 13.2x depth) was working. 16,367 (47.8%) executed before the trader's only opposite-side trade, a SELL of 676. 17,298 executed in total, and only the 16,943 remainder was cancelled. Under section 6.2 this is genuine execution, so feature (a) is absent.\n2. There was no benefit from the opposite-side trade, so feature (b) is absent. The price move on that order was 0.5 tick with 0.5 tick of reversion. The SELL of 676 was small next to the 16,367 already executed.\n3. The trader is a registered SYN.A market maker. The detector triggers came from the paired 4,059 BUY and SELL quotes, which were cancelled together (cancel_symmetry 0.92). There was no public event, no risk event and no prior alert.\n\n**What would change my mind:** Evidence that the large BUY was one-sided and not working, such as no fills before the 676 SELL. A material favourable price move with reversion tied to its placement would have the same effect.",
+  "usage": {
+   "input_tokens": 10,
+   "output_tokens": 3393,
+   "total_tokens": 82978,
+   "cache_read_tokens": 53697,
+   "cache_write_tokens": 25878,
+   "model_calls": 4
+  },
+  "duration_s": 24.4,
+  "session_id": "surv-eval-20261119T1125-seed9-v20-A-260923-0001-cff93dc6",
+  "error": null,
+  "bundle": "none",
+  "decided": null,
+  "analyst": "l1.analyst",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-260923-0001",
+  "case_id": "C-A-260923-0001",
+  "confidence": "0.75",
+  "date": "2026-09-23",
+  "proposal_count": "5",
+  "proposal_history": [
+   {
+    "confidence": "0.72",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-17T13:03:11+00:00",
+    "replaced_at": "2026-11-17T15:02:42+00:00",
+    "session_id": "surv-eval-20261117T1255-seed9-mm-A-260923-0001-4830adaf"
+   },
+   {
+    "confidence": "0.8",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-17T15:02:42+00:00",
+    "replaced_at": "2026-11-17T15:15:15+00:00",
+    "session_id": "surv-eval-20261117T1454-seed9-variance-A-260923-0001-r0-97691627"
+   },
+   {
+    "confidence": "0.75",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-17T15:15:15+00:00",
+    "replaced_at": "2026-11-17T15:27:50+00:00",
+    "session_id": "surv-eval-20261117T1454-seed9-variance-A-260923-0001-r1-c2e08163"
+   },
+   {
+    "confidence": "0.72",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-17T15:27:50+00:00",
+    "replaced_at": "2026-11-19T11:32:59+00:00",
+    "session_id": "surv-eval-20261117T1454-seed9-variance-A-260923-0001-r2-455152a0"
+   }
+  ],
+  "proposal_provenance": "{\"session_id\": \"surv-eval-20261119T1125-seed9-v20-A-260923-0001-cff93dc6\", \"analyst\": \"l1.analyst\", \"model_id\": \"eu.anthropic.claude-sonnet-5-5\", \"bundle\": \"none\", \"mode\": \"investigate\", \"memory\": \"on\"}",
+  "proposed_at": "2026-11-19T11:32:59+00:00",
+  "proposed_disposition": "CLOSE_FP",
+  "report": {
+   "summary": "Registered SYN.A market maker (desk ETF-MM) quoting two-sided at its typical 4059 size, plus one large BUY O-00005963 (34241, 13.2x depth, 1 tick behind the touch). The large order was working: 16367 (47.8%) executed before the trader's only opposite-side trade (SELL 676 at 10:13:01.749), 17298 in total, and only the remainder (16943) was cancelled. A small opposite trade while the order was working and the later cancel of its remainder are ordinary order management under section 6.2. Feature (a) is absent. Feature (b) is also absent: the price move on that order was 0.5 tick with 0.5 tick reversion, and the opposite trade was 676 against 16367 already executed. There was no public event and no risk event. The detector triggers come from the quote refresh cycle (4059 BUY and SELL cancelled together), which is symmetric market making.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "compute_discriminators",
+     "fact": "large_orders O-00005963 BUY qty 34241, size_vs_depth 13.19, distance_from_touch_ticks -1.0, executed_qty_before_opposite_trade 16367, executed_share_before_opposite_trade 0.478, executed_qty_after_opposite_trade 931, cancelled_qty 16943"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "opposite_trade_qty 676 at 10:13:01.749, price_move_ticks 0.5, reversion_ticks 0.5 for the large order; ms_from_opposite_trade_to_first_withdrawal 3466.5"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "cancel_symmetry 0.9226, cancel_ratio 0.88, otr 2.43, repetitions_in_session 1, market_wide_cancels_1s_before_first_cancel 0, parent_order_ids empty, all order types LIMIT"
+    },
+    {
+     "id": "E4",
+     "source": "get_trader_profile",
+     "fact": "role MARKET_MAKER, registered_mm_instruments [SYN.A], typical_order_size 4059, typical_daily_otr 40.0, no risk_limit_events in window"
+    },
+    {
+     "id": "E5",
+     "source": "get_order_events",
+     "fact": "Repeated paired BUY/SELL 4059 quotes at 10001/10002 etc., cancelled together every ~2s; large BUY O-00005963 34241 at 10000 placed 10:12:52.407 with fills of 5206 repeatedly and cancel of 16943 at 10:13:05.216"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "No market events in the window"
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts for this trader in 90 days"
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2596.12, avg spread 2.71 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "opposite-side execution before the cancel (beneficial)",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)",
+    "orders away from the touch"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "size large relative to visible depth",
+    "high order-to-trade ratio (Annex II 4(f))"
+   ],
+   "alert_id": "A-260923-0001",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "genuine execution of the resting order (partial executions before the opposite trade)",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "market making (registered, two-sided quotes of typical size)",
+     "ruled_out_by": [],
+     "verdict": "supported"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1",
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [],
+     "verdict": "undetermined"
+    }
+   ],
+   "memory_used": [
+    "Desk ETF-MM prior CLOSE_FP records (e.g. H-T-MM-01-01, 'registered market maker; two-sided quotes re-priced on fair value moves; no opposite-side benefit') are context only. I did not rely on them. The closure rests on today's tape: the large order was working before the opposite trade."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 10:11:06.900 to 10:13:06.749 (1790158266900424664 to 1790158386749611168); order events were read with 5s padding; no longer frame was examined.",
+   "what_would_change_my_mind": "Evidence that the large BUY was one-sided and unworking, for example no fills before the 676 SELL, or a material favourable move with reversion tied to its placement. Evidence that the 676 SELL was sized to profit from the large order's presence."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X0923-01"
+ }
+}

@@ -170,11 +170,38 @@ def check_categorical(fact: str, ground: str) -> tuple[int, list[str]]:
     return checked, unmatched
 
 
+def has_proposal_call(spans: list[dict[str, Any]]) -> bool:
+    """The report reached the case through `propose_disposition`, the last Gateway call of an investigation. Spans
+    reach CloudWatch a few minutes after the session, the earliest first, so a session that has a report and no
+    span of that call is one whose telemetry is not all in. On 2026-11-19 the check ran three minutes after a run
+    ended: its last two sessions had 19 and 13 spans of 36 and 39, twelve numbers and three roles that the tools
+    had returned were counted as unmatched, and the promotion rule said FAIL."""
+    return any(
+        str(s.get("name") or "").startswith("mcp tools/call") and "propose_disposition" in str(s.get("name"))
+        for s in spans
+    )
+
+
 def check_alert(
-    alert_id: str, session_id: str, report: dict[str, Any] | None, collector: CloudWatchAgentSpanCollector
+    alert_id: str,
+    session_id: str,
+    report: dict[str, Any] | None,
+    collector: CloudWatchAgentSpanCollector,
+    wait_s: float = 240.0,
+    pause_s: float = 20.0,
+    sleep: Any = time.sleep,
 ) -> dict[str, Any]:
-    end = datetime.now(UTC)
-    spans = collector.collect(session_id=session_id, start_time=end - timedelta(days=14), end_time=end)
+    """Check one report against its session's tool results. A session whose spans are not all in is read again
+    every `pause_s` for up to `wait_s`; if they still are not, it is returned as incomplete and is not scored."""
+    waited = 0.0
+    while True:
+        end = datetime.now(UTC)
+        spans = collector.collect(session_id=session_id, start_time=end - timedelta(days=14), end_time=end)
+        complete = not report or has_proposal_call(spans)
+        if complete or waited >= wait_s:
+            break
+        sleep(pause_s)
+        waited += pause_s
     ground = tool_text(spans)
     ground_nums = numbers_in(ground)
     facts = []
@@ -206,18 +233,21 @@ def check_alert(
         "session_id": session_id,
         "n_spans": len(spans),
         "ground_chars": len(ground),
+        "complete": complete,
         "has_report": bool(report),
         "numbers_checked": n_checked,
         "numbers_unmatched": n_unmatched,
         "categorical_checked": c_checked,
         "categorical_unmatched": c_unmatched,
-        "faithful": bool(report) and n_unmatched == 0 and c_unmatched == 0 and len(ground) > 0,
+        "faithful": bool(report) and complete and n_unmatched == 0 and c_unmatched == 0 and len(ground) > 0,
         "facts": facts,
     }
 
 
 def summarize(saved: list[dict[str, Any]], rows_by_alert: dict[str, dict[str, Any]]) -> dict[str, Any]:
-    with_report = [s for s in saved if s["has_report"] and s["ground_chars"] > 0]
+    # a session checked before 2026-11-19 has no `complete` field and is taken as it was scored
+    grounded = [s for s in saved if s["has_report"] and s["ground_chars"] > 0]
+    with_report = [s for s in grounded if s.get("complete", True)]
     n_num = sum(s["numbers_checked"] for s in with_report)
     n_un = sum(s["numbers_unmatched"] for s in with_report)
     c_num = sum(s.get("categorical_checked", 0) for s in with_report)
@@ -242,6 +272,8 @@ def summarize(saved: list[dict[str, Any]], rows_by_alert: dict[str, dict[str, An
         "n_sessions": len(saved),
         "n_with_report": len(with_report),
         "n_no_spans": sum(1 for s in saved if s["ground_chars"] == 0),
+        "n_incomplete": len(grounded) - len(with_report),
+        "incomplete": sorted(s["alert_id"] for s in grounded if not s.get("complete", True)),
         "alerts_faithful": sum(1 for s in with_report if s["faithful"]),
         "alert_rate": round(sum(1 for s in with_report if s["faithful"]) / len(with_report), 4)
         if with_report
@@ -263,6 +295,12 @@ def main() -> int:
     ap.add_argument("--concurrency", type=int, default=3)
     ap.add_argument("--only-missing", action="store_true")
     ap.add_argument("--summarize-only", action="store_true")
+    ap.add_argument(
+        "--wait",
+        type=float,
+        default=240.0,
+        help="seconds to wait for a session whose spans are not all in CloudWatch yet (0: do not wait)",
+    )
     args = ap.parse_args()
     run_dir: Path = args.run_dir
     out_dir = run_dir / "faithfulness"
@@ -298,16 +336,19 @@ def main() -> int:
         )
         t0 = time.time()
         with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-            futs = {pool.submit(check_alert, a, s, r, collector): a for a, s, r in todo}
+            futs = {pool.submit(check_alert, a, s, r, collector, args.wait): a for a, s, r in todo}
             for i, fut in enumerate(as_completed(futs), 1):
                 res = fut.result()
                 (out_dir / f"{res['alert_id']}.json").write_text(json.dumps(res, indent=1))
                 with _lock:
-                    flag = (
-                        "ok "
-                        if res["faithful"]
-                        else ("NO SPANS" if res["ground_chars"] == 0 else f"{res['numbers_unmatched']} unmatched")
-                    )
+                    if res["faithful"]:
+                        flag = "ok "
+                    elif res["ground_chars"] == 0:
+                        flag = "NO SPANS"
+                    elif not res["complete"]:
+                        flag = "SPANS NOT ALL IN, not scored: run again for this alert"
+                    else:
+                        flag = f"{res['numbers_unmatched']} unmatched"
                     print(
                         f"[{i:3d}/{len(todo)}] {res['alert_id']} {res['numbers_checked']:3d} numbers  {flag}",
                         flush=True,
