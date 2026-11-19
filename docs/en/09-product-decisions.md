@@ -11,7 +11,7 @@ A governed Level-1 investigator for trade-surveillance alerts. It sits after any
 | | |
 |---|---|
 | Buyer | Head of compliance at a mid-sized EU broker, CFD/FX broker, prop trading firm or market maker: a surveillance platform with default scenarios, a backlog of alerts, one to five people in compliance, no data-science team, a regulator who expects "human analysis by appropriately trained staff" and records of it (Delegated Regulation (EU) 2016/957). |
-| Pain | Each alert costs 20-40 minutes of a trained person; 80-95% are legitimate activity; the reasoning behind every closure must be written and kept. The firm cannot remove the human and cannot afford a tier-1 platform. |
+| Pain | Each alert costs 20-40 minutes of a trained person [unverified: no source, and it does not fit the market doc's "two to ten analysts, hundreds to a few thousand alerts a day", which leaves a few minutes an alert; the first number to ask a prospect for]; 80-95% are legitimate activity; the reasoning behind every closure must be written and kept. The firm cannot remove the human and cannot afford a tier-1 platform. |
 | Promise | Each alert resolved in the analyst's time of reading a report instead of building one. Nothing decided without a human. Every closure documented to the standard the regulation sets, as a by-product. |
 | Not the buyer | Tier-1 banks (served by NICE Actimize, Nasdaq and in-house teams); firms without a detector. |
 | Positioning | *We do not detect market abuse. We investigate the alerts your detector already raises, and we leave the decision with your analyst.* |
