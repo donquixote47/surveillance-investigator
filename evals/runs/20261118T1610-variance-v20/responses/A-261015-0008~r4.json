@@ -1,0 +1,531 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "repeat": 4,
+  "session_id": "surv-eval-20261118T1610-variance-v20-A-261015-0008-r4-14f5b7e1",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-18T16:35:04+00:00",
+  "wall_s": 33.5
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261015-0008",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.6,
+   "report": {
+    "alert_id": "A-261015-0008",
+    "scenario": "SPOOFING",
+    "summary": "PROP trader placed two BUY 7215 LIMIT orders at 9996 (about 2.75x depth each, 5.5x combined; 14430 total) at 15:12:52.998 and 15:12:55.998. About 25 s later they sold 515 at 10001 (15:13:20.498). Both buys were cancelled at 15:13:23.140, 142 ms after an unscheduled issuer news item (15:13:22.998). The buys never executed. The news timing is a plausible explanation for the cancel. However, the sale came before the news, while 14430 of buying sat on the book. The bid rose 1.5 ticks before the sale and the price then fell back 2 ticks. Feature (a) and feature (b) cannot be ruled out, so the evidence is mixed and I propose ESCALATE. No repetition and no prior alerts, so not DRAFT_STOR.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "Two BUY LIMIT 7215 @9996 NEW at 15:12:52.998 and 15:12:55.998; SELL 515 @10001 filled 15:13:20.498; both BUYs cancelled 15:13:23.140 with no fills on them"
+     },
+     {
+      "id": "E2",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 5.50, distance_from_touch 1.5 ticks, same_side_fill_qty 0, opposite_side_fill_qty 515, cancel_symmetry 0.0, cancel_ratio 0.966, otr 5.0, large_orders empty, repetitions 0"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks +1.5, post_cancel_move_ticks -2.0, reversion_ticks 2.0, market_wide_cancels_1s_before_first_cancel 6"
+     },
+     {
+      "id": "E4",
+      "source": "get_market_events",
+      "fact": "Unscheduled issuer trading update NEWS at 15:13:22.998, 142 ms before the cancels and 2.5 s after the sale"
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "PROP, no registered MM instruments, typical order size 500, typical OTR 4.0, no risk events in window"
+     },
+     {
+      "id": "E6",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts"
+     },
+     {
+      "id": "E7",
+      "source": "get_instrument_stats",
+      "fact": "avg top-5 depth 2624, avg spread 2.73 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "size large relative to visible depth",
+     "opposite-side execution before the cancel",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "orders away from the touch",
+     "high order-to-trade ratio (Annex II 4(f))"
+    ],
+    "indicators_not_matched": [
+     "repetition of the cycle within the session",
+     "several price levels on one side (layering)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E5",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E4",
+       "E3"
+      ],
+      "verdict": "undetermined"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.6,
+    "what_would_change_my_mind": "Evidence that the SELL 515 was a hedge of an existing position and that the buys were a genuine working order. A book snapshot would also help: if the bid rise to 10000 was not caused by the resting buys, feature (b) would be weak and the news-reaction closure would be supportable.",
+    "memory_used": [
+     "Desk PROP-EQ feedback on A-261016-0003 (l1.analyst): a cancel within 200 ms of unscheduled news is a news reaction and the earlier sale was a hedge, so close unless the sale follows the news. Here the cancel is 142 ms after news and the sale precedes it, but I found no tape evidence of a hedge. The buys were also not executing, and the sale is opposite to 14430 of resting buying. I treated the feedback as context only."
+    ],
+    "window_used": "Detector window 15:12:20.498 to 15:13:25.498, plus 5 s padding on the order events. I did not look at a longer frame.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261015-0008",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261015-0008",
+   "proposed_at": "2026-11-18T16:35:34+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261015-0008"
+    },
+    "ms": 247,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 187,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261015-0008",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1015-07"
+    },
+    "ms": 1191,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261015-0008",
+     "pad_seconds": 5
+    },
+    "ms": 237,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261015-0008"
+    },
+    "ms": 275,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1015-07",
+     "alert_id": "A-261015-0008"
+    },
+    "ms": 191,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "alert_id": "A-261015-0008"
+    },
+    "ms": 251,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-15",
+     "instrument": "SYN.A"
+    },
+    "ms": 167,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1015-07",
+     "alert_id": "A-261015-0008"
+    },
+    "ms": 203,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261015-0008",
+     "disposition": "ESCALATE",
+     "confidence": 0.6,
+     "report": "<report>"
+    },
+    "ms": 268,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Disposition:** ESCALATE, confidence 0.6. This is a proposal only, and a human analyst decides.\n\n**Three facts that drove it:**\n1. The trader had two BUY orders of 7,215 each at 9996 resting. That is 14,430 in total, or 5.5x average depth. Neither order was ever executed. While they rested, the trader sold 515 at 10001 (15:13:20.498). The bid had risen 1.5 ticks beforehand. The price fell back 2 ticks after the cancel.\n2. Both buys were cancelled at 15:13:23.140, 142 ms after an unscheduled issuer news item at 15:13:22.998. That fits a news reaction. But the sale came 2.5 s before the news, and I found no evidence it was a hedge. It is also opposite to 14,430 of resting buying.\n3. There is no market-making registration, no risk event and no pegged or parent orders. Cancel symmetry is 0. There was no repetition and the trader has no prior alerts, so I did not propose DRAFT_STOR.\n\n**What would change my mind:** Evidence that the 515 sale hedged an existing position and that the buys were a genuine working order. A book snapshot showing the bid rise was not caused by the resting buys would also weaken the benefit feature. The news-reaction closure would then be supportable.",
+  "usage": {
+   "input_tokens": 12,
+   "output_tokens": 3665,
+   "total_tokens": 63008,
+   "cache_read_tokens": 48425,
+   "cache_write_tokens": 10906,
+   "model_calls": 5
+  },
+  "duration_s": 28.0,
+  "session_id": "surv-eval-20261118T1610-variance-v20-A-261015-0008-r4-14f5b7e1",
+  "error": null,
+  "bundle": "none",
+  "decided": null,
+  "analyst": "l1.analyst2",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261015-0008",
+  "case_id": "C-A-261015-0008",
+  "confidence": "0.6",
+  "date": "2026-10-15",
+  "proposal_count": "33",
+  "proposal_history": [
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-12T14:14:24+00:00",
+    "replaced_at": "2026-11-16T18:49:16+00:00"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T18:49:16+00:00",
+    "replaced_at": "2026-11-16T19:28:18+00:00",
+    "session_id": "surv-eval-20261116T1828-sonnet-v5-A-261015-0008-526e3300"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:28:18+00:00",
+    "replaced_at": "2026-11-16T19:35:25+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261015-0008-r0-5f8db20a"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:35:25+00:00",
+    "replaced_at": "2026-11-16T19:41:52+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261015-0008-r1-225444b3"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:41:52+00:00",
+    "replaced_at": "2026-11-16T19:51:00+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261015-0008-r2-b5dbc6ea"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:51:00+00:00",
+    "replaced_at": "2026-11-16T19:56:58+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261015-0008-r3-bfd82e09"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:56:58+00:00",
+    "replaced_at": "2026-11-17T21:59:09+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261015-0008-r4-e9cf9a5c"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-17T21:59:09+00:00",
+    "replaced_at": "2026-11-18T00:06:24+00:00",
+    "session_id": "surv-eval-20261117T2154-gap-slice-A-261015-0008-56883372"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T00:06:24+00:00",
+    "replaced_at": "2026-11-18T12:24:08+00:00",
+    "session_id": "surv-eval-20261117T2346-sonnet-v6-A-261015-0008-89f50504"
+   },
+   {
+    "confidence": "0.62",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T12:24:08+00:00",
+    "replaced_at": "2026-11-18T13:16:18+00:00",
+    "session_id": "surv-eval-20261118T1204-sonnet-v7-A-261015-0008-b8e5e085"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T13:16:18+00:00",
+    "replaced_at": "2026-11-18T13:48:14+00:00",
+    "session_id": "surv-eval-20261118T1309-two-analysts-slice-A-261015-0008-06c1df22"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T13:48:14+00:00",
+    "replaced_at": "2026-11-18T15:39:30+00:00",
+    "session_id": "surv-eval-20261118T1343-two-analysts-slice-A-261015-0008-835c3909"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T15:39:30+00:00",
+    "replaced_at": "2026-11-18T16:13:19+00:00",
+    "session_id": "surv-eval-20261118T1523-sonnet-v8-A-261015-0008-d21cc9d0"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:13:19+00:00",
+    "replaced_at": "2026-11-18T16:18:48+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261015-0008-r0-dc27fa50"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:18:48+00:00",
+    "replaced_at": "2026-11-18T16:24:30+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261015-0008-r1-425589d0"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:24:30+00:00",
+    "replaced_at": "2026-11-18T16:30:04+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261015-0008-r2-88f66ff1"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:30:04+00:00",
+    "replaced_at": "2026-11-18T16:35:34+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261015-0008-r3-90616f27"
+   }
+  ],
+  "proposal_provenance": "{\"session_id\": \"surv-eval-20261118T1610-variance-v20-A-261015-0008-r4-14f5b7e1\", \"analyst\": \"l1.analyst2\", \"model_id\": \"eu.anthropic.claude-sonnet-5-5\", \"bundle\": \"none\", \"mode\": \"investigate\", \"memory\": \"on\"}",
+  "proposed_at": "2026-11-18T16:35:34+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "PROP trader placed two BUY 7215 LIMIT orders at 9996 (about 2.75x depth each, 5.5x combined; 14430 total) at 15:12:52.998 and 15:12:55.998. About 25 s later they sold 515 at 10001 (15:13:20.498). Both buys were cancelled at 15:13:23.140, 142 ms after an unscheduled issuer news item (15:13:22.998). The buys never executed. The news timing is a plausible explanation for the cancel. However, the sale came before the news, while 14430 of buying sat on the book. The bid rose 1.5 ticks before the sale and the price then fell back 2 ticks. Feature (a) and feature (b) cannot be ruled out, so the evidence is mixed and I propose ESCALATE. No repetition and no prior alerts, so not DRAFT_STOR.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "Two BUY LIMIT 7215 @9996 NEW at 15:12:52.998 and 15:12:55.998; SELL 515 @10001 filled 15:13:20.498; both BUYs cancelled 15:13:23.140 with no fills on them"
+    },
+    {
+     "id": "E2",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 5.50, distance_from_touch 1.5 ticks, same_side_fill_qty 0, opposite_side_fill_qty 515, cancel_symmetry 0.0, cancel_ratio 0.966, otr 5.0, large_orders empty, repetitions 0"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks +1.5, post_cancel_move_ticks -2.0, reversion_ticks 2.0, market_wide_cancels_1s_before_first_cancel 6"
+    },
+    {
+     "id": "E4",
+     "source": "get_market_events",
+     "fact": "Unscheduled issuer trading update NEWS at 15:13:22.998, 142 ms before the cancels and 2.5 s after the sale"
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "PROP, no registered MM instruments, typical order size 500, typical OTR 4.0, no risk events in window"
+    },
+    {
+     "id": "E6",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts"
+    },
+    {
+     "id": "E7",
+     "source": "get_instrument_stats",
+     "fact": "avg top-5 depth 2624, avg spread 2.73 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "repetition of the cycle within the session",
+    "several price levels on one side (layering)"
+   ],
+   "scenario": "SPOOFING",
+   "indicators_matched": [
+    "size large relative to visible depth",
+    "opposite-side execution before the cancel",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "orders away from the touch",
+    "high order-to-trade ratio (Annex II 4(f))"
+   ],
+   "alert_id": "A-261015-0008",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E5",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E4",
+      "E3"
+     ],
+     "verdict": "undetermined"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "Desk PROP-EQ feedback on A-261016-0003 (l1.analyst): a cancel within 200 ms of unscheduled news is a news reaction and the earlier sale was a hedge, so close unless the sale follows the news. Here the cancel is 142 ms after news and the sale precedes it, but I found no tape evidence of a hedge. The buys were also not executing, and the sale is opposite to 14430 of resting buying. I treated the feedback as context only."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 15:12:20.498 to 15:13:25.498, plus 5 s padding on the order events. I did not look at a longer frame.",
+   "what_would_change_my_mind": "Evidence that the SELL 515 was a hedge of an existing position and that the buys were a genuine working order. A book snapshot would also help: if the bid rise to 10000 was not caused by the resting buys, feature (b) would be weak and the news-reaction closure would be supportable."
+  },
+  "scenario": "SPOOFING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1015-07"
+ }
+}

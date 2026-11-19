@@ -82,12 +82,12 @@ A thousand alerts a month on Sonnet is roughly $90 in model tokens plus a few do
 | Claim | Number | Source |
 |---|---|---|
 | Never closes real abuse on the evaluation set | 0 of 28 true-abuse alerts proposed as closed, in every run; the detector's own rules close 6 | data doc 4.6 |
-| Closes most false positives | 95.7% (133 of 139) | run `20261118T1204-sonnet-v7`, the released version (Runtime v20); 95.0% on v6, 94.2% on v5, 95.0% on v4 and 93.5% on v3, the differences within run-to-run variance |
-| Fewer corrections than the rules | override rate 4.8% vs 7.2% for the threshold rules | same |
+| Closes most false positives | 95.7% (133 of 139) | run `20261118T1204-sonnet-v7`, the released version (Runtime v20); 94.2% on a second run of the same version (`20261118T1523-sonnet-v8`), 95.0% on v6, 94.2% on v5, 95.0% on v4 and 93.5% on v3, the differences within run-to-run variance |
+| Fewer corrections than the rules | override rate 4.8% vs 7.2% for the threshold rules (6.6% on the second run of the same version) | same |
 | Numbers and facts in reports are real | 99.9% of 3,940 numbers trace to a tool output (the four that do not are ratios and time differences derived from tool outputs); 601 of 601 categorical claims (roles, desks, order types, registration) match the tool outputs | `evals/faithfulness.py` |
 | Cost halves without touching the decision | $0.187 -> $0.091 per alert, gate and faithfulness unchanged | `compare-v3-v4.md` |
 | Holds on alerts nothing was tuned against | second dataset (seed 8, K = 4, 100 alerts): gate 0 of 24, the ten defined scenarios 77 of 77, 88.2% safe close on a mix with twice the boundary cases (94.0% on seed7's mix) | run `20261116T2028-seed8-v17`, on Runtime v17 (not repeated since; v20 has the same packages and prompt); 86.8% on the first run, `20261111T1326-seed8-generalisation` (Runtime v14) |
-| Procedure follows the standard every time | 100% trajectory match on 167 sessions | Builtin.TrajectoryInOrderMatch |
+| Procedure follows the standard every time | 100% trajectory match on 167 sessions, again on the released version | Builtin.TrajectoryInOrderMatch, run `20261118T1523-sonnet-v8` |
 | Does not close a spoofer because he is a registered market maker | S-SPOOF-6 escalated 12 of 12 and its innocent twin closed 12 of 12; the threshold rules close all twelve spoofers | focused set `seed9`, run `20261117T1255-seed9-mm`, and a repeat run with 24 of 24 alerts stable (data doc 4.6) |
 | Improves in governed steps | 79.9% -> 88.5% -> 93.5% safe close across three runs, gate held each time, each step a dated decision | decision log |
 | Memory helps and does not bias | +0.7 points; clean-history spoofer caught with and without | `compare-v3-memory.md` |

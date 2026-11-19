@@ -93,7 +93,7 @@ uv run evals/run_dataset.py --tag sonnet-vN --notes "..."              # all 167
 uv run evals/run_dataset.py --scenario F-ICE-1 S-SPOOF-5 --tag slice   # a slice; --no-memory hides recall_memory; --bundle <name> sends a config bundle
 SURV_PROMPT_CACHE=off uv run evals/run_dataset.py --backend local ...   # the no-caching arm (local backend only; the Runtime reads its own env)
 uv run evals/compare_runs.py evals/runs/<A> evals/runs/<B> --out ...   # paired comparison of two runs of the same dataset on their shared alerts
-uv run evals/run_dataset.py --repeat 5 --alerts ... --tag variance    # run-to-run variance: per-alert stability, pseudo-run spread (~$8 for 21 x 5)
+uv run evals/run_dataset.py --repeat 5 --alerts ... --tag variance    # run-to-run variance: per-alert stability, pseudo-run spread (~$10 for the 26 alerts of evals/runs/20261119T0023-variance-v20-26/run.json x 5)
 uv run scripts/span_turns.py --run evals/runs/<run_id> --alerts A-...  # per-turn timing of a session from its spans: model turns, tokens, tools
 uv run evals/run_dataset.py --dataset data/synthetic/seed8 --tag seed8-...  # the generalisation set (100 alerts, ~$9); --rescore/--resume pick the run's dataset themselves
 uv run evals/calibration.py [run dirs]                                  # agreement with the label by proposed disposition and confidence band (free)

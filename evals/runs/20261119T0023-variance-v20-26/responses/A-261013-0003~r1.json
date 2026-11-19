@@ -1,0 +1,565 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "repeat": 1,
+  "session_id": "surv-eval-20261119T0023-variance-v20-26-A-261013-0003-r1-dbb11b39",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-19T00:33:09+00:00",
+  "wall_s": 30.0
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261013-0003",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "DRAFT_STOR",
+   "confidence": 0.62,
+   "report": {
+    "alert_id": "A-261013-0003",
+    "scenario": "LAYERING",
+    "summary": "PROP trader (no MM registration, typical order size 500) placed five one-sided BUY limits of 4340 each (21,700 total, 8.69x depth) at 9988-9992, 1-5 ticks below the 9993 bid. The bid then rose to 9995, and a SELL market order of 1085 executed 799 at 9995/9995/9993. All five bids were cancelled 0.29-1.2 s later with zero fills, and the price reverted 2 ticks. Both core features are present and no legitimate explanation is supported. Level 2 should draft the STOR. A single cycle in the session is the main weakness.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "Five BUY LIMIT orders of 4340 each at 9992, 9991, 9990, 9989, 9988 were placed 14:58:33.755-.815 with best bid 9993 and best ask 9996"
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "SELL MARKET 1085 at 14:58:35.806 filled 316@9995, 301@9995, 182@9993 (799 total). All five BUYs were cancelled 14:58:36.100-36.712 and none was filled"
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "max_resting_size_vs_depth 8.69, distinct_price_levels 5, cancel_ratio 1.0, cancel_symmetry 0.0, same_side_fill_qty 0, opposite_side_fill_qty 799, first opposite fill 293.99 ms before first cancel"
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks +2.0, post_cancel_move_ticks -2.0, reversion_ticks 2.0, repetitions_in_session 0, large_orders empty, market_wide_cancels_1s_before_first_cancel 1"
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, no risk events in window"
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "No market events in the window"
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts for the trader"
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2497.7, tick 0.01, avg spread 2.36 ticks"
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute",
+     "opposite-side execution before the cancel",
+     "size large relative to visible depth",
+     "several price levels on one side (layering)",
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "orders away from the touch"
+    ],
+    "indicators_not_matched": [
+     "repetition of the cycle within the session",
+     "high order-to-trade ratio (OTR 4.0 equals the typical daily OTR)"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E5",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E3",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1",
+       "E2"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     }
+    ],
+    "proposed_disposition": "DRAFT_STOR",
+    "confidence": 0.62,
+    "what_would_change_my_mind": "Evidence that the SELL was a pre-planned hedge or a client order unrelated to the bids, or an unscheduled news item before the cancels. Evidence that the bids were part of a parent order with a genuine buy purpose would also change it. A longer frame showing fills on similar bids would too.",
+    "memory_used": [
+     "Desk feedback on A-261016-0003: a cancel within 200 ms of unscheduled news is a news reaction. It does not apply here because get_market_events shows no event. The sell executed before the cancels and not before any news.",
+     "A-261126-0001 was recorded ESCALATE with the agent's proposal agreed. It is context only."
+    ],
+    "window_used": "Detector window 14:57:35.806-14:58:40.806 (65 s), with 5 s of padding on the order events. I did not look at a longer frame.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261013-0003",
+   "disposition": "DRAFT_STOR",
+   "case_id": "C-A-261013-0003",
+   "proposed_at": "2026-11-19T00:33:36+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261013-0003"
+    },
+    "ms": 190,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 311,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261013-0003",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1013-03"
+    },
+    "ms": 873,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261013-0003",
+     "pad_seconds": 5
+    },
+    "ms": 165,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261013-0003"
+    },
+    "ms": 264,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1013-03",
+     "alert_id": "A-261013-0003"
+    },
+    "ms": 163,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "alert_id": "A-261013-0003"
+    },
+    "ms": 250,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-13",
+     "instrument": "SYN.A"
+    },
+    "ms": 241,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1013-03",
+     "alert_id": "A-261013-0003"
+    },
+    "ms": 207,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261013-0003",
+     "disposition": "DRAFT_STOR",
+     "confidence": 0.62,
+     "report": "<report>"
+    },
+    "ms": 240,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** DRAFT_STOR, with confidence 0.62. Level 2 drafts the STOR.\n\n**Three facts that drove it:**\n1. The trader placed five one-sided BUY limits of 4340 each (21,700 total, 8.69x depth) at 9988\u20139992, below the 9993 bid. Then a SELL market order filled 799 at 9995/9995/9993. All five bids were cancelled 0.29\u20131.2 s later with zero fills, and the price reverted 2 ticks after the move of +2 ticks.\n2. The trader is PROP with no market-making registration and a typical order size of 500. There were no market events and no risk events in the window, so no legitimate explanation is supported.\n3. The trader has no prior alerts, and the pattern did not repeat in the session (repetitions_in_session 0). That is why confidence is only moderate.\n\n**What would change my mind:** evidence that the SELL was an unrelated hedge or client order, or that the bids were part of a parent order with a genuine buy purpose. In that case I would drop to ESCALATE or close.",
+  "usage": {
+   "input_tokens": 10,
+   "output_tokens": 3173,
+   "total_tokens": 54249,
+   "cache_read_tokens": 39457,
+   "cache_write_tokens": 11609,
+   "model_calls": 4
+  },
+  "duration_s": 22.8,
+  "session_id": "surv-eval-20261119T0023-variance-v20-26-A-261013-0003-r1-dbb11b39",
+  "error": null,
+  "bundle": "none",
+  "decided": null,
+  "analyst": "l1.analyst2",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261013-0003",
+  "case_id": "C-A-261013-0003",
+  "confidence": "0.62",
+  "date": "2026-10-13",
+  "proposal_count": "34",
+  "proposal_history": [
+   {
+    "confidence": "0.8",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-12T14:13:16+00:00",
+    "replaced_at": "2026-11-16T18:43:18+00:00"
+   },
+   {
+    "confidence": "0.7",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T18:43:18+00:00",
+    "replaced_at": "2026-11-16T19:27:44+00:00",
+    "session_id": "surv-eval-20261116T1828-sonnet-v5-A-261013-0003-b315e82a"
+   },
+   {
+    "confidence": "0.8",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:27:44+00:00",
+    "replaced_at": "2026-11-16T19:34:39+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261013-0003-r0-46c33d1b"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "DRAFT_STOR",
+    "proposed_at": "2026-11-16T19:34:39+00:00",
+    "replaced_at": "2026-11-16T19:41:20+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261013-0003-r1-5b5ee57a"
+   },
+   {
+    "confidence": "0.75",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:41:20+00:00",
+    "replaced_at": "2026-11-16T19:50:21+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261013-0003-r2-46f1b77b"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "DRAFT_STOR",
+    "proposed_at": "2026-11-16T19:50:21+00:00",
+    "replaced_at": "2026-11-16T19:56:26+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261013-0003-r3-3bcc1efd"
+   },
+   {
+    "confidence": "0.7",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:56:26+00:00",
+    "replaced_at": "2026-11-17T21:57:59+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261013-0003-r4-dda80e93"
+   },
+   {
+    "confidence": "0.7",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-17T21:57:59+00:00",
+    "replaced_at": "2026-11-18T00:00:01+00:00",
+    "session_id": "surv-eval-20261117T2154-gap-slice-A-261013-0003-f4706422"
+   },
+   {
+    "confidence": "0.7",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T00:00:01+00:00",
+    "replaced_at": "2026-11-18T12:20:53+00:00",
+    "session_id": "surv-eval-20261117T2346-sonnet-v6-A-261013-0003-4014e604"
+   },
+   {
+    "confidence": "0.65",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T12:20:53+00:00",
+    "replaced_at": "2026-11-18T13:14:51+00:00",
+    "session_id": "surv-eval-20261118T1204-sonnet-v7-A-261013-0003-497218ec"
+   },
+   {
+    "confidence": "0.75",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T13:14:51+00:00",
+    "replaced_at": "2026-11-18T13:47:14+00:00",
+    "session_id": "surv-eval-20261118T1309-two-analysts-slice-A-261013-0003-83bceeaa"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T13:47:14+00:00",
+    "replaced_at": "2026-11-18T15:36:23+00:00",
+    "session_id": "surv-eval-20261118T1343-two-analysts-slice-A-261013-0003-ad126c56"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "DRAFT_STOR",
+    "proposed_at": "2026-11-18T15:36:23+00:00",
+    "replaced_at": "2026-11-18T16:12:46+00:00",
+    "session_id": "surv-eval-20261118T1523-sonnet-v8-A-261013-0003-6d0b0024"
+   },
+   {
+    "confidence": "0.62",
+    "disposition": "DRAFT_STOR",
+    "proposed_at": "2026-11-18T16:12:46+00:00",
+    "replaced_at": "2026-11-18T16:18:16+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261013-0003-r0-84f456c3"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:18:16+00:00",
+    "replaced_at": "2026-11-18T16:23:56+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261013-0003-r1-e1011c6a"
+   },
+   {
+    "confidence": "0.7",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:23:56+00:00",
+    "replaced_at": "2026-11-18T16:29:28+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261013-0003-r2-626b6b19"
+   },
+   {
+    "confidence": "0.72",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:29:28+00:00",
+    "replaced_at": "2026-11-18T16:35:01+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261013-0003-r3-b719f2f6"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "DRAFT_STOR",
+    "proposed_at": "2026-11-18T16:35:01+00:00",
+    "replaced_at": "2026-11-19T00:27:00+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261013-0003-r4-ae24372c"
+   },
+   {
+    "confidence": "0.7",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-19T00:27:00+00:00",
+    "replaced_at": "2026-11-19T00:33:36+00:00",
+    "session_id": "surv-eval-20261119T0023-variance-v20-26-A-261013-0003-r0-834c2266"
+   }
+  ],
+  "proposal_provenance": "{\"session_id\": \"surv-eval-20261119T0023-variance-v20-26-A-261013-0003-r1-dbb11b39\", \"analyst\": \"l1.analyst2\", \"model_id\": \"eu.anthropic.claude-sonnet-5-5\", \"bundle\": \"none\", \"mode\": \"investigate\", \"memory\": \"on\"}",
+  "proposed_at": "2026-11-19T00:33:36+00:00",
+  "proposed_disposition": "DRAFT_STOR",
+  "report": {
+   "summary": "PROP trader (no MM registration, typical order size 500) placed five one-sided BUY limits of 4340 each (21,700 total, 8.69x depth) at 9988-9992, 1-5 ticks below the 9993 bid. The bid then rose to 9995, and a SELL market order of 1085 executed 799 at 9995/9995/9993. All five bids were cancelled 0.29-1.2 s later with zero fills, and the price reverted 2 ticks. Both core features are present and no legitimate explanation is supported. Level 2 should draft the STOR. A single cycle in the session is the main weakness.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "Five BUY LIMIT orders of 4340 each at 9992, 9991, 9990, 9989, 9988 were placed 14:58:33.755-.815 with best bid 9993 and best ask 9996"
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "SELL MARKET 1085 at 14:58:35.806 filled 316@9995, 301@9995, 182@9993 (799 total). All five BUYs were cancelled 14:58:36.100-36.712 and none was filled"
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "max_resting_size_vs_depth 8.69, distinct_price_levels 5, cancel_ratio 1.0, cancel_symmetry 0.0, same_side_fill_qty 0, opposite_side_fill_qty 799, first opposite fill 293.99 ms before first cancel"
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks +2.0, post_cancel_move_ticks -2.0, reversion_ticks 2.0, repetitions_in_session 0, large_orders empty, market_wide_cancels_1s_before_first_cancel 1"
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "role PROP, desk PROP-EQ, registered_mm_instruments empty, typical_order_size 500, no risk events in window"
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "No market events in the window"
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts for the trader"
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2497.7, tick 0.01, avg spread 2.36 ticks"
+    }
+   ],
+   "indicators_not_matched": [
+    "repetition of the cycle within the session",
+    "high order-to-trade ratio (OTR 4.0 equals the typical daily OTR)"
+   ],
+   "scenario": "LAYERING",
+   "indicators_matched": [
+    "orders with no intention to execute",
+    "opposite-side execution before the cancel",
+    "size large relative to visible depth",
+    "several price levels on one side (layering)",
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "orders away from the touch"
+   ],
+   "alert_id": "A-261013-0003",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E5",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E3",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1",
+      "E2"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    }
+   ],
+   "memory_used": [
+    "Desk feedback on A-261016-0003: a cancel within 200 ms of unscheduled news is a news reaction. It does not apply here because get_market_events shows no event. The sell executed before the cancels and not before any news.",
+    "A-261126-0001 was recorded ESCALATE with the agent's proposal agreed. It is context only."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 14:57:35.806-14:58:40.806 (65 s), with 5 s of padding on the order events. I did not look at a longer frame.",
+   "what_would_change_my_mind": "Evidence that the SELL was a pre-planned hedge or a client order unrelated to the bids, or an unscheduled news item before the cancels. Evidence that the bids were part of a parent order with a genuine buy purpose would also change it. A longer frame showing fills on similar bids would too."
+  },
+  "scenario": "LAYERING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1013-03"
+ }
+}

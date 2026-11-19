@@ -72,8 +72,7 @@ def test_gate_failure_hides_safe_close_rate():
 def test_regression_rule():
     prev_rows = [
         _row("f1", "FALSE_POSITIVE", "F-MM-1", CLOSE, CLOSE),
-        _row("f2", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, CLOSE),
-        _row("f3", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, CLOSE),
+        *_scenario("F-NEWS-1", 3, closed=3),
         _row("a1", "TRUE_ABUSE", "S-SPOOF-1", ESCALATE, ESCALATE),
     ]
     prev = {"run_id": "prev", "metrics": compute(prev_rows)}
@@ -81,30 +80,92 @@ def test_regression_rule():
     assert same["verdict"].startswith("PASS")
     worse = [
         _row("f1", "FALSE_POSITIVE", "F-MM-1", CLOSE, CLOSE),
-        _row("f2", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, ESCALATE),  # F-NEWS-1 falls from 2/2 to 0% close
-        _row("f3", "FALSE_POSITIVE", "F-NEWS-1", CLOSE, ESCALATE),
+        *_scenario("F-NEWS-1", 3, closed=0),  # F-NEWS-1 falls from 3/3 to 0% close
         _row("a1", "TRUE_ABUSE", "S-SPOOF-1", ESCALATE, ESCALATE),
     ]
     r = regression(compute(worse), prev)
     assert r["verdict"] == "FAIL"
-    assert r["deltas"]["raw_safe_close_rate"] == pytest.approx(-2 / 3, abs=1e-3)
+    assert r["deltas"]["raw_safe_close_rate"] == pytest.approx(-3 / 4, abs=1e-3)
     assert any("F-NEWS-1" in name and not ok for name, ok in r["checks"])
     assert regression(compute(worse), None)["previous"] is None
 
 
-def test_zero_close_regression_has_a_materiality_floor():
-    """v2 -> v3: F-STOP-1 went 1/6 -> 0/6. One alert in six is inside the noise of a non-deterministic agent, so the
-    rule needs the previous run to have closed >= 2 alerts and >= 25% of the scenario before a fall to 0% counts."""
-    prev_rows = [_row(f"s{i}", "FALSE_POSITIVE", "F-STOP-1", CLOSE, CLOSE if i == 0 else ESCALATE) for i in range(6)]
-    prev = {"run_id": "prev", "metrics": compute(prev_rows)}
-    cur_rows = [_row(f"s{i}", "FALSE_POSITIVE", "F-STOP-1", CLOSE, ESCALATE) for i in range(6)]
-    r = regression(compute(cur_rows), prev)
-    zero_check = next(c for c in r["checks"] if c[0].startswith("no false-positive scenario regressed"))
-    assert zero_check[1] is True and "within noise: F-STOP-1 (1/6 -> 0/6" in zero_check[0]
-    # but 3/6 -> 0/6 is a real regression
-    prev_rows = [_row(f"s{i}", "FALSE_POSITIVE", "F-STOP-1", CLOSE, CLOSE if i < 3 else ESCALATE) for i in range(6)]
+def _scenario(scen: str, n: int, closed: int) -> list[dict]:
+    """A false-positive scenario of `n` alerts of which the agent proposed to close `closed`."""
+    return [_row(f"{scen}-{i}", "FALSE_POSITIVE", scen, CLOSE, CLOSE if i < closed else ESCALATE) for i in range(n)]
+
+
+def _third_check(prev_rows: list[dict], cur_rows: list[dict]) -> tuple[str, bool]:
     r = regression(compute(cur_rows), {"run_id": "prev", "metrics": compute(prev_rows)})
+    return next(c for c in r["checks"] if c[0].startswith("no false-positive scenario regressed"))
+
+
+@pytest.mark.parametrize(
+    ("n", "closed_before", "counts"),
+    [
+        (6, 1, False),  # v2 -> v3, F-STOP-1: the first floor (2 alerts, a quarter) was written for this one
+        (6, 2, False),  # v7 -> v8, F-STOP-1: one agent version, measured twice, PASS then FAIL under that floor
+        (6, 4, False),
+        (6, 5, True),
+        (4, 3, False),  # F-NEWS-1 closes three of its four alerts in one run of nine by chance
+        (4, 4, True),
+        (3, 2, False),
+        (3, 3, True),  # F-FAT-1, F-RISK-1
+        (5, 4, True),  # four in five is "at least"
+        (24, 19, False),
+        (24, 20, True),
+        (2, 2, False),  # two alerts are not a scenario the agent closes steadily, whatever their rate
+    ],
+)
+def test_a_fall_to_zero_counts_only_for_a_scenario_the_previous_run_closed_steadily(n, closed_before, counts):
+    """The third check of the promotion rule speaks for the scenarios the agent closes nearly always: the previous
+    run closed at least 3 of the scenario's alerts and at least four in five of them. Below that, a fall to 0% on
+    four to six alerts is what an unchanged agent does by chance, and the scenario is judged on the variance run."""
+    name, ok = _third_check(_scenario("F-X-1", n, closed_before), _scenario("F-X-1", n, 0))
+    assert ok is not counts
+    if counts:
+        assert name == "no false-positive scenario regressed to 0% close (F-X-1)"
+    else:
+        assert name == (
+            "no false-positive scenario regressed to 0% close "
+            f"(none; below the floor, read the variance run: F-X-1 ({closed_before}/{n} -> 0/{n}))"
+        ), "a fall the check does not judge is still shown"
+
+
+def test_the_third_check_sees_a_collapse_that_gains_elsewhere_hide():
+    """What the check is for. A scenario of three alerts that stops closing costs 2 points of safe close rate, and
+    a change that closes three more alerts somewhere else hides it from the second check."""
+    prev_rows = [*_scenario("BACKGROUND", 30, closed=27), *_scenario("F-FAT-1", 3, closed=3)]
+    cur_rows = [*_scenario("BACKGROUND", 30, closed=30), *_scenario("F-FAT-1", 3, closed=0)]
+    r = regression(compute(cur_rows), {"run_id": "prev", "metrics": compute(prev_rows)})
+    assert r["deltas"]["raw_safe_close_rate"] == 0
+    checks = dict(r["checks"])
+    assert checks["safe close rate not down by more than 2 points"] is True
+    assert checks["no false-positive scenario regressed to 0% close (F-FAT-1)"] is False
     assert r["verdict"] == "FAIL"
+
+
+def test_the_floor_is_out_of_reach_of_the_scenarios_the_agent_closes_now_and_then():
+    """Why four in five, from the runs and not from a model. Alert by alert over the nine runs since v4 (five full
+    runs and four variance runs, 2026-11-10 to 2026-11-19; data doc 4.6), F-STOP-1 is three alerts never proposed
+    for closing in 45 investigations and three closed about one time in four, and F-NEWS-1 is two alerts never
+    closed in 35 investigations and two that are. A run reaches the floor on such a scenario only if an alert that
+    was never closed is closed. The floor of half that was proposed first is within F-STOP-1's reach: its three
+    closable alerts in one run. (A test here first recomputed "1 comparison in 6" and "1 in 350" from a rate per
+    scenario; the alerts of a scenario are not alike, and those figures were withdrawn on 2026-11-19.)"""
+    from math import ceil
+
+    from metrics import ZERO_FLOOR_N, ZERO_FLOOR_RATE
+
+    ever_closed = {"F-STOP-1": (3, 6), "F-NEWS-1": (2, 4)}  # alerts ever proposed CLOSE_FP, alerts of the scenario
+
+    def needed(n: int, floor_n: int, floor_rate: float) -> int:
+        return max(floor_n, ceil(floor_rate * n - 1e-9))
+
+    for scenario, (closable, n) in ever_closed.items():
+        assert closable < needed(n, ZERO_FLOOR_N, ZERO_FLOOR_RATE), scenario
+    assert ever_closed["F-STOP-1"][0] >= needed(6, 3, 0.5), "half is reachable by F-STOP-1"
+    assert ever_closed["F-NEWS-1"][0] < needed(4, 3, 0.5), "and not by F-NEWS-1, whatever was written on 2026-11-18"
 
 
 def test_promotion_rule_checks_faithfulness_once_it_has_run():

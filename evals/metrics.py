@@ -20,8 +20,20 @@ CLOSE = "CLOSE_FP"
 ESCALATE = "ESCALATE"
 DRAFT_STOR = "DRAFT_STOR"
 DISPOSITIONS = (CLOSE, ESCALATE, DRAFT_STOR)
-ZERO_FLOOR_N = 2  # promotion rule: a scenario "regressed to 0%" only if the previous run closed >= 2 of its alerts
-ZERO_FLOOR_RATE = 0.25  # and at least a quarter of them
+# Promotion rule, third check. A scenario's fall to 0% close counts only when the previous run closed at least
+# ZERO_FLOOR_N of its alerts and at least ZERO_FLOOR_RATE of them: the check speaks for the scenarios the agent
+# closes nearly always, where one run is enough to see a collapse. The floor was 2 alerts and a quarter until
+# 2026-11-18, when two runs of one agent version gave PASS and FAIL on F-STOP-1 (2 of 6, then 0 of 6).
+# What the nine runs since v4 show, alert by alert (data doc 4.6, table of 2026-11-19): every false-positive
+# scenario but two is closed in at least 53 of 55 investigations. F-STOP-1 is three alerts never closed (0 of 45)
+# and three closed about one time in four; F-NEWS-1 is two never closed (0 of 35), one always (10 of 10) and one
+# that flips. A full run therefore closes 0 to 2 of F-STOP-1's six, rarely 3, and 1 or 2 of F-NEWS-1's four, and
+# neither reaches four in five unless an alert that was never closed is closed. A floor of half is within
+# F-STOP-1's reach: its three closable alerts in one run. The two scenarios are read alert by alert in the
+# variance run. (Chance figures written here on 2026-11-18, "1 comparison in 6" and "1 in 350", treated the
+# alerts of a scenario as alike and are withdrawn: decision log 2026-11-19.)
+ZERO_FLOOR_N = 3
+ZERO_FLOOR_RATE = 0.8
 # Promotion rule, fourth check. The data doc said "faithfulness stays at 100% (or at least does not fall)" and
 # the code never checked it: the verdict only carried the words "faithfulness pending". No run has reached 100%
 # (99.76% to 99.90% of numbers; the misses are derived figures such as a time difference), and v3 was promoted
@@ -249,11 +261,12 @@ def regression(
     checks.append(("gate holds", cm["gate"]["holds"]))
     d = deltas["raw_safe_close_rate"]
     checks.append(("safe close rate not down by more than 2 points", d is None or d >= -0.02))
-    # "regressed to 0%" needs a floor: a scenario the previous run closed once out of six is inside run-to-run
-    # noise of a non-deterministic agent (decision log 2026-11-07, v2 -> v3 on F-STOP-1). The previous run must have
-    # closed at least ZERO_FLOOR_N alerts and ZERO_FLOOR_RATE of the scenario for its fall to 0% to count.
+    # "regressed to 0%" needs a floor: a scenario the agent closes now and then goes to 0 of 6 by chance (decision
+    # log 2026-11-07, v2 -> v3, and 2026-11-18, v7 -> v8, both on F-STOP-1). The previous run must have closed at
+    # least ZERO_FLOOR_N alerts and ZERO_FLOOR_RATE of the scenario for its fall to 0% to count. A scenario below
+    # the floor is named in the check, so its fall is seen, and is judged on the variance run.
     newly_zero = []
-    noise_zero = []
+    below_floor = []
     for s, v in cm["per_scenario"].items():
         prev = pm["per_scenario"].get(s)
         if v["truth"] != FALSE_POSITIVE or v["close_rate"] != 0 or not prev or (prev.get("close_rate") or 0) <= 0:
@@ -262,10 +275,10 @@ def regression(
         if prev_closed >= ZERO_FLOOR_N and prev["close_rate"] >= ZERO_FLOOR_RATE:
             newly_zero.append(s)
         else:
-            noise_zero.append(f"{s} ({prev_closed}/{prev['n']} -> 0/{v['n']}, below the floor)")
+            below_floor.append(f"{s} ({prev_closed}/{prev['n']} -> 0/{v['n']})")
     detail = ", ".join(newly_zero) or "none"
-    if noise_zero:
-        detail += "; within noise: " + ", ".join(noise_zero)
+    if below_floor:
+        detail += "; below the floor, read the variance run: " + ", ".join(below_floor)
     checks.append((f"no false-positive scenario regressed to 0% close ({detail})", not newly_zero))
     scen = {}
     for s, v in cm["per_scenario"].items():

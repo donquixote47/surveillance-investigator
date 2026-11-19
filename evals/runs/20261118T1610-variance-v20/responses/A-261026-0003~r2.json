@@ -1,0 +1,514 @@
+{
+ "meta": {
+  "prior_recorded": false,
+  "repeat": 2,
+  "session_id": "surv-eval-20261118T1610-variance-v20-A-261026-0003-r2-ce049852",
+  "attempt": 1,
+  "invoke_started_at": "2026-11-18T16:25:32+00:00",
+  "wall_s": 31.2
+ },
+ "label_hidden_from_agent": true,
+ "response": {
+  "alert_id": "A-261026-0003",
+  "mode": "investigate",
+  "model_id": "eu.anthropic.claude-sonnet-5-5",
+  "proposal": {
+   "disposition": "ESCALATE",
+   "confidence": 0.6,
+   "report": {
+    "alert_id": "A-261026-0003",
+    "scenario": "LAYERING",
+    "summary": "Prop trader (not a registered MM) placed three one-sided BUY limit orders of 4024 each (12072 total, 3 levels, 6 ticks from touch, 4.9x depth in aggregate) after a 1118 market buy. Then a 361 market SELL filled at 9997, and all three bids were cancelled 600 ms later. No bid ever executed. Feature (a) looks present. Feature (b) is not shown: price fell 4 ticks, with no reversion and a round trip of -7.27 ticks. A stop-out of the earlier buy is possible, but it doesn't explain why three large bids were placed and pulled together. The evidence is mixed and no explanation is supported, so I propose escalation, not closure.",
+    "evidence": [
+     {
+      "id": "E1",
+      "source": "get_order_events",
+      "fact": "Three BUY LIMIT orders of 4024 at 9996, 9995 and 9994 were placed at 12:36:15, :17 and :19. All were cancelled together at 12:36:33.662, 600 ms after the SELL market order O-00018101 filled 361 at 9997."
+     },
+     {
+      "id": "E2",
+      "source": "get_order_events",
+      "fact": "A BUY market order of 1118 at 12:36:13 swept the ask from 10003 to 10007 and was fully filled. A SELL market order of 1118 at 12:36:33 filled 361 and the remaining 757 was cancelled."
+     },
+     {
+      "id": "E3",
+      "source": "compute_discriminators",
+      "fact": "gross_submitted_dominant 12072, other side 0; cancel_ratio 1.0; cancel_symmetry 0.0; same_side_fill_qty 0; distinct_price_levels 3; distance_from_touch_ticks 6.0; max_resting_size_vs_depth 4.87; large_orders empty."
+     },
+     {
+      "id": "E4",
+      "source": "compute_discriminators",
+      "fact": "price_move_ticks -4.0, post_cancel_move_ticks -2.0, reversion_ticks 0.0, round_trip_ticks -7.27, repetitions_in_session 0, market_wide_cancels_1s_before_first_cancel 0."
+     },
+     {
+      "id": "E5",
+      "source": "get_trader_profile",
+      "fact": "Role PROP, registered_mm_instruments empty, typical_order_size 500, no risk events in window."
+     },
+     {
+      "id": "E6",
+      "source": "get_market_events",
+      "fact": "No market events in the window."
+     },
+     {
+      "id": "E7",
+      "source": "get_trader_alert_history",
+      "fact": "No prior alerts for this trader."
+     },
+     {
+      "id": "E8",
+      "source": "get_instrument_stats",
+      "fact": "avg_depth_top5 2479 on SYN.A, so each 4024 order is about 1.6x depth and the three together about 4.9x."
+     }
+    ],
+    "indicators_matched": [
+     "orders with no intention to execute (Annex II 5(e))",
+     "size large relative to visible depth",
+     "orders away from the touch",
+     "several price levels on one side (layering)",
+     "opposite-side execution before the cancel"
+    ],
+    "indicators_not_matched": [
+     "price moved in the trader's favour before the execution and reverted after the cancel",
+     "repetition of the cycle within the session",
+     "high order-to-trade ratio (Annex II 4(f)): OTR 1.0 vs typical 4"
+    ],
+    "legitimate_explanations_considered": [
+     {
+      "explanation": "market making",
+      "ruled_out_by": [
+       "E3",
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "algorithmic re-pricing",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "risk-limit or kill-switch cancellation",
+      "ruled_out_by": [
+       "E5"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "reaction to a public event",
+      "ruled_out_by": [
+       "E6",
+       "E4"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "iceberg or reserve order",
+      "ruled_out_by": [
+       "E1",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "order modification after a partial fill",
+      "ruled_out_by": [
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "fat finger",
+      "ruled_out_by": [
+       "E1",
+       "E3"
+      ],
+      "verdict": "ruled_out"
+     },
+     {
+      "explanation": "momentum trader stopped out",
+      "ruled_out_by": [
+       "E2",
+       "E4"
+      ],
+      "verdict": "undetermined"
+     }
+    ],
+    "proposed_disposition": "ESCALATE",
+    "confidence": 0.6,
+    "what_would_change_my_mind": "Evidence that the three bids were a genuine working buy order, for example a parent order or client instruction showing intent to buy, would support closure. So would a tape showing the SELL as a stop-out of the earlier 1118 buy, with the bids cancelled as part of that exit. A favourable price move and reversion, or a repeat of the cycle, would move this towards DRAFT_STOR.",
+    "memory_used": [
+     "Desk note from A-261016-0003 (news-reaction cancels on PROP-EQ) not applicable: no market event in this window (E6)."
+    ],
+    "window_used": "Detector window 12:35:33.062 to 12:36:38.062 (65 s), plus 5 s padding on the order events. I did not look beyond that.",
+    "tool_calls": [
+     "get_alert",
+     "get_procedures",
+     "recall_memory",
+     "get_order_events",
+     "compute_discriminators",
+     "get_trader_profile",
+     "get_market_events",
+     "get_instrument_stats",
+     "get_trader_alert_history"
+    ]
+   }
+  },
+  "proposal_result": {
+   "alert_id": "A-261026-0003",
+   "disposition": "ESCALATE",
+   "case_id": "C-A-261026-0003",
+   "proposed_at": "2026-11-18T16:26:00+00:00",
+   "status": "PROPOSED: awaiting a human decision"
+  },
+  "stor_draft": null,
+  "rejections": [],
+  "tool_calls": [
+   {
+    "tool": "get_alert",
+    "input": {
+     "alert_id": "A-261026-0003"
+    },
+    "ms": 194,
+    "status": "ok"
+   },
+   {
+    "tool": "get_procedures",
+    "input": {
+     "topic": "all"
+    },
+    "ms": 171,
+    "status": "ok"
+   },
+   {
+    "tool": "recall_memory",
+    "input": {
+     "alert_id": "A-261026-0003",
+     "instrument": "SYN.A",
+     "trader_id": "T-X1026-03"
+    },
+    "ms": 1127,
+    "status": "ok"
+   },
+   {
+    "tool": "get_order_events",
+    "input": {
+     "alert_id": "A-261026-0003",
+     "pad_seconds": 5
+    },
+    "ms": 211,
+    "status": "ok"
+   },
+   {
+    "tool": "compute_discriminators",
+    "input": {
+     "alert_id": "A-261026-0003"
+    },
+    "ms": 309,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_profile",
+    "input": {
+     "trader_id": "T-X1026-03",
+     "alert_id": "A-261026-0003"
+    },
+    "ms": 213,
+    "status": "ok"
+   },
+   {
+    "tool": "get_market_events",
+    "input": {
+     "alert_id": "A-261026-0003"
+    },
+    "ms": 187,
+    "status": "ok"
+   },
+   {
+    "tool": "get_instrument_stats",
+    "input": {
+     "date": "2026-10-26",
+     "instrument": "SYN.A"
+    },
+    "ms": 244,
+    "status": "ok"
+   },
+   {
+    "tool": "get_trader_alert_history",
+    "input": {
+     "trader_id": "T-X1026-03",
+     "alert_id": "A-261026-0003"
+    },
+    "ms": 230,
+    "status": "ok"
+   },
+   {
+    "tool": "propose_disposition",
+    "input": {
+     "alert_id": "A-261026-0003",
+     "confidence": 0.6,
+     "disposition": "ESCALATE",
+     "report": "<report>"
+    },
+    "ms": 228,
+    "status": "ok"
+   }
+  ],
+  "final_text": "**Proposed disposition:** ESCALATE, confidence 0.6. Level 2 decides what happens next.\n\n**What drove it:**\n1. **Layering-type resting orders:** The trader placed three BUY limit orders of 4,024 each at 9996, 9995 and 9994. That is 12,072 in total and about 4.9x average depth, with no other-side orders. They sat 6 ticks from the touch, and none was ever filled. All three were cancelled together 600 ms after a 361 SELL market fill at 9997.\n2. **No supported explanation:** The trader is PROP, not a registered market maker. No risk event or public market event is recorded in the window. This is a one-sided pattern with a cancel symmetry of 0.\n3. **Mixed benefit evidence:**\n   - The price fell 4 ticks and did not revert.\n   - The round trip was -7.27 ticks.\n   - There was no repetition in the session.\n   - A stop-out of the earlier 1,118 market buy is possible. It doesn't explain why three large bids were placed and pulled together.\n\n**What would change my mind:** Evidence that the bids were a genuine working buy order, such as a parent order or client instruction, would support closure. A favourable price move with reversion, or a repeat of the cycle, would push it towards a STOR draft.",
+  "usage": {
+   "input_tokens": 10,
+   "output_tokens": 3483,
+   "total_tokens": 54958,
+   "cache_read_tokens": 39492,
+   "cache_write_tokens": 11973,
+   "model_calls": 4
+  },
+  "duration_s": 25.7,
+  "session_id": "surv-eval-20261118T1610-variance-v20-A-261026-0003-r2-ce049852",
+  "error": null,
+  "bundle": "none",
+  "decided": null,
+  "analyst": "l1.analyst2",
+  "groups": [
+   "L1"
+  ]
+ },
+ "case_after": {
+  "alert_id": "A-261026-0003",
+  "case_id": "C-A-261026-0003",
+  "confidence": "0.6",
+  "date": "2026-10-26",
+  "proposal_count": "23",
+  "proposal_history": [
+   {
+    "confidence": "0.65",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-11T10:23:07+00:00",
+    "replaced_at": "2026-11-16T19:07:18+00:00"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:07:18+00:00",
+    "replaced_at": "2026-11-16T19:29:49+00:00",
+    "session_id": "surv-eval-20261116T1828-sonnet-v5-A-261026-0003-40aef88c"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:29:49+00:00",
+    "replaced_at": "2026-11-16T19:36:46+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261026-0003-r0-195ad03a"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-16T19:36:46+00:00",
+    "replaced_at": "2026-11-16T19:43:47+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261026-0003-r1-c44a4ff6"
+   },
+   {
+    "confidence": "0.65",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:43:47+00:00",
+    "replaced_at": "2026-11-16T19:52:52+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261026-0003-r2-6d105c2e"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-16T19:52:52+00:00",
+    "replaced_at": "2026-11-16T19:58:38+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261026-0003-r3-5d987359"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-16T19:58:38+00:00",
+    "replaced_at": "2026-11-18T00:24:14+00:00",
+    "session_id": "surv-eval-20261116T1924-variance-v5-A-261026-0003-r4-0ced935e"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-18T00:24:14+00:00",
+    "replaced_at": "2026-11-18T12:42:06+00:00",
+    "session_id": "surv-eval-20261117T2346-sonnet-v6-A-261026-0003-16a9cf08"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "CLOSE_FP",
+    "proposed_at": "2026-11-18T12:42:06+00:00",
+    "replaced_at": "2026-11-18T15:53:03+00:00",
+    "session_id": "surv-eval-20261118T1204-sonnet-v7-A-261026-0003-1c46d437"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T15:53:03+00:00",
+    "replaced_at": "2026-11-18T16:14:50+00:00",
+    "session_id": "surv-eval-20261118T1523-sonnet-v8-A-261026-0003-99d1a4bb"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:14:50+00:00",
+    "replaced_at": "2026-11-18T16:20:25+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261026-0003-r0-5f0e62b9"
+   },
+   {
+    "confidence": "0.6",
+    "disposition": "ESCALATE",
+    "proposed_at": "2026-11-18T16:20:25+00:00",
+    "replaced_at": "2026-11-18T16:26:00+00:00",
+    "session_id": "surv-eval-20261118T1610-variance-v20-A-261026-0003-r1-69071b70"
+   }
+  ],
+  "proposal_provenance": "{\"session_id\": \"surv-eval-20261118T1610-variance-v20-A-261026-0003-r2-ce049852\", \"analyst\": \"l1.analyst2\", \"model_id\": \"eu.anthropic.claude-sonnet-5-5\", \"bundle\": \"none\", \"mode\": \"investigate\", \"memory\": \"on\"}",
+  "proposed_at": "2026-11-18T16:26:00+00:00",
+  "proposed_disposition": "ESCALATE",
+  "report": {
+   "summary": "Prop trader (not a registered MM) placed three one-sided BUY limit orders of 4024 each (12072 total, 3 levels, 6 ticks from touch, 4.9x depth in aggregate) after a 1118 market buy. Then a 361 market SELL filled at 9997, and all three bids were cancelled 600 ms later. No bid ever executed. Feature (a) looks present. Feature (b) is not shown: price fell 4 ticks, with no reversion and a round trip of -7.27 ticks. A stop-out of the earlier buy is possible, but it doesn't explain why three large bids were placed and pulled together. The evidence is mixed and no explanation is supported, so I propose escalation, not closure.",
+   "evidence": [
+    {
+     "id": "E1",
+     "source": "get_order_events",
+     "fact": "Three BUY LIMIT orders of 4024 at 9996, 9995 and 9994 were placed at 12:36:15, :17 and :19. All were cancelled together at 12:36:33.662, 600 ms after the SELL market order O-00018101 filled 361 at 9997."
+    },
+    {
+     "id": "E2",
+     "source": "get_order_events",
+     "fact": "A BUY market order of 1118 at 12:36:13 swept the ask from 10003 to 10007 and was fully filled. A SELL market order of 1118 at 12:36:33 filled 361 and the remaining 757 was cancelled."
+    },
+    {
+     "id": "E3",
+     "source": "compute_discriminators",
+     "fact": "gross_submitted_dominant 12072, other side 0; cancel_ratio 1.0; cancel_symmetry 0.0; same_side_fill_qty 0; distinct_price_levels 3; distance_from_touch_ticks 6.0; max_resting_size_vs_depth 4.87; large_orders empty."
+    },
+    {
+     "id": "E4",
+     "source": "compute_discriminators",
+     "fact": "price_move_ticks -4.0, post_cancel_move_ticks -2.0, reversion_ticks 0.0, round_trip_ticks -7.27, repetitions_in_session 0, market_wide_cancels_1s_before_first_cancel 0."
+    },
+    {
+     "id": "E5",
+     "source": "get_trader_profile",
+     "fact": "Role PROP, registered_mm_instruments empty, typical_order_size 500, no risk events in window."
+    },
+    {
+     "id": "E6",
+     "source": "get_market_events",
+     "fact": "No market events in the window."
+    },
+    {
+     "id": "E7",
+     "source": "get_trader_alert_history",
+     "fact": "No prior alerts for this trader."
+    },
+    {
+     "id": "E8",
+     "source": "get_instrument_stats",
+     "fact": "avg_depth_top5 2479 on SYN.A, so each 4024 order is about 1.6x depth and the three together about 4.9x."
+    }
+   ],
+   "indicators_not_matched": [
+    "price moved in the trader's favour before the execution and reverted after the cancel",
+    "repetition of the cycle within the session",
+    "high order-to-trade ratio (Annex II 4(f)): OTR 1.0 vs typical 4"
+   ],
+   "scenario": "LAYERING",
+   "indicators_matched": [
+    "orders with no intention to execute (Annex II 5(e))",
+    "size large relative to visible depth",
+    "orders away from the touch",
+    "several price levels on one side (layering)",
+    "opposite-side execution before the cancel"
+   ],
+   "alert_id": "A-261026-0003",
+   "legitimate_explanations_considered": [
+    {
+     "explanation": "market making",
+     "ruled_out_by": [
+      "E3",
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "algorithmic re-pricing",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "risk-limit or kill-switch cancellation",
+     "ruled_out_by": [
+      "E5"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "reaction to a public event",
+     "ruled_out_by": [
+      "E6",
+      "E4"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "iceberg or reserve order",
+     "ruled_out_by": [
+      "E1",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "order modification after a partial fill",
+     "ruled_out_by": [
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "fat finger",
+     "ruled_out_by": [
+      "E1",
+      "E3"
+     ],
+     "verdict": "ruled_out"
+    },
+    {
+     "explanation": "momentum trader stopped out",
+     "ruled_out_by": [
+      "E2",
+      "E4"
+     ],
+     "verdict": "undetermined"
+    }
+   ],
+   "memory_used": [
+    "Desk note from A-261016-0003 (news-reaction cancels on PROP-EQ) not applicable: no market event in this window (E6)."
+   ],
+   "tool_calls": [
+    "get_alert",
+    "get_procedures",
+    "recall_memory",
+    "get_order_events",
+    "compute_discriminators",
+    "get_trader_profile",
+    "get_market_events",
+    "get_instrument_stats",
+    "get_trader_alert_history"
+   ],
+   "window_used": "Detector window 12:35:33.062 to 12:36:38.062 (65 s), plus 5 s padding on the order events. I did not look beyond that.",
+   "what_would_change_my_mind": "Evidence that the three bids were a genuine working buy order, for example a parent order or client instruction showing intent to buy, would support closure. So would a tape showing the SELL as a stop-out of the earlier 1118 buy, with the bids cancelled as part of that exit. A favourable price move and reversion, or a repeat of the cycle, would move this towards DRAFT_STOR."
+  },
+  "scenario": "LAYERING",
+  "status": "PROPOSED",
+  "trader_id": "T-X1026-03"
+ }
+}
