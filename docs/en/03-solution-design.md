@@ -23,7 +23,7 @@
                      ┌───────────────┴──────────────────────────────▼───────────────┐
                      │  AgentCore Runtime: Strands agent "L1 investigator"          │
                      │  - reads alert, calls tools in evidence order                │
-                     │  - Code Interpreter for ad-hoc analysis and charts           │
+                     │  - Code Interpreter for charts (designed, not built)         │
                      │  - Memory: trader/instrument namespaces, analyst feedback    │
                      │  - writes InvestigationReport (JSON) -> propose_disposition  │
                      └───────────────┬──────────────────────────────────────────────┘
@@ -47,10 +47,10 @@ Two paths touch the back end. The agent path goes through the Gateway, where Pol
 | **Identity** | Cognito user pool as inbound JWT provider; groups `L1`, `L2`; agent workload identity. | Lets policies and rate limits key on *who* is driving the agent, and lets the human path carry a different identity from the agent path. |
 | **Policy** | Deny-by-default Cedar/Dogwood rules: which tools, in what order, how many times, never `record_disposition`. | Deterministic control outside the prompt. The temporal rules (evidence before conclusion) are the demo's strongest moment. |
 | **Memory** | Episodic and semantic records per trader and instrument: past dispositions, analyst corrections, firm procedures text. | The agent should know "this trader is a registered market maker and the last six alerts were closed for that reason" without being told each time, and should learn from overrides. |
-| **Code Interpreter** | Ad-hoc computation and charts for the report (price path with order placements and cancels overlaid). | Keeps arbitrary code off the Runtime and out of the Lambdas; the deterministic metrics stay in Lambda for reproducibility. |
+| **Code Interpreter** | Ad-hoc computation and charts for the report (price path with order placements and cancels overlaid). **Designed, not built**: no demo step needed it (`09-product-decisions.md`, section 4). | Keeps arbitrary code off the Runtime and out of the Lambdas; the deterministic metrics stay in Lambda for reproducibility. |
 | **Observability** | OTel traces of every step; policy decision logs. | This *is* the record-keeping requirement. |
 | **Evaluations** | Ground-truth evaluators (expected disposition, assertions, tool trajectory) and a custom evaluator for rationale quality; on-demand runs over the labelled dataset. | Regression gate before any prompt or tool change. |
-| **Optimization** | Recommendations for the system prompt and tool descriptions generated from traces against our rationale evaluator; versioned configuration bundles; A/B test of a candidate bundle through the Gateway; promotion only if the deterministic gate holds. | The governed answer to "does it get better?": measured, versioned, human-approved changes, never silent drift. See section 11. |
+| **Optimization** | Recommendations for the system prompt and tool descriptions generated from traces against our rationale evaluator; versioned configuration bundles; A/B test of a candidate bundle through the Gateway (designed, **not run**: the first recommendation was rejected on an offline replay, decision log 2026-11-06); promotion only if the deterministic gate holds. | The governed answer to "does it get better?": measured, versioned, human-approved changes, never silent drift. See section 11. |
 | Registry, A2A (stretch) | Publish the agent; L2 reviewer agent. | Only if the core is done. |
 
 ## 3. Data model (synthetic)

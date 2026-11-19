@@ -41,7 +41,7 @@ Every tool call goes through AgentCore Gateway, where Policy decides determinist
 | Code Interpreter | Designed for charts in the report; **not built** (the deterministic metrics stayed in Lambda; `docs/en/09-product-decisions.md` section 4) |
 | Observability | Traces plus policy decision logs: the regulator's "why" |
 | Evaluations | Ground-truth and custom evaluators over a labelled synthetic dataset; our harness computes the gate (0 missed true cases), the safe close rate and the override rate |
-| Optimization | Prompt recommendations from traces, configuration bundles, A/B through the Gateway; promoted only through the deterministic gate (the governed learning loop) |
+| Optimization | A prompt recommendation from traces and configuration bundles, promoted only through the deterministic gate (the governed learning loop). The recommendation was rejected by that gate on an offline replay, so the A/B test through the Gateway was **not run** |
 | A2A, Registry | Stretch |
 
 ## Repository layout
