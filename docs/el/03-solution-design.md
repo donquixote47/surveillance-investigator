@@ -6,12 +6,12 @@
                      ┌──────────────────────────────────────────────────────────────┐
                      │                      "The firm" (mock back end, CDK)          │
                      │  DynamoDB: alerts, order_events, trades, traders, events,     │
-                     │            cases, dispositions                                │
-                     │  S3: synthetic market data (parquet), reports                 │
-                     │  Lambda: one function per tool (src/tools/)                   │
+                     │            instrument_stats, cases, cases_history             │
+                     │  S3: one bucket, empty (the tools read DynamoDB)              │
+                     │  Lambda: one for the twelve tools, one for the human path     │
                      │  Cognito: user pool, groups L1 and L2                         │
                      └───────────────▲──────────────────────────────▲───────────────┘
-                                     │ invoke (Gateway IAM role)    │ invoke (direct, human path)
+                                     │ invoke (Gateway IAM role)    │ HTTP API (human path)
                      ┌───────────────┴───────────────┐    ┌─────────┴────────────────────┐
                      │  AgentCore Gateway            │    │  Analyst UI (Streamlit/CLI)  │
                      │  target "surv" -> MCP tools   │    │  Cognito login as L1 or L2   │
