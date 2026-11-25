@@ -14,7 +14,7 @@ Clone `https://github.com/donquixote47/trade-alert-investigator` (public since 2
 6. `.kiro/steering/agentcore-gotchas.md` - verified behaviours and traps of AgentCore, Strands, the CLI and Claude 5.5 on Bedrock, each with the date it was verified.
 7. For the mentor conversation: `docs/en/09-product-decisions.md` (the product and where AgentCore does the work) and `docs/en/08-broker-brief.md` (the logic as a surveillance team reads it).
 8. Before changing anything: `docs/en/10-operations.md` (release cycle, promotion rule in practice, what to watch, the ranked backlog with measured gains).
-9. Before talking to a prospect: `docs/en/11-market-landscape.md` (the vendors' AI and what it does, why there is no standalone competitor yet, the first-conversation checklist, what we borrow from them).
+9. Before talking to a prospect: `docs/en/11-market-landscape.md` (the vendors' AI and what it does, why there is no standalone commercial competitor yet and which open-source projects come close, the first-conversation checklist, what we borrow from them).
 
 The SessionStart hook (`.kiro/hooks/session-brief.json`) prints STATUS, the last decisions and recently changed files automatically. Under Claude Code the same five steering files load from `.claude/rules/` (identical copies) with `.claude/CLAUDE.md` in front of them; the hooks do not run there, so print the brief with `bash .kiro/hooks/scripts/session-brief.sh` and run the docs-sync check by hand before ending a turn.
 
