@@ -4,7 +4,7 @@ How to pick this project up in a fresh Kiro session, on this machine or another 
 
 ## 1. What a new session must read first
 
-Clone `https://github.com/donquixote47/surveillance-investigator` (private; `gh auth login` as donquixote47 first) and open the repository root as the Kiro workspace. Then, in this order:
+Clone `https://github.com/donquixote47/trade-alert-investigator` (public since 2026-11-25; `gh auth login` as donquixote47 is needed to push, not to clone) and open the repository root as the Kiro workspace. Then, in this order:
 
 1. `.kiro/steering/project-context.md` - the goal, scope, rules (region eu-west-2, synthetic data only, tags on every resource, bilingual docs, announce cost before deploys).
 2. `.kiro/steering/challenge-and-verify.md` - Kiro does not agree by default; claims are checked against primary sources.
