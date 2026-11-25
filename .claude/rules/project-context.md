@@ -22,7 +22,7 @@ George is a TAM at AWS whose customers are brokers, traders and some HFT firms. 
 
 - Python 3.14 pinned with `uv` (system Python 3.14.2; all SDKs install and import on it as of 2026-11-02; Lambda `python3.14` and AgentCore Runtime `PYTHON_3_14` both exist). `uv run`, `ruff` for lint/format, type hints everywhere.
 - Agent framework: Strands Agents. Models (Bedrock, `eu.` inference profiles): Haiku 5.5 for development loops; Sonnet 5.5 as the default agent for demos and evaluation runs; Opus 5.5 as the Phase 5 model-comparison arm and as the rationale-rubric judge. Opus becomes the default only if the comparison run justifies it (decision log 2026-11-02).
-- AgentCore resources (Runtime, Gateway, targets, Policy Engine, policies, Memory, evaluators, config bundles) via the `agentcore` CLI 1.0.1 (`npm i -g @aws/agentcore`) and `agentcore/agentcore.json`. The Python starter toolkit is not installed and not needed.
+- AgentCore resources (Runtime, Gateway, targets, Policy Engine, policies, Memory, evaluators, config bundles) via the `agentcore` CLI 1.0.2 (`npm i -g @aws/agentcore`) and `agentcore/agentcore.json`. The Python starter toolkit is not installed and not needed.
 - Mock surveillance back end ("the firm"): AWS CDK in Python under `infra/`, its own stack. Lambda tools + DynamoDB + S3 + Cognito user pool + human-path Lambdas. Deploy order: `infra/` first (outputs Lambda ARNs, Cognito discovery URL), then `agentcore deploy`. No Terraform.
 - Model ids: `eu.anthropic.claude-haiku-5-5`, `eu.anthropic.claude-sonnet-5-5`, `eu.anthropic.claude-opus-5-5` (inference-profile ids; bare model ids are not on-demand in eu-west-2).
 - Gateway target name is `surv`; tools are therefore `surv___<tool>` in MCP and `AgentCore::Action::"surv___<tool>"` in policies.

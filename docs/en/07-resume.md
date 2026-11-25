@@ -58,7 +58,7 @@ See the table in `STATUS.md`. Two CloudFormation stacks in eu-west-2:
 
 Every resource must carry `Project=agentcore-surveillance-investigator` and `auto-delete=no`. Audit: `uv run scripts/check_tags.py` (add `--fix` to tag what is missing). Resources the stacks do not tag (so far: the Gateway's workload identity) are caught by this script.
 
-The data is already in DynamoDB (seed7, 1,961,720 items). To reload after a table rebuild: `uv run scripts/load_dynamodb.py data/synthetic/seed7` (about 12 minutes, about $3). To regenerate the dataset itself: `uv run scripts/build_dataset.py --seed 7 --sessions 20` (deterministic; the committed parquet files are the reference). seed9 was loaded on 2026-11-17 with `uv run scripts/load_dynamodb.py data/synthetic/seed9 --tables order_events trades traders market_events instrument_stats alerts --keep-existing-traders` (about 7 minutes, about $1.70; no cases history, which would add rows to the background traders the three sets share).
+The data is already in DynamoDB (seed7, 1,961,720 items). To reload after a table rebuild: `uv run scripts/load_dynamodb.py data/synthetic/seed7` (about 12 minutes, about $3). To regenerate the dataset itself: `uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1 --out /tmp/seed7` (the same rows in every table, not the same bytes; the committed parquet files are the reference, and without `--out` the command writes over them). seed9 was loaded on 2026-11-17 with `uv run scripts/load_dynamodb.py data/synthetic/seed9 --tables order_events trades traders market_events instrument_stats alerts --keep-existing-traders` (about 7 minutes, about $1.70; no cases history, which would add rows to the background traders the three sets share).
 
 ## 5. Everyday commands
 
@@ -78,7 +78,7 @@ uv run scripts/gateway_throttling.py evals/runs/<run>      # how often the Gatew
 uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # Memory records; also ingest-procedures, seed-history, delete
 uv run scripts/reset_cases.py --from 2026-11-01 [--apply]   # clear the agent's proposals (not the analyst's records) so alerts arrive fresh; dry run by default
 uv run scripts/reset_cases.py --alerts A-261009-0003 --include-recorded [--apply]   # reopen a decided alert: also clears the decision, its lock and history (the agent and the harness skip decided alerts)
-uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # rebuild seed7 exactly; a new dataset takes the latest scenario catalogue by default
+uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # rebuild seed7 from its seed: the same rows, not the same bytes; add --out to keep the committed files. A new dataset takes the latest scenario catalogue by default
 uv run scripts/build_dataset.py --seed 9 --sessions 12 --start-date 2026-09-14 --k-depth 4 --scenarios S-SPOOF-6 F-MM-LARGE-1 F-MM-1 F-SPOOFLIKE-HARD-1   # rebuild seed9, the focused set: the same four scenarios every session, nothing sampled
 uv run --group ui streamlit run ui/analyst_app.py          # analyst UI on http://127.0.0.1:8501 (loopback only)
 #   SURV_RUNTIME_ENDPOINT=demo ... for the pinned endpoint. A login survives a page refresh for the life of the Streamlit
@@ -123,12 +123,12 @@ src/detector/            The noisy spoofing/layering detector and labelling
 src/tools/               Tool schema (Gateway), discriminators, DynamoDB access, Lambda handlers
 infra/                   CDK Python stack for the firm's back end
 agentcore/               AgentCore CLI project: agentcore.json, deployed state, TS CDK stack (rate limits live here)
-app/surv_investigator_l1 The agent: report model, prompt, Strands agent + guard, Runtime entrypoint, tests
-scripts/                 build_dataset, replay_alert, load_dynamodb, smoke_gateway, investigate, invoke_runtime, check_tags
+app/surv_investigator_l1 The agent: report model, prompt, Strands agent + guard, Runtime entrypoint (the folder is the Runtime bundle; its tests are in app/tests/)
+scripts/                 build_dataset, load_dynamodb, replay_alert, replay_trajectory, smoke_gateway, investigate, invoke_runtime, policy_demo, validate_policies, reset_cases, memory_admin, gateway_throttling, span_turns, lock_runtime_deps, check_tags
 ui/                      Analyst UI (Streamlit) and its Streamlit-free clients for Cognito, the human-path API, the Runtime, CloudWatch spans
-data/synthetic/seed7     The dataset (committed) with labels
+data/synthetic/          seed7, seed8 and seed9 (committed) with labels
 surv-tools.json          Gateway tool schema, generated from src/tools/schema.py
-policies/, evals/        Phase 4 and 5 (empty so far)
+policies/, evals/        The nine policy files; the evaluation harness and every run's output (evals/runs/)
 ```
 
 ## 7. Rules of engagement

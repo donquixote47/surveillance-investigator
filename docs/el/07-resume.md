@@ -58,7 +58,7 @@ export JSII_SILENCE_WARNING_UNTESTED_NODE_VERSION=1
 
 Κάθε πόρος πρέπει να φέρει `Project=agentcore-surveillance-investigator` και `auto-delete=no`. Έλεγχος: `uv run scripts/check_tags.py` (πρόσθεσε `--fix` για να βάλεις tags όπου λείπουν). Πόρους που τα stacks δεν ταμπελώνουν (μέχρι στιγμής: η workload identity του Gateway) τους πιάνει αυτό το script.
 
-Τα δεδομένα είναι ήδη στο DynamoDB (seed7, 1.961.720 items). Για επαναφόρτωση μετά από ανακατασκευή πινάκων: `uv run scripts/load_dynamodb.py data/synthetic/seed7` (περίπου 12 λεπτά, περίπου $3). Για αναδημιουργία του ίδιου του dataset: `uv run scripts/build_dataset.py --seed 7 --sessions 20` (ντετερμινιστικό· τα αρχεία parquet στο repo είναι η αναφορά). Το seed9 φορτώθηκε στις 2026-11-17 με `uv run scripts/load_dynamodb.py data/synthetic/seed9 --tables order_events trades traders market_events instrument_stats alerts --keep-existing-traders` (περίπου 7 λεπτά, περίπου $1,70· χωρίς ιστορικό υποθέσεων, που θα πρόσθετε γραμμές στους traders υποβάθρου που μοιράζονται τα τρία σύνολα).
+Τα δεδομένα είναι ήδη στο DynamoDB (seed7, 1.961.720 items). Για επαναφόρτωση μετά από ανακατασκευή πινάκων: `uv run scripts/load_dynamodb.py data/synthetic/seed7` (περίπου 12 λεπτά, περίπου $3). Για αναδημιουργία του ίδιου του dataset: `uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1 --out /tmp/seed7` (οι ίδιες γραμμές σε κάθε πίνακα, όχι τα ίδια bytes· τα αρχεία parquet στο repo είναι η αναφορά, και χωρίς `--out` η εντολή γράφει πάνω τους). Το seed9 φορτώθηκε στις 2026-11-17 με `uv run scripts/load_dynamodb.py data/synthetic/seed9 --tables order_events trades traders market_events instrument_stats alerts --keep-existing-traders` (περίπου 7 λεπτά, περίπου $1,70· χωρίς ιστορικό υποθέσεων, που θα πρόσθετε γραμμές στους traders υποβάθρου που μοιράζονται τα τρία σύνολα).
 
 ## 5. Καθημερινές εντολές
 
@@ -78,7 +78,7 @@ uv run scripts/gateway_throttling.py evals/runs/<run>      # πόσο συχνά
 uv run scripts/memory_admin.py list /desks/PROP-EQ/notes/   # εγγραφές Memory· επίσης ingest-procedures, seed-history, delete
 uv run scripts/reset_cases.py --from 2026-11-01 [--apply]   # καθαρίζει τις προτάσεις του agent (όχι τις καταγραφές του αναλυτή) ώστε τα alerts να έρχονται φρέσκα· dry run εξ ορισμού
 uv run scripts/reset_cases.py --alerts A-261009-0003 --include-recorded [--apply]   # επαναφορά αποφασισμένου alert: καθαρίζει και την απόφαση, το lock και το ιστορικό της (ο agent και το harness παραλείπουν τα αποφασισμένα alerts)
-uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # ξαναχτίζει ακριβώς το seed7· νέο dataset παίρνει εξ ορισμού τον τελευταίο κατάλογο σεναρίων
+uv run scripts/build_dataset.py --seed 7 --sessions 20 --catalogue 1   # ξαναχτίζει το seed7 από το seed του: οι ίδιες γραμμές, όχι τα ίδια bytes· με --out μένουν τα αρχεία του repo. Νέο dataset παίρνει εξ ορισμού τον τελευταίο κατάλογο σεναρίων
 uv run scripts/build_dataset.py --seed 9 --sessions 12 --start-date 2026-09-14 --k-depth 4 --scenarios S-SPOOF-6 F-MM-LARGE-1 F-MM-1 F-SPOOFLIKE-HARD-1   # ξαναχτίζει το seed9, το στοχευμένο σύνολο: τα ίδια τέσσερα σενάρια σε κάθε session, τίποτα από δειγματοληψία
 uv run --group ui streamlit run ui/analyst_app.py          # UI αναλυτή στο http://127.0.0.1:8501 (μόνο loopback)
 #   SURV_RUNTIME_ENDPOINT=demo ... για το καρφωμένο endpoint. Η σύνδεση επιζεί page refresh όσο ζει η διεργασία Streamlit:
@@ -123,12 +123,12 @@ src/detector/            Ο θορυβώδης detector spoofing/layering και
 src/tools/               Σχήμα tools (Gateway), discriminators, πρόσβαση DynamoDB, Lambda handlers
 infra/                   CDK Python stack για το back end της εταιρείας
 agentcore/               Project του AgentCore CLI: agentcore.json, deployed state, TS CDK stack (εδώ ζουν τα όρια ρυθμού)
-app/surv_investigator_l1 Ο agent: μοντέλο έκθεσης, prompt, agent Strands + guard, entrypoint Runtime, tests
-scripts/                 build_dataset, replay_alert, load_dynamodb, smoke_gateway, investigate, invoke_runtime, check_tags
+app/surv_investigator_l1 Ο agent: μοντέλο έκθεσης, prompt, agent Strands + guard, entrypoint Runtime (ο φάκελος είναι το bundle του Runtime· τα tests του είναι στο app/tests/)
+scripts/                 build_dataset, load_dynamodb, replay_alert, replay_trajectory, smoke_gateway, investigate, invoke_runtime, policy_demo, validate_policies, reset_cases, memory_admin, gateway_throttling, span_turns, lock_runtime_deps, check_tags
 ui/                      UI αναλυτή (Streamlit) και οι clients του χωρίς Streamlit για Cognito, το API της ανθρώπινης διαδρομής, το Runtime, τα spans του CloudWatch
-data/synthetic/seed7     Το dataset (στο repo) με labels
+data/synthetic/          seed7, seed8 και seed9 (στο repo) με labels
 surv-tools.json          Σχήμα tools του Gateway, παράγεται από το src/tools/schema.py
-policies/, evals/        Φάσεις 4 και 5 (άδεια μέχρι στιγμής)
+policies/, evals/        Τα εννέα αρχεία policy· το harness αξιολόγησης και το αποτέλεσμα κάθε run (evals/runs/)
 ```
 
 ## 7. Κανόνες εργασίας
