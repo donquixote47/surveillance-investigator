@@ -6,6 +6,19 @@ Built as George's project for the AWS AI/ML TFC (Agentic AI learning path). Two 
 
 Documentation is bilingual: `docs/en/` (canonical) and `docs/el/` (Greek twin). Τα ελληνικά κείμενα είναι στο `docs/el/`.
 
+## The problem in one paragraph
+
+Every broker, investment firm and algorithmic trading firm in the EU must monitor its order flow for market manipulation and report suspicious orders and transactions (MAR Art. 16(2); RTS 6 Art. 13 for algorithmic traders). Rule-based detectors are tuned for recall and so raise many alerts, most of them on legitimate activity: market making, algorithmic re-pricing, risk cuts, reactions to news. Each alert must still be reviewed by a trained person and the reasoning behind each closure kept for the regulator. At a mid-sized firm that is a small compliance team working a queue every morning, repeating the same evidence-gathering steps per alert. The cost is analyst time; the risk is the true case buried among false positives. Detail in `docs/en/01-domain-primer.md` and `docs/en/02-problem-statement.md`.
+
+## What the agent does
+
+1. Reads an alert and the raw order and trade events around it from a mock surveillance back end.
+2. Has the order book reconstructed and the discriminators computed by deterministic tools (size against depth, distance from the touch, cancel ratio and timing, fills on each side, cancel symmetry, price move, repetitions), reads the trader's profile and alert history, checks market events in the window, and recalls prior analyst decisions from Memory.
+3. Writes an investigation report in the vocabulary of the regulation's indicators, citing every piece of evidence it used, listing the legitimate explanations it considered and what ruled each one out.
+4. Proposes one disposition: close as false positive, escalate to Level 2, or draft a STOR narrative. The analyst records the decision, on a separate API the agent cannot reach.
+
+Every tool call goes through AgentCore Gateway, where Policy decides deterministically whether the call is allowed given what the agent has already done in the session.
+
 ## Where it stands
 
 | Item | Value |
@@ -44,19 +57,6 @@ Detail, run by run: `docs/en/04-synthetic-data-and-evaluation.md` section 4.6. E
 - No online evaluation, no dashboard, no slides.
 - Two scenarios the agent closes only now and then (a loss-making exit, a reaction to news) are followed alert by alert in the repeat run and are not judged by the promotion rule.
 - A transitive dependency of the Runtime bundle has an open advisory (`opentelemetry-api` 1.45.1, GHSA-mf5v-w3w3-f6cg, moderate). It is fixed in 1.45.2, which the AWS OpenTelemetry distro does not yet allow.
-
-## The problem in one paragraph
-
-Every broker, investment firm and algorithmic trading firm in the EU must monitor its order flow for market manipulation and report suspicious orders and transactions (MAR Art. 16(2); RTS 6 Art. 13 for algorithmic traders). Rule-based detectors are tuned for recall and so raise many alerts, most of them on legitimate activity: market making, algorithmic re-pricing, risk cuts, reactions to news. Each alert must still be reviewed by a trained person and the reasoning behind each closure kept for the regulator. At a mid-sized firm that is a small compliance team working a queue every morning, repeating the same evidence-gathering steps per alert. The cost is analyst time; the risk is the true case buried among false positives. Detail in `docs/en/01-domain-primer.md` and `docs/en/02-problem-statement.md`.
-
-## What the agent does
-
-1. Reads an alert and the raw order and trade events around it from a mock surveillance back end.
-2. Has the order book reconstructed and the discriminators computed by deterministic tools (size against depth, distance from the touch, cancel ratio and timing, fills on each side, cancel symmetry, price move, repetitions), reads the trader's profile and alert history, checks market events in the window, and recalls prior analyst decisions from Memory.
-3. Writes an investigation report in the vocabulary of the regulation's indicators, citing every piece of evidence it used, listing the legitimate explanations it considered and what ruled each one out.
-4. Proposes one disposition: close as false positive, escalate to Level 2, or draft a STOR narrative. The analyst records the decision, on a separate API the agent cannot reach.
-
-Every tool call goes through AgentCore Gateway, where Policy decides deterministically whether the call is allowed given what the agent has already done in the session.
 
 ## AgentCore capabilities exercised
 
